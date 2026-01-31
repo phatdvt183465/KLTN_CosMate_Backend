@@ -3,6 +3,7 @@ package com.cosmate.service.impl;
 import com.cosmate.dto.request.ChangePasswordRequest;
 import com.cosmate.dto.request.RegisterRequest;
 import com.cosmate.dto.request.UpdateProfileRequest;
+import com.cosmate.dto.request.GoogleTokenRequest;
 import com.cosmate.dto.response.UserListItem;
 import com.cosmate.entity.Role;
 import com.cosmate.entity.User;
@@ -15,6 +16,7 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -26,9 +28,15 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.io.InputStreamReader;
+import java.io.BufferedReader;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 @RequiredArgsConstructor
@@ -40,6 +48,10 @@ public class UserServiceImpl implements UserService {
     private final JwtUtils jwtUtils;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Value("${google.client-id:}")
+    private String googleClientId;
 
     @Override
     @Transactional
@@ -224,5 +236,108 @@ public class UserServiceImpl implements UserService {
                 .roles(u.getRoles().stream().map(Enum::name).collect(Collectors.toSet()))
                 .createdAt(u.getCreatedAt())
                 .build()).collect(Collectors.toList());
+    }
+
+    @Override
+    public String loginWithGoogleToken(GoogleTokenRequest request) {
+        Map<String, Object> payload = verifyGoogleIdToken(request.getIdToken());
+        if (payload == null) throw new AppException(ErrorCode.INVALID_CREDENTIALS);
+        String email = (String) payload.get("email");
+        if (email == null) throw new AppException(ErrorCode.INVALID_EMAIL);
+
+        User user = userRepository.findByEmail(email).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        // check banned
+        if (user.getStatus() != null && "BANNED".equalsIgnoreCase(user.getStatus())) {
+            throw new AppException(ErrorCode.ACCOUNT_BANNED);
+        }
+        List<String> roles = user.getRoles().stream().map(Enum::name).collect(Collectors.toList());
+        Long userIdLong = user.getId() == null ? null : user.getId().longValue();
+        return jwtUtils.generateToken(userIdLong, roles);
+    }
+
+    @Override
+    @Transactional
+    public String registerWithGoogleToken(GoogleTokenRequest request) {
+        Map<String, Object> payload = verifyGoogleIdToken(request.getIdToken());
+        if (payload == null) throw new AppException(ErrorCode.INVALID_CREDENTIALS);
+        String email = (String) payload.get("email");
+        String name = (String) payload.get("name");
+        String picture = (String) payload.get("picture");
+        if (email == null) throw new AppException(ErrorCode.INVALID_EMAIL);
+
+        Optional<User> existing = userRepository.findByEmail(email);
+        User user;
+        if (existing.isPresent()) {
+            user = existing.get();
+            // update profile fields
+            if (name != null) user.setFullName(name);
+            if (picture != null) user.setAvatarUrl(picture);
+            user = userRepository.save(user);
+        } else {
+            RegisterRequest r = new RegisterRequest();
+            r.setEmail(email);
+            r.setFullName(name);
+            r.setAvatarUrl(picture);
+            user = register(r, true);
+        }
+
+        if (user.getStatus() != null && "BANNED".equalsIgnoreCase(user.getStatus())) {
+            throw new AppException(ErrorCode.ACCOUNT_BANNED);
+        }
+
+        List<String> roles = user.getRoles().stream().map(Enum::name).collect(Collectors.toList());
+        Long userIdLong = user.getId() == null ? null : user.getId().longValue();
+        return jwtUtils.generateToken(userIdLong, roles);
+    }
+
+    /**
+     * Verify Google id_token using Google's tokeninfo endpoint.
+     * Returns payload map if valid, otherwise null.
+     */
+    private Map<String, Object> verifyGoogleIdToken(String idToken) {
+        try {
+            // Google's tokeninfo endpoint: https://oauth2.googleapis.com/tokeninfo?id_token=XYZ
+            String urlStr = "https://oauth2.googleapis.com/tokeninfo?id_token=" + idToken;
+            URL url = new URL(urlStr);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
+            int code = conn.getResponseCode();
+            if (code != 200) {
+                logger.debug("Google tokeninfo returned status {}", code);
+                return null;
+            }
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                Map<String, Object> map = objectMapper.readValue(sb.toString(), Map.class);
+                // Validate aud (client_id) if configured
+                if (googleClientId != null && !googleClientId.isBlank()) {
+                    Object audObj = map.get("aud");
+                    String aud = audObj == null ? null : audObj.toString();
+                    if (!googleClientId.equals(aud)) {
+                        logger.debug("Google id_token aud mismatch: expected='{}' actual='{}'", googleClientId, aud);
+                        return null;
+                    }
+                } else {
+                    logger.debug("google.client-id not set; skipping aud validation");
+                }
+                // Optionally validate issuer
+                Object issObj = map.get("iss");
+                if (issObj != null) {
+                    String iss = issObj.toString();
+                    if (!"accounts.google.com".equals(iss) && !"https://accounts.google.com".equals(iss)) {
+                        logger.debug("Unexpected token issuer='{}'", iss);
+                        return null;
+                    }
+                }
+                return map;
+            }
+        } catch (Exception e) {
+            logger.debug("verifyGoogleIdToken error: {}", e.getMessage());
+            return null;
+        }
     }
 }

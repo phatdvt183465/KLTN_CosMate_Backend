@@ -4,6 +4,7 @@ import com.cosmate.dto.request.RegisterRequest;
 import com.cosmate.entity.User;
 import com.cosmate.dto.request.ChangePasswordRequest;
 import com.cosmate.dto.request.UpdateProfileRequest;
+import com.cosmate.dto.request.GoogleTokenRequest;
 import com.cosmate.dto.response.UserListItem;
 
 import java.util.List;
@@ -21,4 +22,8 @@ public interface UserService {
     void unbanUser(Integer targetUserId);
 
     List<UserListItem> listUsers();
+
+    // New methods for Google token flows
+    String loginWithGoogleToken(GoogleTokenRequest request);
+    String registerWithGoogleToken(GoogleTokenRequest request);
 }

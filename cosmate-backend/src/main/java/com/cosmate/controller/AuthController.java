@@ -3,6 +3,7 @@ package com.cosmate.controller;
 import com.cosmate.dto.request.GoogleRegisterRequest;
 import com.cosmate.dto.request.LoginRequest;
 import com.cosmate.dto.request.RegisterRequest;
+import com.cosmate.dto.request.GoogleTokenRequest;
 import com.cosmate.dto.response.ApiResponse;
 import com.cosmate.dto.response.AuthResponse;
 import com.cosmate.dto.response.UserResponse;
@@ -73,6 +74,30 @@ public class AuthController {
         AuthResponse auth = new AuthResponse();
         auth.setToken(token);
 
+        ApiResponse<AuthResponse> api = new ApiResponse<>();
+        api.setCode(0);
+        api.setMessage("OK");
+        api.setResult(auth);
+        return ResponseEntity.ok(api);
+    }
+
+    @PostMapping("/google/login")
+    public ResponseEntity<ApiResponse<AuthResponse>> googleLogin(@RequestBody GoogleTokenRequest request) {
+        String token = userService.loginWithGoogleToken(request);
+        AuthResponse auth = new AuthResponse();
+        auth.setToken(token);
+        ApiResponse<AuthResponse> api = new ApiResponse<>();
+        api.setCode(0);
+        api.setMessage("OK");
+        api.setResult(auth);
+        return ResponseEntity.ok(api);
+    }
+
+    @PostMapping("/google/register")
+    public ResponseEntity<ApiResponse<AuthResponse>> googleRegister(@RequestBody GoogleTokenRequest request) {
+        String token = userService.registerWithGoogleToken(request);
+        AuthResponse auth = new AuthResponse();
+        auth.setToken(token);
         ApiResponse<AuthResponse> api = new ApiResponse<>();
         api.setCode(0);
         api.setMessage("OK");

@@ -290,6 +290,11 @@ public class UserServiceImpl implements UserService {
         return jwtUtils.generateToken(userIdLong, roles);
     }
 
+    @Override
+    public User getById(Integer userId) {
+        return userRepository.findById(userId).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+    }
+
     /**
      * Verify Google id_token using Google's tokeninfo endpoint.
      * Returns payload map if valid, otherwise null.

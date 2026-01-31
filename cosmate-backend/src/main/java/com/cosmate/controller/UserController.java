@@ -4,6 +4,7 @@ import com.cosmate.dto.request.ChangePasswordRequest;
 import com.cosmate.dto.request.UpdateProfileRequest;
 import com.cosmate.dto.response.ApiResponse;
 import com.cosmate.dto.response.UserListItem;
+import com.cosmate.dto.response.UserResponse;
 import com.cosmate.entity.User;
 import com.cosmate.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -60,6 +61,34 @@ public class UserController {
         api.setCode(0);
         api.setMessage("OK");
         api.setResult(item);
+        return ResponseEntity.ok(api);
+    }
+
+    @GetMapping("/{id}/profile")
+    public ResponseEntity<ApiResponse<UserResponse>> viewProfile(@PathVariable("id") Integer id) {
+        Integer currentUserId = getCurrentUserId();
+        if (currentUserId == null || !currentUserId.equals(id)) {
+            ApiResponse api = new ApiResponse();
+            api.setCode(1006);
+            api.setMessage("Không có quyền thực hiện thao tác này!");
+            return ResponseEntity.status(403).body(api);
+        }
+
+        User user = userService.getById(id);
+        UserResponse resp = UserResponse.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .fullName(user.getFullName())
+                .avatarUrl(user.getAvatarUrl())
+                .phone(user.getPhone())
+                .status(user.getStatus())
+                .build();
+
+        ApiResponse<UserResponse> api = new ApiResponse<>();
+        api.setCode(0);
+        api.setMessage("OK");
+        api.setResult(resp);
         return ResponseEntity.ok(api);
     }
 

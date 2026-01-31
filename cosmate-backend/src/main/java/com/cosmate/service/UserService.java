@@ -26,4 +26,7 @@ public interface UserService {
     // New methods for Google token flows
     String loginWithGoogleToken(GoogleTokenRequest request);
     String registerWithGoogleToken(GoogleTokenRequest request);
+
+    // Retrieve user by id (for profile view)
+    User getById(Integer userId);
 }

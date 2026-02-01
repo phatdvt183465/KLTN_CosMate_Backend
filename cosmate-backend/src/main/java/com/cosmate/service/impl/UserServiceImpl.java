@@ -12,6 +12,7 @@ import com.cosmate.exception.ErrorCode;
 import com.cosmate.repository.UserRepository;
 import com.cosmate.security.JwtUtils;
 import com.cosmate.service.UserService;
+import com.cosmate.service.FirebaseStorageService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -22,6 +23,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -46,6 +48,7 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final JwtUtils jwtUtils;
+    private final FirebaseStorageService firebaseStorageService;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -55,7 +58,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public User register(RegisterRequest request, boolean fromGoogle) {
+    public User register(RegisterRequest request, boolean fromGoogle, String avatarUrl) {
         // check duplicates
         if (request.getEmail() != null && userRepository.findByEmail(request.getEmail()).isPresent()) {
             throw new AppException(ErrorCode.EMAIL_ALREADY_EXISTS);
@@ -113,7 +116,7 @@ public class UserServiceImpl implements UserService {
                 .roles(new HashSet<>(Collections.singleton(desiredRole)));
 
         if (request.getFullName() != null) builder.fullName(request.getFullName());
-        if (request.getAvatarUrl() != null) builder.avatarUrl(request.getAvatarUrl());
+        if (avatarUrl != null) builder.avatarUrl(avatarUrl);
 
         User user = builder.build();
 
@@ -152,15 +155,46 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public User updateProfile(Integer userId, UpdateProfileRequest request) {
+    public User updateProfile(Integer userId, UpdateProfileRequest request, MultipartFile avatar) {
         User user = userRepository.findById(userId).orElseThrow(() -> new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION));
 
         // username is not allowed to be changed via profile update
 
         if (request.getFullName() != null) user.setFullName(request.getFullName());
         if (request.getPhone() != null) user.setPhone(request.getPhone());
-        if (request.getAvatarUrl() != null) user.setAvatarUrl(request.getAvatarUrl());
 
+        // upload avatar if provided; service handles upload and sets avatarUrl
+        if (avatar != null && !avatar.isEmpty()) {
+            try {
+                String filename = avatar.getOriginalFilename() == null ? "avatar" : avatar.getOriginalFilename();
+                String destination = "users/" + userId + "/avatar_" + System.currentTimeMillis() + "_" + filename;
+                String url = firebaseStorageService.uploadFile(avatar, destination);
+                user.setAvatarUrl(url);
+            } catch (Exception e) {
+                // Log the upload failure but do not abort the whole profile update
+                logger.error("Failed to upload avatar for user {}: {}. Continuing without updating avatar.", userId, e.getMessage(), e);
+                // keep existing avatarUrl in user (no change)
+            }
+        }
+
+        return userRepository.save(user);
+    }
+
+    // New: update only avatar
+    @Override
+    @Transactional
+    public User updateAvatar(Integer userId, MultipartFile avatar) {
+        if (avatar == null || avatar.isEmpty()) throw new AppException(ErrorCode.INVALID_KEY);
+        User user = userRepository.findById(userId).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        try {
+            String filename = avatar.getOriginalFilename() == null ? "avatar" : avatar.getOriginalFilename();
+            String destination = "users/" + userId + "/avatar_" + System.currentTimeMillis() + "_" + filename;
+            String url = firebaseStorageService.uploadFile(avatar, destination);
+            user.setAvatarUrl(url);
+        } catch (Exception e) {
+            logger.error("Failed to upload avatar for user {}: {}", userId, e.getMessage(), e);
+            throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION);
+        }
         return userRepository.save(user);
     }
 
@@ -243,7 +277,7 @@ public class UserServiceImpl implements UserService {
         Map<String, Object> payload = verifyGoogleIdToken(request.getIdToken());
         if (payload == null) throw new AppException(ErrorCode.INVALID_CREDENTIALS);
         String email = (String) payload.get("email");
-        if (email == null) throw new AppException(ErrorCode.INVALID_EMAIL);
+        if (email == null) throw new AppException(ErrorCode.INVALID_CREDENTIALS);
 
         User user = userRepository.findByEmail(email).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
         // check banned
@@ -277,8 +311,7 @@ public class UserServiceImpl implements UserService {
             RegisterRequest r = new RegisterRequest();
             r.setEmail(email);
             r.setFullName(name);
-            r.setAvatarUrl(picture);
-            user = register(r, true);
+            user = register(r, true, picture);
         }
 
         if (user.getStatus() != null && "BANNED".equalsIgnoreCase(user.getStatus())) {

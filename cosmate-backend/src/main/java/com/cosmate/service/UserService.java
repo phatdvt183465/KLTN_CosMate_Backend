@@ -6,14 +6,21 @@ import com.cosmate.dto.request.ChangePasswordRequest;
 import com.cosmate.dto.request.UpdateProfileRequest;
 import com.cosmate.dto.request.GoogleTokenRequest;
 import com.cosmate.dto.response.UserListItem;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
 public interface UserService {
-    User register(RegisterRequest request, boolean fromGoogle);
+    // avatarUrl is optional and passed separately; avatar file upload handled at controller/service boundary
+    User register(RegisterRequest request, boolean fromGoogle, String avatarUrl);
     String authenticate(String usernameOrEmail, String password);
 
-    User updateProfile(Integer userId, UpdateProfileRequest request);
+    // accept avatar file so service can upload and persist avatarUrl
+    User updateProfile(Integer userId, UpdateProfileRequest request, MultipartFile avatar);
+
+    // New: update only avatar
+    User updateAvatar(Integer userId, MultipartFile avatar);
+
     void changePassword(Integer userId, ChangePasswordRequest request);
 
     void lockUser(Integer targetUserId);

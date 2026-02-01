@@ -21,6 +21,8 @@ public class GlobalExceptionHandler {
         apiResponse.setCode(errorCode.getCode());
         apiResponse.setMessage(errorCode.getMessage());
 
+        logger.debug("AppException handled: {}", errorCode, exception);
+
         if (errorCode == ErrorCode.FORBIDDEN || errorCode == ErrorCode.ACCOUNT_BANNED) {
             // return proper 403 for forbidden or banned operations
             return ResponseEntity.status(403).body(apiResponse);
@@ -31,6 +33,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(value = MethodArgumentNotValidException.class)
     ResponseEntity<ApiResponse> handlingValidation(MethodArgumentNotValidException exception){
+        logger.debug("Validation exception: {}", exception.getMessage(), exception);
         String enumKey = exception.getFieldError().getDefaultMessage();
 
         ErrorCode errorCode = ErrorCode.INVALID_KEY;
@@ -53,6 +56,17 @@ public class GlobalExceptionHandler {
         apiResponse.setCode(errorCode.getCode());
         apiResponse.setMessage(errorCode.getMessage());
 
+        logger.debug("Mapped validation error {} -> {}", enumKey, errorCode);
+
         return ResponseEntity.badRequest().body(apiResponse);
+    }
+
+    @ExceptionHandler(value = Exception.class)
+    ResponseEntity<ApiResponse> handlingAll(Exception exception) {
+        logger.error("Unhandled exception: {}", exception.getMessage(), exception);
+        ApiResponse apiResponse = new ApiResponse();
+        apiResponse.setCode(99998);
+        apiResponse.setMessage("Internal server error: " + exception.getMessage());
+        return ResponseEntity.status(500).body(apiResponse);
     }
 }

@@ -55,6 +55,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Auth endpoints
                         .requestMatchers("/api/auth/**").permitAll()
+                        // Allow VNPay return endpoint (VNPay redirect must be anonymous)
+                        .requestMatchers("/api/vnpay/return").permitAll()
                         // Swagger/OpenAPI
                         .requestMatchers(
                                 "/v3/api-docs/**",

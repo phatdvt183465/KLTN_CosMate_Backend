@@ -13,6 +13,7 @@ import com.cosmate.repository.UserRepository;
 import com.cosmate.security.JwtUtils;
 import com.cosmate.service.UserService;
 import com.cosmate.service.FirebaseStorageService;
+import com.cosmate.service.WalletService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -49,6 +50,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final JwtUtils jwtUtils;
     private final FirebaseStorageService firebaseStorageService;
+    private final WalletService walletService;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -127,7 +129,19 @@ public class UserServiceImpl implements UserService {
             user.setPasswordHash(hash);
         }
 
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        // Automatically create wallet for COSPLAYER or PROVIDER
+        try {
+            if (saved.getRoles() != null) {
+                boolean createWallet = saved.getRoles().stream().anyMatch(r -> r == Role.COSPLAYER || r == Role.PROVIDER);
+                if (createWallet) {
+                    walletService.createForUser(saved);
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Failed to create wallet for user {}: {}", saved.getId(), e.getMessage(), e);
+        }
+        return saved;
     }
 
     @Override

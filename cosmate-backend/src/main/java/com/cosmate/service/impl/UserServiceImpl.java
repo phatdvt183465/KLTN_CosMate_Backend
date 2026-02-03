@@ -14,6 +14,7 @@ import com.cosmate.security.JwtUtils;
 import com.cosmate.service.UserService;
 import com.cosmate.service.FirebaseStorageService;
 import com.cosmate.service.WalletService;
+import com.cosmate.service.ProviderService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -51,6 +52,7 @@ public class UserServiceImpl implements UserService {
     private final JwtUtils jwtUtils;
     private final FirebaseStorageService firebaseStorageService;
     private final WalletService walletService;
+    private final ProviderService providerService;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -141,6 +143,15 @@ public class UserServiceImpl implements UserService {
         } catch (Exception e) {
             logger.error("Failed to create wallet for user {}: {}", saved.getId(), e.getMessage(), e);
         }
+
+        // If the user was created with PROVIDER role, create a Provider entity (fields null by default). The Providers table references Users by user_id.
+        try {
+            if (saved.getRoles() != null && saved.getRoles().stream().anyMatch(r -> r == Role.PROVIDER)) {
+                providerService.createForUser(saved.getId());
+            }
+        } catch (Exception e) {
+            logger.error("Failed to create provider record for user {}: {}", saved.getId(), e.getMessage(), e);
+        }
         return saved;
     }
 
@@ -184,6 +195,14 @@ public class UserServiceImpl implements UserService {
                 String destination = "users/" + userId + "/avatar_" + System.currentTimeMillis() + "_" + filename;
                 String url = firebaseStorageService.uploadFile(avatar, destination);
                 user.setAvatarUrl(url);
+                // If user is a PROVIDER, mirror avatar to Provider record
+                try {
+                    if (user.getRoles() != null && user.getRoles().stream().anyMatch(r -> r == Role.PROVIDER)) {
+                        providerService.updateAvatarForUser(userId, url);
+                    }
+                } catch (Exception e) {
+                    logger.error("Failed to mirror avatar to provider for user {}: {}", userId, e.getMessage(), e);
+                }
             } catch (Exception e) {
                 // Log the upload failure but do not abort the whole profile update
                 logger.error("Failed to upload avatar for user {}: {}. Continuing without updating avatar.", userId, e.getMessage(), e);
@@ -205,6 +224,14 @@ public class UserServiceImpl implements UserService {
             String destination = "users/" + userId + "/avatar_" + System.currentTimeMillis() + "_" + filename;
             String url = firebaseStorageService.uploadFile(avatar, destination);
             user.setAvatarUrl(url);
+            // If user is a PROVIDER, mirror avatar to Provider record
+            try {
+                if (user.getRoles() != null && user.getRoles().stream().anyMatch(r -> r == Role.PROVIDER)) {
+                    providerService.updateAvatarForUser(userId, url);
+                }
+            } catch (Exception e) {
+                logger.error("Failed to mirror avatar to provider for user {}: {}", userId, e.getMessage(), e);
+            }
         } catch (Exception e) {
             logger.error("Failed to upload avatar for user {}: {}", userId, e.getMessage(), e);
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION);

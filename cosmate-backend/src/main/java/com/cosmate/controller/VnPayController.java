@@ -1,6 +1,7 @@
 package com.cosmate.controller;
 
 import com.cosmate.dto.response.ApiResponse;
+import com.cosmate.service.SubscriptionService;
 import com.cosmate.service.VnPayService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +17,7 @@ import java.util.Map;
 public class VnPayController {
 
     private final VnPayService vnPayService;
+    private final SubscriptionService subscriptionService;
 
     @PostMapping("/create")
     public ResponseEntity<ApiResponse<Map<String, String>>> createPayment(@RequestParam Integer userId,
@@ -42,6 +44,20 @@ public class VnPayController {
         ApiResponse<Map<String, String>> api = new ApiResponse<>();
         try {
             Map<String, String> result = vnPayService.handleReturn(allParams);
+            // If transaction is SUB and completed, activate subscription
+            String status = result.get("status");
+            if ("OK".equals(status)) {
+                String txnRef = allParams.get("vnp_TxnRef");
+                if (txnRef != null && txnRef.startsWith("SUB")) {
+                    String idPart = txnRef.substring("SUB".length());
+                    try {
+                        Integer txnId = Integer.valueOf(idPart);
+                        subscriptionService.finalizeSubscriptionPayment(txnId);
+                    } catch (Exception e) {
+                        // log and continue; return will still be OK to VNPay
+                    }
+                }
+            }
             api.setCode(0);
             api.setMessage("OK");
             api.setResult(result);

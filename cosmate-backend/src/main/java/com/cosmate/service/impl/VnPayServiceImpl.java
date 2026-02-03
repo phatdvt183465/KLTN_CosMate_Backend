@@ -39,6 +39,7 @@ public class VnPayServiceImpl implements VnPayService {
     @Override
     @Transactional
     public String createPaymentUrl(Integer userId, BigDecimal amount, String returnUrl) throws Exception {
+        // default flow - create its own transaction and use WALLET prefix
         // amount in VND (VNPay expects amount in cents - multiply by 100)
         long amountVnd100 = amount.multiply(new BigDecimal(100)).longValue();
 
@@ -56,7 +57,22 @@ public class VnPayServiceImpl implements VnPayService {
                 .build();
         pending = transactionRepository.save(pending);
 
-        String txnRef = "WALLET" + pending.getId();
+        return createPaymentUrlForTransaction(userId, amount, returnUrl, pending.getId());
+    }
+
+    @Override
+    @Transactional
+    public String createPaymentUrlForTransaction(Integer userId, BigDecimal amount, String returnUrl, Integer transactionId) throws Exception {
+        long amountVnd100 = amount.multiply(new BigDecimal(100)).longValue();
+
+        // create txn ref with SUB or WALLET depending on type - here use SUB if transaction type starts with SUBSCRIPTION else WALLET
+        String prefix = "WALLET";
+        Optional<Transaction> txOpt = transactionRepository.findById(transactionId);
+        if (txOpt.isPresent()) {
+            Transaction tx = txOpt.get();
+            if (tx.getType() != null && tx.getType().toUpperCase().contains("SUBSCRIPTION")) prefix = "SUB";
+        }
+        String txnRef = prefix + transactionId;
 
         Map<String, String> vnp_Params = new HashMap<>();
         vnp_Params.put("vnp_Version", "2.1.0");
@@ -65,13 +81,12 @@ public class VnPayServiceImpl implements VnPayService {
         vnp_Params.put("vnp_Amount", String.valueOf(amountVnd100));
         vnp_Params.put("vnp_CurrCode", "VND");
         vnp_Params.put("vnp_TxnRef", txnRef);
-        vnp_Params.put("vnp_OrderInfo", "Topup wallet user:" + userId);
+        vnp_Params.put("vnp_OrderInfo", "Payment for txn:" + txnRef);
         vnp_Params.put("vnp_OrderType", "topup");
         vnp_Params.put("vnp_Locale", "vn");
         vnp_Params.put("vnp_ReturnUrl", returnUrl);
         vnp_Params.put("vnp_CreateDate", LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss")));
         vnp_Params.put("vnp_ExpireDate", LocalDateTime.now().plusMinutes(15).format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss")));
-        // ip - frontend will actually come from user's browser; use placeholder
         vnp_Params.put("vnp_IpAddr", "127.0.0.1");
 
         List<String> fieldNames = new ArrayList<>(vnp_Params.keySet());
@@ -121,12 +136,14 @@ public class VnPayServiceImpl implements VnPayService {
         }
 
         String txnRef = params.get("vnp_TxnRef");
-        if (txnRef == null || !txnRef.startsWith("WALLET")) {
+        if (txnRef == null || !(txnRef.startsWith("WALLET") || txnRef.startsWith("SUB"))) {
             result.put("status", "INVALID_TXNREF");
             return result;
         }
 
-        String idPart = txnRef.substring("WALLET".length());
+        String idPart;
+        if (txnRef.startsWith("WALLET")) idPart = txnRef.substring("WALLET".length());
+        else idPart = txnRef.substring("SUB".length());
         Integer txnId;
         try {
             txnId = Integer.valueOf(idPart);
@@ -170,14 +187,21 @@ public class VnPayServiceImpl implements VnPayService {
             return result;
         }
 
-        // credit wallet
-        Wallet wallet = t.getWallet();
-        wallet.setBalance(wallet.getBalance().add(amount));
-        walletRepository.save(wallet);
+        // For subscription payments (txnRef starting with SUB) we should NOT add money to wallet;
+        // we only mark the transaction as COMPLETED and let subscription flow activate the subscription.
+        if (!txnRef.startsWith("SUB")) {
+            // credit wallet for non-subscription topups
+            Wallet wallet = t.getWallet();
+            wallet.setBalance(wallet.getBalance().add(amount));
+            walletRepository.save(wallet);
+        }
 
         t.setStatus("COMPLETED");
         t.setCreatedAt(LocalDateTime.now());
         transactionRepository.save(t);
+
+        // If this is a subscription transaction (SUB prefix), subscription activation should be handled by SubscriptionService.finalizeSubscriptionPayment
+        // The caller (controller handling VNPay return) can call that service after invoking vnPayService.handleReturn and seeing status OK.
 
         result.put("status", "OK");
         return result;

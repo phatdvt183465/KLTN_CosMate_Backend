@@ -72,14 +72,19 @@ public class ProviderController {
         }
     }
 
-    @GetMapping("/me")
-    public ResponseEntity<ApiResponse<ProviderResponse>> getMyProvider() {
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<ProviderResponse>> getProvider(@PathVariable Integer id) {
         Integer currentUserId = getCurrentUserId();
         ApiResponse<ProviderResponse> api = new ApiResponse<>();
         if (currentUserId == null) {
             api.setCode(1001);
             api.setMessage("Chưa xác thực - Vui lòng đăng nhập");
             return ResponseEntity.status(401).body(api);
+        }
+        if (!currentUserId.equals(id)) {
+            api.setCode(1006);
+            api.setMessage("Không có quyền thực hiện thao tác này!");
+            return ResponseEntity.status(403).body(api);
         }
         try {
             Provider p = providerService.getByUserId(currentUserId);
@@ -102,14 +107,19 @@ public class ProviderController {
         }
     }
 
-    @PutMapping("/me")
-    public ResponseEntity<ApiResponse<ProviderResponse>> updateMyProvider(@RequestBody UpdateProviderRequest request) {
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse<ProviderResponse>> updateProvider(@PathVariable Integer id, @RequestBody UpdateProviderRequest request) {
         Integer currentUserId = getCurrentUserId();
         ApiResponse<ProviderResponse> api = new ApiResponse<>();
         if (currentUserId == null) {
             api.setCode(1001);
             api.setMessage("Chưa xác thực - Vui lòng đăng nhập");
             return ResponseEntity.status(401).body(api);
+        }
+        if (!currentUserId.equals(id)) {
+            api.setCode(1006);
+            api.setMessage("Không có quyền thực hiện thao tác này!");
+            return ResponseEntity.status(403).body(api);
         }
         try {
             Provider p = providerService.updateOwnProvider(currentUserId, request);

@@ -13,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -46,8 +47,8 @@ public class WalletController {
         }
     }
 
-    @GetMapping("/me")
-    public ResponseEntity<ApiResponse<WalletResponse>> getMyWallet() {
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<WalletResponse>> getWallet(@PathVariable Integer id) {
         Integer userId = getCurrentUserId();
         ApiResponse<WalletResponse> api = new ApiResponse<>();
         if (userId == null) {
@@ -56,7 +57,13 @@ public class WalletController {
             return ResponseEntity.status(401).body(api);
         }
 
-        Wallet wallet = walletService.getByUserId(userId).orElse(null);
+        if (!userId.equals(id)) {
+            api.setCode(1006);
+            api.setMessage("Không có quyền thực hiện thao tác này!");
+            return ResponseEntity.status(403).body(api);
+        }
+
+        Wallet wallet = walletService.getByUserId(id).orElse(null);
         if (wallet == null) {
             api.setCode(1004);
             api.setMessage("Wallet not found");
@@ -76,8 +83,8 @@ public class WalletController {
         return ResponseEntity.ok(api);
     }
 
-    @GetMapping("/me/transactions")
-    public ResponseEntity<ApiResponse<List<TransactionResponse>>> getMyTransactions() {
+    @GetMapping("/{id}/transactions")
+    public ResponseEntity<ApiResponse<List<TransactionResponse>>> getTransactions(@PathVariable Integer id) {
         Integer userId = getCurrentUserId();
         ApiResponse<List<TransactionResponse>> api = new ApiResponse<>();
         if (userId == null) {
@@ -86,7 +93,13 @@ public class WalletController {
             return ResponseEntity.status(401).body(api);
         }
 
-        Wallet wallet = walletService.getByUserId(userId).orElse(null);
+        if (!userId.equals(id)) {
+            api.setCode(1006);
+            api.setMessage("Không có quyền thực hiện thao tác này!");
+            return ResponseEntity.status(403).body(api);
+        }
+
+        Wallet wallet = walletService.getByUserId(id).orElse(null);
         if (wallet == null) {
             api.setCode(1004);
             api.setMessage("Wallet not found");

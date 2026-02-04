@@ -68,14 +68,20 @@ public class ProviderSubscriptionController {
     }
 
     // New: provider can list their own subscriptions
-    @GetMapping("/me")
-    public ResponseEntity<ApiResponse<List<ProviderSubscriptionResponse>>> listMySubscriptions() {
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<List<ProviderSubscriptionResponse>>> listMySubscriptions(@PathVariable Integer id) {
         ApiResponse<List<ProviderSubscriptionResponse>> api = new ApiResponse<>();
         Integer currentUserId = getCurrentUserId();
         if (currentUserId == null) {
             api.setCode(1001);
             api.setMessage("Chưa xác thực - Vui lòng đăng nhập");
             return ResponseEntity.status(401).body(api);
+        }
+
+        if (!currentUserId.equals(id)) {
+            api.setCode(1006);
+            api.setMessage("Không có quyền thực hiện thao tác này!");
+            return ResponseEntity.status(403).body(api);
         }
 
         try {

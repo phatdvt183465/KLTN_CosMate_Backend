@@ -69,6 +69,8 @@ public class SecurityConfig {
                         ).permitAll()
                         // Allow public GET access to providers list and details
                         .requestMatchers(HttpMethod.GET, "/api/providers/**").permitAll()
+                        // Allow public GET access to subscription plans
+                        .requestMatchers(HttpMethod.GET, "/api/subscription-plans/**").permitAll()
                         // OPTIONS preflight
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // Other endpoints

@@ -95,20 +95,26 @@ public class UserServiceImpl implements UserService {
         // Authorization rules:
         // - PROVIDER: open registration (no authenticated admin needed)
         // - COSPLAYER: open registration
-        // - ADMIN / STAFF: only an authenticated user with ROLE_ADMIN can create these accounts
+        // - ADMIN: only an authenticated user with ROLE_SUPERADMIN can create ADMIN accounts
+        // - STAFF: only an authenticated user with ROLE_ADMIN or ROLE_SUPERADMIN can create STAFF accounts
         if (desiredRole == Role.ADMIN || desiredRole == Role.STAFF) {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            boolean isAdmin = false;
+            boolean canCreate = false;
             if (auth != null && auth.isAuthenticated()) {
                 for (GrantedAuthority ga : auth.getAuthorities()) {
-                    if ("ROLE_ADMIN".equals(ga.getAuthority())) {
-                        isAdmin = true;
-                        break;
+                    if (desiredRole == Role.ADMIN) {
+                        if ("ROLE_SUPERADMIN".equals(ga.getAuthority())) {
+                            canCreate = true; break;
+                        }
+                    } else { // STAFF
+                        if ("ROLE_ADMIN".equals(ga.getAuthority()) || "ROLE_SUPERADMIN".equals(ga.getAuthority())) {
+                            canCreate = true; break;
+                        }
                     }
                 }
             }
-            logger.debug("register: isAdmin={}", isAdmin);
-            if (!isAdmin) {
+            logger.debug("register: canCreate={}", canCreate);
+            if (!canCreate) {
                 throw new AppException(ErrorCode.FORBIDDEN);
             }
         }
@@ -255,7 +261,7 @@ public class UserServiceImpl implements UserService {
         boolean isAdmin = false;
         if (auth != null && auth.isAuthenticated()) {
             for (GrantedAuthority ga : auth.getAuthorities()) {
-                if ("ROLE_ADMIN".equals(ga.getAuthority())) {
+                if ("ROLE_ADMIN".equals(ga.getAuthority()) || "ROLE_SUPERADMIN".equals(ga.getAuthority())) {
                     isAdmin = true; break;
                 }
             }

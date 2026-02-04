@@ -57,7 +57,17 @@ public class WalletController {
             return ResponseEntity.status(401).body(api);
         }
 
-        if (!userId.equals(id)) {
+        boolean allowed = false;
+        if (userId.equals(id)) allowed = true;
+        else {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated()) {
+                var authorities = auth.getAuthorities();
+                allowed = authorities.stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()) || "ROLE_STAFF".equals(a.getAuthority()) || "ROLE_SUPERADMIN".equals(a.getAuthority()));
+            }
+        }
+
+        if (!allowed) {
             api.setCode(1006);
             api.setMessage("Không có quyền thực hiện thao tác này!");
             return ResponseEntity.status(403).body(api);
@@ -93,7 +103,17 @@ public class WalletController {
             return ResponseEntity.status(401).body(api);
         }
 
-        if (!userId.equals(id)) {
+        boolean allowed = false;
+        if (userId.equals(id)) allowed = true;
+        else {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated()) {
+                var authorities = auth.getAuthorities();
+                allowed = authorities.stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()) || "ROLE_STAFF".equals(a.getAuthority()) || "ROLE_SUPERADMIN".equals(a.getAuthority()));
+            }
+        }
+
+        if (!allowed) {
             api.setCode(1006);
             api.setMessage("Không có quyền thực hiện thao tác này!");
             return ResponseEntity.status(403).body(api);

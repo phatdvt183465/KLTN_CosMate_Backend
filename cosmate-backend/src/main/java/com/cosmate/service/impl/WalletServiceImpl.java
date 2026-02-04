@@ -66,7 +66,7 @@ public class WalletServiceImpl implements WalletService {
     @Override
     @Transactional
     public Transaction debit(Wallet wallet, BigDecimal amount, String desc, String reference) throws Exception {
-        if (wallet.getBalance().compareTo(amount) < 0) throw new Exception("Insufficient funds");
+        if (wallet.getBalance().compareTo(amount) < 0) throw new Exception("Số dư trong ví không đủ");
         wallet.setBalance(wallet.getBalance().subtract(amount));
         walletRepository.save(wallet);
 

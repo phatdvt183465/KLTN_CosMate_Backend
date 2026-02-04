@@ -47,18 +47,19 @@ public class WalletController {
         }
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<WalletResponse>> getWallet(@PathVariable Integer id) {
-        Integer userId = getCurrentUserId();
+    // NOTE: endpoint made explicit to indicate this path expects a user id
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<ApiResponse<WalletResponse>> getWallet(@PathVariable Integer userId) {
+        Integer currentUserId = getCurrentUserId();
         ApiResponse<WalletResponse> api = new ApiResponse<>();
-        if (userId == null) {
+        if (currentUserId == null) {
             api.setCode(1001);
             api.setMessage("Chưa xác thực - Vui lòng đăng nhập");
             return ResponseEntity.status(401).body(api);
         }
 
         boolean allowed = false;
-        if (userId.equals(id)) allowed = true;
+        if (currentUserId.equals(userId)) allowed = true;
         else {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.isAuthenticated()) {
@@ -73,7 +74,7 @@ public class WalletController {
             return ResponseEntity.status(403).body(api);
         }
 
-        Wallet wallet = walletService.getByUserId(id).orElse(null);
+        Wallet wallet = walletService.getByUserId(userId).orElse(null);
         if (wallet == null) {
             api.setCode(1004);
             api.setMessage("Wallet not found");
@@ -93,18 +94,18 @@ public class WalletController {
         return ResponseEntity.ok(api);
     }
 
-    @GetMapping("/{id}/transactions")
-    public ResponseEntity<ApiResponse<List<TransactionResponse>>> getTransactions(@PathVariable Integer id) {
-        Integer userId = getCurrentUserId();
+    @GetMapping("/user/{userId}/transactions")
+    public ResponseEntity<ApiResponse<List<TransactionResponse>>> getTransactions(@PathVariable Integer userId) {
+        Integer currentUserId = getCurrentUserId();
         ApiResponse<List<TransactionResponse>> api = new ApiResponse<>();
-        if (userId == null) {
+        if (currentUserId == null) {
             api.setCode(1001);
             api.setMessage("Chưa xác thực - Vui lòng đăng nhập");
             return ResponseEntity.status(401).body(api);
         }
 
         boolean allowed = false;
-        if (userId.equals(id)) allowed = true;
+        if (currentUserId.equals(userId)) allowed = true;
         else {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.isAuthenticated()) {
@@ -119,7 +120,7 @@ public class WalletController {
             return ResponseEntity.status(403).body(api);
         }
 
-        Wallet wallet = walletService.getByUserId(id).orElse(null);
+        Wallet wallet = walletService.getByUserId(userId).orElse(null);
         if (wallet == null) {
             api.setCode(1004);
             api.setMessage("Wallet not found");

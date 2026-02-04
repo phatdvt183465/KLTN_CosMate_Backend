@@ -11,6 +11,7 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -43,7 +44,12 @@ public class ProviderServiceImpl implements ProviderService {
 
     @Override
     public Provider getByUserId(Integer userId) {
-        return providerRepository.findByUserId(userId).orElseThrow(() -> new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION));
+        return providerRepository.findByUserId(userId).orElseThrow(() -> new AppException(ErrorCode.PROVIDER_NOT_FOUND));
+    }
+
+    @Override
+    public Provider getById(Integer providerId) {
+        return providerRepository.findById(providerId).orElseThrow(() -> new AppException(ErrorCode.PROVIDER_NOT_FOUND));
     }
 
     @Override
@@ -75,5 +81,10 @@ public class ProviderServiceImpl implements ProviderService {
         Provider p = opt.get();
         p.setAvatarUrl(avatarUrl);
         return providerRepository.save(p);
+    }
+
+    @Override
+    public List<Provider> listAllProviders() {
+        return providerRepository.findAll();
     }
 }

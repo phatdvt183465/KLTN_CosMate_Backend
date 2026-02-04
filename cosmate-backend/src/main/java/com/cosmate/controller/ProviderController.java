@@ -2,6 +2,7 @@ package com.cosmate.controller;
 
 import com.cosmate.dto.request.UpdateProviderRequest;
 import com.cosmate.dto.response.ApiResponse;
+import com.cosmate.dto.response.ProviderPublicResponse;
 import com.cosmate.dto.response.ProviderResponse;
 import com.cosmate.entity.Provider;
 import com.cosmate.exception.AppException;
@@ -14,6 +15,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/providers")
@@ -42,62 +46,51 @@ public class ProviderController {
         }
     }
 
-    @PostMapping
-    public ResponseEntity<ApiResponse<ProviderResponse>> createForCurrentUser() {
+    private boolean isPrivilegedViewer(Provider p) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) return false;
         Integer currentUserId = getCurrentUserId();
-        ApiResponse<ProviderResponse> api = new ApiResponse<>();
-        if (currentUserId == null) {
-            api.setCode(1001);
-            api.setMessage("Chưa xác thực - Vui lòng đăng nhập");
-            return ResponseEntity.status(401).body(api);
+        // owner (provider role and owner) can view
+        if (currentUserId != null && currentUserId.equals(p.getUserId())) {
+            // if owner has PROVIDER role we allow; but we can't check roles on User here easily.
+            // We'll allow owner access regardless of role to be safe (owner sees own bank info).
+            return true;
         }
+        // staff/admin/superadmin can view
+        return auth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()) || "ROLE_STAFF".equals(a.getAuthority()) || "ROLE_SUPERADMIN".equals(a.getAuthority()));
+    }
+
+    // Public: list all providers (anyone can call)
+    @GetMapping("")
+    public ResponseEntity<ApiResponse<List<ProviderPublicResponse>>> listProviders() {
+        ApiResponse<List<ProviderPublicResponse>> api = new ApiResponse<>();
         try {
-            Provider p = providerService.createForUser(currentUserId);
-            ProviderResponse resp = toResponse(p);
+            List<Provider> providers = providerService.listAllProviders();
+            List<ProviderPublicResponse> resp = providers.stream().map(this::toPublicResponse).collect(Collectors.toList());
             api.setCode(0);
             api.setMessage("OK");
             api.setResult(resp);
             return ResponseEntity.ok(api);
-        } catch (AppException ae) {
-            ErrorCode ec = ae.getErrorCode();
-            api.setCode(ec.getCode());
-            api.setMessage(ec.getMessage());
-            if (ec == ErrorCode.FORBIDDEN || ec == ErrorCode.ACCOUNT_BANNED) return ResponseEntity.status(403).body(api);
-            return ResponseEntity.badRequest().body(api);
         } catch (Exception e) {
-            log.error("Unexpected error creating provider for user {}: {}", currentUserId, e.getMessage(), e);
+            log.error("Unexpected error listing providers: {}", e.getMessage(), e);
             api.setCode(99999);
             api.setMessage("Unexpected server error: " + e.getMessage());
             return ResponseEntity.status(500).body(api);
         }
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<ProviderResponse>> getProvider(@PathVariable Integer id) {
-        Integer currentUserId = getCurrentUserId();
+    // Public: get provider by provider id
+    @GetMapping("/id/{providerId}")
+    public ResponseEntity<ApiResponse<ProviderResponse>> getByProviderId(@PathVariable("providerId") Integer providerId) {
         ApiResponse<ProviderResponse> api = new ApiResponse<>();
-        if (currentUserId == null) {
-            api.setCode(1001);
-            api.setMessage("Chưa xác thực - Vui lòng đăng nhập");
-            return ResponseEntity.status(401).body(api);
-        }
-        boolean allowed = false;
-        if (currentUserId.equals(id)) allowed = true;
-        else {
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.isAuthenticated()) {
-                var authorities = auth.getAuthorities();
-                allowed = authorities.stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()) || "ROLE_STAFF".equals(a.getAuthority()) || "ROLE_SUPERADMIN".equals(a.getAuthority()));
-            }
-        }
-        if (!allowed) {
-            api.setCode(1006);
-            api.setMessage("Không có quyền thực hiện thao tác này!");
-            return ResponseEntity.status(403).body(api);
-        }
         try {
-            Provider p = providerService.getByUserId(id);
+            Provider p = providerService.getById(providerId);
             ProviderResponse resp = toResponse(p);
+            if (!isPrivilegedViewer(p)) {
+                // hide bank info for non-privileged viewers
+                resp.setBankAccountNumber(null);
+                resp.setBankName(null);
+            }
             api.setCode(0);
             api.setMessage("OK");
             api.setResult(resp);
@@ -106,10 +99,39 @@ public class ProviderController {
             ErrorCode ec = ae.getErrorCode();
             api.setCode(ec.getCode());
             api.setMessage(ec.getMessage());
-            if (ec == ErrorCode.FORBIDDEN || ec == ErrorCode.ACCOUNT_BANNED) return ResponseEntity.status(403).body(api);
+            if (ec == ErrorCode.PROVIDER_NOT_FOUND) return ResponseEntity.status(404).body(api);
             return ResponseEntity.badRequest().body(api);
         } catch (Exception e) {
-            log.error("Unexpected error fetching provider for user {}: {}", currentUserId, e.getMessage(), e);
+            log.error("Unexpected error fetching provider by id {}: {}", providerId, e.getMessage(), e);
+            api.setCode(99999);
+            api.setMessage("Unexpected server error: " + e.getMessage());
+            return ResponseEntity.status(500).body(api);
+        }
+    }
+
+    // Public: get provider by user id
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<ApiResponse<ProviderResponse>> getByUserId(@PathVariable("userId") Integer userId) {
+        ApiResponse<ProviderResponse> api = new ApiResponse<>();
+        try {
+            Provider p = providerService.getByUserId(userId);
+            ProviderResponse resp = toResponse(p);
+            if (!isPrivilegedViewer(p)) {
+                resp.setBankAccountNumber(null);
+                resp.setBankName(null);
+            }
+            api.setCode(0);
+            api.setMessage("OK");
+            api.setResult(resp);
+            return ResponseEntity.ok(api);
+        } catch (AppException ae) {
+            ErrorCode ec = ae.getErrorCode();
+            api.setCode(ec.getCode());
+            api.setMessage(ec.getMessage());
+            if (ec == ErrorCode.PROVIDER_NOT_FOUND) return ResponseEntity.status(404).body(api);
+            return ResponseEntity.badRequest().body(api);
+        } catch (Exception e) {
+            log.error("Unexpected error fetching provider by user {}: {}", userId, e.getMessage(), e);
             api.setCode(99999);
             api.setMessage("Unexpected server error: " + e.getMessage());
             return ResponseEntity.status(500).body(api);
@@ -183,6 +205,18 @@ public class ProviderController {
             api.setMessage("Unexpected server error: " + e.getMessage());
             return ResponseEntity.status(500).body(api);
         }
+    }
+
+    private ProviderPublicResponse toPublicResponse(Provider p) {
+        return ProviderPublicResponse.builder()
+                .id(p.getId())
+                .userId(p.getUserId())
+                .shopName(p.getShopName())
+                .shopAddressId(p.getShopAddressId())
+                .avatarUrl(p.getAvatarUrl())
+                .bio(p.getBio())
+                .verified(p.getVerified())
+                .build();
     }
 
     private ProviderResponse toResponse(Provider p) {

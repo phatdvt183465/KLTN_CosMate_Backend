@@ -14,6 +14,7 @@ public enum ErrorCode {
     INVALID_ROLE(1010, "Vai trò không hợp lệ!"),
     USER_NOT_FOUND(1011, "Không tìm thấy người dùng!"),
     INVALID_EMAIL(1012, "Email không hợp lệ!"),
+    PROVIDER_NOT_FOUND(1013, "Không tìm thấy provider cho user_id!"),
     ;
 
     ErrorCode(int code, String message) {

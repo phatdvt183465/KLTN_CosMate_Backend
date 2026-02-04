@@ -67,6 +67,8 @@ public class SecurityConfig {
                                 "/webjars/**",
                                 "/configuration/**"
                         ).permitAll()
+                        // Allow public GET access to providers list and details
+                        .requestMatchers(HttpMethod.GET, "/api/providers/**").permitAll()
                         // OPTIONS preflight
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // Other endpoints

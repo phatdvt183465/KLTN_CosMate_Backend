@@ -19,7 +19,7 @@ public class JwtUtils {
 
     // Read secret and optional expiration from application.properties via constructor injection
     public JwtUtils(@Value("${jwt.secret:}") String jwtSecret,
-                    @Value("${jwt.expiration-ms:86400000}") long expirationMs) {
+                    @Value("${jwt.expiration-ms:604800000}") long expirationMs) {
         if (jwtSecret == null || jwtSecret.isBlank()) {
             throw new IllegalArgumentException("jwt.secret is missing or empty. Vui lòng cấu hình jwt.secret trong application.properties");
         }

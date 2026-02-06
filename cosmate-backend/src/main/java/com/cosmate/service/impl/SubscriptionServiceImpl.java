@@ -10,6 +10,8 @@ import com.cosmate.repository.TransactionRepository;
 import com.cosmate.service.SubscriptionService;
 import com.cosmate.service.VnPayService;
 import com.cosmate.service.WalletService;
+import com.cosmate.dto.request.PaymentMethod;
+import com.cosmate.service.MomoService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -29,6 +31,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final ProviderSubscriptionRepository subscriptionRepository;
     private final WalletService walletService;
     private final VnPayService vnPayService;
+    private final MomoService momoService;
     private final TransactionRepository transactionRepository;
 
     @Override
@@ -57,7 +60,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     @Override
     @Transactional
-    public String initiateProviderSubscription(Integer providerUserId, Integer planId, String returnUrl) throws Exception {
+    public String initiateProviderSubscription(Integer providerUserId, Integer planId, String returnUrl, PaymentMethod paymentMethod) throws Exception {
         // find provider by user id
         Provider provider = providerRepository.findByUserId(providerUserId).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
         SubscriptionPlan plan = planRepository.findById(planId).orElseThrow(() -> new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION));
@@ -102,8 +105,17 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         ps.setTransaction(t);
         subscriptionRepository.save(ps);
 
-        // Create VNPay URL using transaction id as reference
-        String payUrl = vnPayService.createPaymentUrlForTransaction(wallet.getUser().getId(), plan.getPrice(), returnUrl, t.getId());
+        // Decide payment provider; default to VNPAY for backward compatibility
+        PaymentMethod pm = paymentMethod == null ? PaymentMethod.VNPAY : paymentMethod;
+
+        String payUrl;
+        if (pm == PaymentMethod.VNPAY) {
+            payUrl = vnPayService.createPaymentUrlForTransaction(wallet.getUser().getId(), plan.getPrice(), returnUrl, t.getId());
+        } else if (pm == PaymentMethod.MOMO) {
+            payUrl = momoService.createPaymentUrlForTransaction(wallet.getUser().getId(), plan.getPrice(), returnUrl, t.getId());
+        } else {
+            throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION);
+        }
         return payUrl;
     }
 

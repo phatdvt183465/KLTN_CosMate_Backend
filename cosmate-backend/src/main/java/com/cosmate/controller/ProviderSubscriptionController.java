@@ -54,7 +54,8 @@ public class ProviderSubscriptionController {
         }
 
         try {
-            String url = subscriptionService.initiateProviderSubscription(currentUserId, req.getSubscriptionPlanId(), req.getReturnUrl());
+            // pass paymentMethod through; SubscriptionService will default to VNPAY if null
+            String url = subscriptionService.initiateProviderSubscription(currentUserId, req.getSubscriptionPlanId(), req.getReturnUrl(), req.getPaymentMethod());
             api.setCode(0);
             api.setMessage("OK");
             api.setResult(url);

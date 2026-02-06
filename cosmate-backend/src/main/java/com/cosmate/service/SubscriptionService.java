@@ -2,6 +2,7 @@ package com.cosmate.service;
 
 import com.cosmate.entity.SubscriptionPlan;
 import com.cosmate.entity.ProviderSubscription;
+import com.cosmate.dto.request.PaymentMethod;
 
 import java.util.List;
 
@@ -11,7 +12,7 @@ public interface SubscriptionService {
     List<SubscriptionPlan> listPlans();
 
     // Provider actions
-    String initiateProviderSubscription(Integer providerUserId, Integer planId, String returnUrl) throws Exception;
+    String initiateProviderSubscription(Integer providerUserId, Integer planId, String returnUrl, PaymentMethod paymentMethod) throws Exception;
     ProviderSubscription finalizeSubscriptionPayment(Integer transactionId) throws Exception; // called when VnPay return handled
 
     // New: query subscriptions

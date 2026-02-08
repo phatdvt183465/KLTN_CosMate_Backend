@@ -4,40 +4,45 @@ import jakarta.persistence.*;
 import lombok.Data;
 import org.hibernate.annotations.Nationalized;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
+@Entity
+@Table(name = "Costumes")
+@Data
 public class Costume {
-    @Entity
-    @Table(name = "Costumes")
-    @Data
-    public class Costume {
-        @Id
-        @GeneratedValue(strategy = GenerationType.IDENTITY)
-        private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-        @Nationalized
-        @Column(nullable = false)
-        private String name;
+    @Column(name = "provider_id")
+    private Long providerId;
 
-        @Nationalized
-        private String description;
+    @Nationalized
+    private String name;
 
-        private String size; // S, M, L, XL...
+    private String size;
 
-        private BigDecimal price; // Dùng BigDecimal cho tiền tệ nhé
+    @Column(name = "rent_purpose")
+    private String rentPurpose;
 
-        private BigDecimal deposit; // Tiền cọc
+    @Column(name = "number_of_items")
+    private Integer numberOfItems;
 
-        private Integer status; // 0: Available, 1: Rented, 2: Maintenance
+    @Nationalized
+    private String description;
 
-        @ManyToOne
-        @JoinColumn(name = "user_id")
-        private User owner; // Người sở hữu bộ đồ
+    @Column(name = "price_per_day")
+    private BigDecimal pricePerDay;
 
-        @OneToMany(mappedBy = "costume", cascade = CascadeType.ALL)
-        private List<CostumeImage> images;
+    @Column(name = "deposit_amount")
+    private BigDecimal depositAmount;
 
-        @OneToMany(mappedBy = "costume", cascade = CascadeType.ALL)
-        private List<CostumeSurcharge> surcharges;
-    }
+    private String status;
+
+    @OneToMany(mappedBy = "costume", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<CostumeImage> images = new ArrayList<>();
+
+    @OneToMany(mappedBy = "costume", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<CostumeSurcharge> surcharges = new ArrayList<>();
 }

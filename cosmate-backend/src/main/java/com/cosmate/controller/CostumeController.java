@@ -1,6 +1,7 @@
 package com.cosmate.controller;
 
 import com.cosmate.dto.request.CostumeRequest;
+import com.cosmate.dto.response.ApiResponse;
 import com.cosmate.dto.response.CostumeResponse;
 import com.cosmate.service.CostumeService;
 import lombok.RequiredArgsConstructor;
@@ -18,28 +19,25 @@ public class CostumeController {
     private final CostumeService costumeService;
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<CostumeResponse> create(@ModelAttribute CostumeRequest request) {
-        return ResponseEntity.ok(costumeService.createCostume(request));
-    }
-
-    @GetMapping
-    public ResponseEntity<List<CostumeResponse>> getAll() {
-        return ResponseEntity.ok(costumeService.getAllCostumes());
-    }
-
-    @GetMapping("/{id}")
-    public ResponseEntity<CostumeResponse> getById(@PathVariable Long id) {
-        return ResponseEntity.ok(costumeService.getById(id));
+    public ApiResponse<CostumeResponse> create(@ModelAttribute CostumeRequest request) {
+        return ApiResponse.<CostumeResponse>builder()
+                .result(costumeService.createCostume(request))
+                .message("Tạo mới thành công!")
+                .build();
     }
 
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<CostumeResponse> update(@PathVariable Long id, @ModelAttribute CostumeRequest request) {
-        return ResponseEntity.ok(costumeService.updateCostume(id, request));
+    public ApiResponse<CostumeResponse> update(@PathVariable Long id, @ModelAttribute CostumeRequest request) {
+        return ApiResponse.<CostumeResponse>builder()
+                .result(costumeService.updateCostume(id, request))
+                .message("Cập nhật xong!")
+                .build();
     }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
-        costumeService.deleteCostume(id);
-        return ResponseEntity.noContent().build();
+    @GetMapping("/{id}")
+    public ApiResponse<CostumeResponse> getById(@PathVariable Long id) {
+        return ApiResponse.<CostumeResponse>builder()
+                .result(costumeService.getById(id))
+                .build();
     }
 }

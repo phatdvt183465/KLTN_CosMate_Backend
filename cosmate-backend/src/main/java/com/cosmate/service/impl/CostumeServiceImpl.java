@@ -28,6 +28,10 @@ public class CostumeServiceImpl implements CostumeService {
     @Override
     @Transactional
     public CostumeResponse createCostume(CostumeRequest request) {
+        if (request.getProviderId() == null) {
+            throw new RuntimeException("Provider ID không được để trống!");
+        }
+
         Costume costume = new Costume();
         // Khi tạo mới thì gán hết
         mapRequestToEntity(costume, request);
@@ -45,40 +49,27 @@ public class CostumeServiceImpl implements CostumeService {
         Costume costume = costumeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy bộ đồ ID: " + id));
 
-        // --- PHẦN QUAN TRỌNG: CHỈ CẬP NHẬT NẾU KHÁC NULL ---
-        if (request.getName() != null && !request.getName().isBlank())
-            costume.setName(request.getName());
+        // Logic giữ thông tin cũ nếu request gửi null (Partial Update)
+        if (request.getName() != null && !request.getName().isBlank()) costume.setName(request.getName());
+        if (request.getDescription() != null) costume.setDescription(request.getDescription());
+        if (request.getSize() != null) costume.setSize(request.getSize());
+        if (request.getRentPurpose() != null) costume.setRentPurpose(request.getRentPurpose());
+        if (request.getNumberOfItems() != null) costume.setNumberOfItems(request.getNumberOfItems());
+        if (request.getPricePerDay() != null) costume.setPricePerDay(request.getPricePerDay());
+        if (request.getDepositAmount() != null) costume.setDepositAmount(request.getDepositAmount());
+        if (request.getProviderId() != null) costume.setProviderId(request.getProviderId());
 
-        if (request.getDescription() != null)
-            costume.setDescription(request.getDescription());
-
-        if (request.getSize() != null)
-            costume.setSize(request.getSize());
-
-        if (request.getRentPurpose() != null)
-            costume.setRentPurpose(request.getRentPurpose());
-
-        if (request.getNumberOfItems() != null)
-            costume.setNumberOfItems(request.getNumberOfItems());
-
-        if (request.getPricePerDay() != null)
-            costume.setPricePerDay(request.getPricePerDay());
-
-        if (request.getDepositAmount() != null)
-            costume.setDepositAmount(request.getDepositAmount());
-
-        if (request.getProviderId() != null)
-            costume.setProviderId(request.getProviderId());
-
-        // CHỈ cập nhật ảnh nếu có up file mới lên
+        // Fix lỗi ảnh: Chỉ xóa và cập nhật nếu có file mới thực sự được gửi lên
         if (request.getImageFiles() != null && !request.getImageFiles().isEmpty()) {
-            costume.getImages().clear(); // Xóa ảnh cũ
-            handleImages(costume, request.getImageFiles());
+            // Kiểm tra xem file đầu tiên có dữ liệu không để tránh lỗi multipart trống
+            if (!request.getImageFiles().get(0).isEmpty()) {
+                costume.getImages().clear();
+                handleImages(costume, request.getImageFiles());
+            }
         }
 
-        // CHỈ cập nhật phụ phí nếu có gửi chuỗi JSON mới và không rỗng
         if (request.getSurcharges() != null && !request.getSurcharges().isBlank()) {
-            costume.getSurcharges().clear(); // Xóa phụ phí cũ
+            costume.getSurcharges().clear();
             handleSurcharges(costume, request.getSurcharges());
         }
 
@@ -88,9 +79,14 @@ public class CostumeServiceImpl implements CostumeService {
     private void handleImages(Costume costume, List<MultipartFile> files) {
         if (files == null || files.isEmpty()) return;
         for (int i = 0; i < files.size(); i++) {
-            String path = saveFileLocal(files.get(i));
+            if (files.get(i).isEmpty()) continue;
+
+            // 4. Lưu Firebase thay vì Local [cite: 2]
+            // String url = firebaseService.upload(files.get(i));
+            String url = "https://firebase-storage/mock/" + files.get(i).getOriginalFilename(); // Giả lập
+
             CostumeImage img = new CostumeImage();
-            img.setImageUrl(path);
+            img.setImageUrl(url);
             img.setType(i == 0 ? "MAIN" : "DETAIL");
             img.setCostume(costume);
             costume.getImages().add(img);
@@ -159,6 +155,14 @@ public class CostumeServiceImpl implements CostumeService {
                 .status(costume.getStatus())
                 .providerId(costume.getProviderId())
                 .imageUrls(costume.getImages().stream().map(CostumeImage::getImageUrl).collect(Collectors.toList()))
+                // 2. Trả thêm thông tin Surcharge [cite: 2]
+                .surcharges(costume.getSurcharges().stream()
+                        .map(s -> CostumeResponse.SurchargeResponse.builder()
+                                .name(s.getName())
+                                .description(s.getDescription())
+                                .price(s.getPrice())
+                                .build())
+                        .collect(Collectors.toList()))
                 .build();
     }
 

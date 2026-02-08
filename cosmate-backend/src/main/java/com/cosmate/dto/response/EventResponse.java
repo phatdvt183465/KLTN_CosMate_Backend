@@ -13,6 +13,6 @@ public class EventResponse {
     private String description;
     private LocalDate startDate;
     private LocalDate endDate;
-    private Integer status;
+    private String status;
     private Integer createdBy;
 }

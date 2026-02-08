@@ -22,7 +22,7 @@ public class Event {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    private Integer status;
+    private String status; // changed code: status is now a String to match the DB NVARCHAR(50) values like 'UPCOMING', 'ONGOING', etc.
 
     @Column(name = "start_date")
     private LocalDate startDate;

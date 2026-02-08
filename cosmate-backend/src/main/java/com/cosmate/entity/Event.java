@@ -5,7 +5,7 @@ import lombok.*;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "EVENTS")
+@Table(name = "Events")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -22,6 +22,7 @@ public class Event {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @Column(columnDefinition = "nvarchar(255)")
     private String location;
     private Integer status;
 

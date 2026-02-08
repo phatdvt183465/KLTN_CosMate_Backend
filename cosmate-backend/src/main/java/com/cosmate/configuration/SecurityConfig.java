@@ -53,6 +53,9 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // public business api
+                        .requestMatchers("/api/events/**").permitAll()
+                        .requestMatchers("/api/costumes/**").permitAll()
                         // Auth endpoints
                         .requestMatchers("/api/auth/**").permitAll()
                         // Allow VNPay return endpoint (VNPay redirect must be anonymous)

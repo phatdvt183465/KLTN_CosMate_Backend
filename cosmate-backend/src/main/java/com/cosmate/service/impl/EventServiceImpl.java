@@ -29,7 +29,6 @@ public class EventServiceImpl implements EventService {
         Event event = new Event();
         event.setTitle(request.getTitle());
         event.setDescription(request.getDescription());
-        event.setLocation(request.getLocation());
         event.setStartDate(request.getStartDate());
         event.setEndDate(request.getEndDate());
         event.setStatus(request.getStatus());
@@ -50,7 +49,6 @@ public class EventServiceImpl implements EventService {
                 .id(event.getId())
                 .title(event.getTitle())
                 .description(event.getDescription())
-                .location(event.getLocation())
                 .startDate(event.getStartDate())
                 .endDate(event.getEndDate())
                 .status(event.getStatus())

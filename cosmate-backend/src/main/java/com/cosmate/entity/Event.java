@@ -22,8 +22,6 @@ public class Event {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(columnDefinition = "nvarchar(255)")
-    private String location;
     private Integer status;
 
     @Column(name = "start_date")

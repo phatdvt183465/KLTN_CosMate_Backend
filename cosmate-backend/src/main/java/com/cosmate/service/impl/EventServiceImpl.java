@@ -31,7 +31,11 @@ public class EventServiceImpl implements EventService {
         event.setDescription(request.getDescription());
         event.setStartDate(request.getStartDate());
         event.setEndDate(request.getEndDate());
-        event.setStatus(request.getStatus());
+        String status = request.getStatus();
+        if (status == null || status.isBlank()) {
+            status = "PENDING_APPROVAL";
+        }
+        event.setStatus(status);
         event.setCreatedBy(request.getCreatedBy());
 
         return mapToResponse(eventRepository.save(event));

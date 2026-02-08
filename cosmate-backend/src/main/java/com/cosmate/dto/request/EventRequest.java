@@ -14,6 +14,6 @@ public class EventRequest {
     private String description;
     private LocalDate startDate;
     private LocalDate endDate;
-    private Integer status;
+    private String status; // changed code: status is a String representing enum-like values (e.g., 'UPCOMING')
     private Integer createdBy; // ID của Staff/Admin tạo sự kiện
 }

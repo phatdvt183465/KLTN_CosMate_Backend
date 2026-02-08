@@ -12,7 +12,6 @@ import java.time.LocalDate;
 public class EventRequest {
     private String title;
     private String description;
-    private String location;
     private LocalDate startDate;
     private LocalDate endDate;
     private Integer status;

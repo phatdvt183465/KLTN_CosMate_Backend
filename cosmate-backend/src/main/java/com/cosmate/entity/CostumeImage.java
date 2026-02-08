@@ -2,8 +2,6 @@ package com.cosmate.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
 
 @Entity
 @Table(name = "Costume_Images")
@@ -11,7 +9,7 @@ import lombok.Setter;
 public class CostumeImage {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Integer id;
 
     @ManyToOne
     @JoinColumn(name = "costume_id")

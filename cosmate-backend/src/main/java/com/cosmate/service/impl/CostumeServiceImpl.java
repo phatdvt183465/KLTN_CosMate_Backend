@@ -41,7 +41,7 @@ public class CostumeServiceImpl implements CostumeService {
 
     @Override
     @Transactional
-    public CostumeResponse updateCostume(Long id, CostumeRequest request) {
+    public CostumeResponse updateCostume(Integer id, CostumeRequest request) {
         Costume costume = costumeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy bộ đồ ID: " + id));
 
@@ -163,6 +163,6 @@ public class CostumeServiceImpl implements CostumeService {
     }
 
     @Override public List<CostumeResponse> getAllCostumes() { return costumeRepository.findAll().stream().map(this::mapToResponse).collect(Collectors.toList()); }
-    @Override public CostumeResponse getById(Long id) { return mapToResponse(costumeRepository.findById(id).orElseThrow()); }
-    @Override public void deleteCostume(Long id) { costumeRepository.deleteById(id); }
+    @Override public CostumeResponse getById(Integer id) { return mapToResponse(costumeRepository.findById(id).orElseThrow()); }
+    @Override public void deleteCostume(Integer id) { costumeRepository.deleteById(id); }
 }

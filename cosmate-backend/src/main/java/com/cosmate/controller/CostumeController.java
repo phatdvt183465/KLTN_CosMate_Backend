@@ -28,17 +28,17 @@ public class CostumeController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<CostumeResponse> getById(@PathVariable Long id) {
+    public ResponseEntity<CostumeResponse> getById(@PathVariable Integer id) {
         return ResponseEntity.ok(costumeService.getById(id));
     }
 
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<CostumeResponse> update(@PathVariable Long id, @ModelAttribute CostumeRequest request) {
+    public ResponseEntity<CostumeResponse> update(@PathVariable Integer id, @ModelAttribute CostumeRequest request) {
         return ResponseEntity.ok(costumeService.updateCostume(id, request));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable Integer id) {
         costumeService.deleteCostume(id);
         return ResponseEntity.noContent().build();
     }

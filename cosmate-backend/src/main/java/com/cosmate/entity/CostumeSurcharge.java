@@ -13,7 +13,7 @@ import java.math.BigDecimal;
 public class CostumeSurcharge {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Integer id;
 
     @ManyToOne
     @JoinColumn(name = "costume_id")

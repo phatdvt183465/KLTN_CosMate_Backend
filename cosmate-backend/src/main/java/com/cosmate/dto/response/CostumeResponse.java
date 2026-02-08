@@ -12,7 +12,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CostumeResponse {
-    private Long id;
+    private Integer id;
     private String name;
     private String description;
     private String size;
@@ -21,6 +21,6 @@ public class CostumeResponse {
     private BigDecimal pricePerDay;   // Trả về đúng tên
     private BigDecimal depositAmount; // Trả về đúng tên
     private String status;
-    private Long providerId;          // Trả về đúng tên
+    private Integer providerId;          // Trả về đúng tên
     private List<String> imageUrls;
 }

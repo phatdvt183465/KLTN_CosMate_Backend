@@ -168,5 +168,13 @@ public class CostumeServiceImpl implements CostumeService {
 
     @Override public List<CostumeResponse> getAllCostumes() { return costumeRepository.findAll().stream().map(this::mapToResponse).collect(Collectors.toList()); }
     @Override public CostumeResponse getById(Long id) { return mapToResponse(costumeRepository.findById(id).orElseThrow()); }
-    @Override public void deleteCostume(Long id) { costumeRepository.deleteById(id); }
+    @Override
+    @Transactional
+    public void deleteCostume(Long id) {
+        Costume costume = costumeRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy bộ đồ để xóa!"));
+
+        costume.setStatus("DELETED");
+        costumeRepository.save(costume);
+    }
 }

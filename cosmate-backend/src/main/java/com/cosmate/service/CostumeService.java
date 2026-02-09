@@ -8,7 +8,7 @@ public interface CostumeService {
     CostumeResponse createCostume(CostumeRequest request);
     List<CostumeResponse> getAllCostumes();
     CostumeResponse getById(Integer id);
-    // Thêm 2 dòng này
     CostumeResponse updateCostume(Integer id, CostumeRequest request);
     void deleteCostume(Integer id);
+    void changeStatus(Integer id, String newStatus);
 }

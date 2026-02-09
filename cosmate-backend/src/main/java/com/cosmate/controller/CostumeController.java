@@ -17,6 +17,20 @@ import java.util.List;
 public class CostumeController {
 
     private final CostumeService costumeService;
+    // Get all costumes (excluding deleted ones)
+    @GetMapping
+    public ApiResponse<List<CostumeResponse>> getAll() {
+        return ApiResponse.<List<CostumeResponse>>builder()
+                .result(costumeService.getAllCostumes())
+                .build();
+    }
+
+    @GetMapping("/{id}")
+    public ApiResponse<CostumeResponse> getById(@PathVariable Integer id) {
+        return ApiResponse.<CostumeResponse>builder()
+                .result(costumeService.getById(id))
+                .build();
+    }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<CostumeResponse> create(@ModelAttribute CostumeRequest request) {
@@ -34,10 +48,16 @@ public class CostumeController {
                 .build();
     }
 
-    @GetMapping("/{id}")
-    public ApiResponse<CostumeResponse> getById(@PathVariable Integer id) {
-        return ApiResponse.<CostumeResponse>builder()
-                .result(costumeService.getById(id))
+    // API đổi trạng thái: DISABLED <-> AVAILABLE
+    // Gọi: PUT /api/costumes/{id}/status?status=DISABLED
+    @PutMapping("/{id}/status")
+    public ApiResponse<Void> changeStatus(
+            @PathVariable Integer id,
+            @RequestParam String status) { // Truyền status muốn đổi vào đây
+
+        costumeService.changeStatus(id, status);
+        return ApiResponse.<Void>builder()
+                .message("Đã đổi trạng thái thành " + status + " thành công!")
                 .build();
     }
 

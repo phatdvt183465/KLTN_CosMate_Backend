@@ -21,14 +21,14 @@ public class CostumeImageServiceImpl implements CostumeImageService {
     // private final FirebaseService firebaseService;
 
     @Override
-    public List<CostumeImage> getByCostumeId(Long costumeId) {
+    public List<CostumeImage> getByCostumeId(Integer costumeId) {
         // Trả về danh sách ảnh của costume
         return imageRepository.findByCostumeId(costumeId);
     }
 
     @Override
     @Transactional
-    public CostumeImage uploadImage(Long costumeId, MultipartFile file, String type) {
+    public CostumeImage uploadImage(Integer costumeId, MultipartFile file, String type) {
         // Kiểm tra xem bộ đồ có tồn tại không
         Costume costume = costumeRepository.findById(costumeId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy bộ đồ ID: " + costumeId + " để thêm ảnh!"));
@@ -44,18 +44,5 @@ public class CostumeImageServiceImpl implements CostumeImageService {
         img.setCostume(costume);
 
         return imageRepository.save(img);
-    }
-
-    @Override
-    @Transactional
-    public void delete(Long id) {
-        // Kiểm tra xem ảnh có tồn tại trước khi xóa
-        CostumeImage img = imageRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Ảnh này không tồn tại hoặc đã bị xóa rồi!"));
-
-        // TODO: Viết thêm logic xóa file vật lý trên Firebase tại đây để tránh rác storage
-        // firebaseService.deleteFile(img.getImageUrl());
-
-        imageRepository.delete(img);
     }
 }

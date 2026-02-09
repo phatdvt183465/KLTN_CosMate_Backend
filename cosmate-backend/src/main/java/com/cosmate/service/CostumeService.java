@@ -7,8 +7,8 @@ import java.util.List;
 public interface CostumeService {
     CostumeResponse createCostume(CostumeRequest request);
     List<CostumeResponse> getAllCostumes();
-    CostumeResponse getById(Long id);
+    CostumeResponse getById(Integer id);
     // Thêm 2 dòng này
-    CostumeResponse updateCostume(Long id, CostumeRequest request);
-    void deleteCostume(Long id);
+    CostumeResponse updateCostume(Integer id, CostumeRequest request);
+    void deleteCostume(Integer id);
 }

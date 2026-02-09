@@ -19,14 +19,14 @@ public class CostumeSurchargeServiceImpl implements CostumeSurchargeService {
     private final CostumeRepository costumeRepository;
 
     @Override
-    public List<CostumeSurcharge> getByCostumeId(Long costumeId) {
+    public List<CostumeSurcharge> getByCostumeId(Integer costumeId) {
         // Tìm danh sách phụ phí liên quan đến Costume ID
         return surchargeRepository.findByCostumeId(costumeId);
     }
 
     @Override
     @Transactional
-    public CostumeSurcharge create(Long costumeId, CostumeSurcharge request) {
+    public CostumeSurcharge create(Integer costumeId, CostumeSurcharge request) {
         // Kiểm tra xem Costume có tồn tại không trước khi thêm phụ phí
         Costume costume = costumeRepository.findById(costumeId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy bộ đồ ID: " + costumeId + " để thêm phí!"));
@@ -37,7 +37,7 @@ public class CostumeSurchargeServiceImpl implements CostumeSurchargeService {
 
     @Override
     @Transactional
-    public CostumeSurcharge update(Long id, CostumeSurcharge request) {
+    public CostumeSurcharge update(Integer id, CostumeSurcharge request) {
         // Tìm phụ phí cũ để cập nhật
         CostumeSurcharge surcharge = surchargeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Phụ phí này không tồn tại!"));
@@ -52,14 +52,5 @@ public class CostumeSurchargeServiceImpl implements CostumeSurchargeService {
             surcharge.setDescription(request.getDescription());
 
         return surchargeRepository.save(surcharge);
-    }
-
-    @Override
-    @Transactional
-    public void delete(Long id) {
-        if (!surchargeRepository.existsById(id)) {
-            throw new RuntimeException("Phí này xóa rồi hoặc không có!");
-        }
-        surchargeRepository.deleteById(id);
     }
 }

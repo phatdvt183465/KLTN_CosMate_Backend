@@ -11,7 +11,7 @@ import lombok.Setter;
 public class CostumeImage {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Integer id;
 
     @ManyToOne
     @JoinColumn(name = "costume_id")

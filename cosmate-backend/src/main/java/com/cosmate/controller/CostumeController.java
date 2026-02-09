@@ -27,7 +27,7 @@ public class CostumeController {
     }
 
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<CostumeResponse> update(@PathVariable Long id, @ModelAttribute CostumeRequest request) {
+    public ApiResponse<CostumeResponse> update(@PathVariable Integer id, @ModelAttribute CostumeRequest request) {
         return ApiResponse.<CostumeResponse>builder()
                 .result(costumeService.updateCostume(id, request))
                 .message("Cập nhật xong!")
@@ -35,9 +35,18 @@ public class CostumeController {
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<CostumeResponse> getById(@PathVariable Long id) {
+    public ApiResponse<CostumeResponse> getById(@PathVariable Integer id) {
         return ApiResponse.<CostumeResponse>builder()
                 .result(costumeService.getById(id))
+                .build();
+    }
+
+    // Thêm vào CostumeController.java
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> delete(@PathVariable Integer id) {
+        costumeService.deleteCostume(id);
+        return ApiResponse.<Void>builder()
+                .message("Xóa bộ đồ thành công (Soft Delete)!")
                 .build();
     }
 }

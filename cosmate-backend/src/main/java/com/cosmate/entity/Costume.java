@@ -13,10 +13,10 @@ import java.util.List;
 public class Costume {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Integer id;
 
     @Column(name = "provider_id")
-    private Long providerId;
+    private Integer providerId;
 
     @Nationalized
     private String name;

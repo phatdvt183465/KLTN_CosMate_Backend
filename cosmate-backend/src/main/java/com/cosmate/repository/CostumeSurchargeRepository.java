@@ -7,6 +7,6 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface CostumeSurchargeRepository extends JpaRepository<CostumeSurcharge, Long> {
-    List<CostumeSurcharge> findByCostumeId(Long costumeId);
+public interface CostumeSurchargeRepository extends JpaRepository<CostumeSurcharge, Integer> {
+    List<CostumeSurcharge> findByCostumeId(Integer costumeId);
 }

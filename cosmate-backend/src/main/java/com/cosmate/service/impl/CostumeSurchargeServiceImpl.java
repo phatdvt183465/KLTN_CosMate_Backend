@@ -1,5 +1,7 @@
 package com.cosmate.service.impl;
 
+import com.cosmate.dto.request.SurchargeRequest;
+import com.cosmate.dto.response.SurchargeResponse;
 import com.cosmate.entity.Costume;
 import com.cosmate.entity.CostumeSurcharge;
 import com.cosmate.repository.CostumeRepository;
@@ -9,7 +11,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -19,38 +23,79 @@ public class CostumeSurchargeServiceImpl implements CostumeSurchargeService {
     private final CostumeRepository costumeRepository;
 
     @Override
-    public List<CostumeSurcharge> getByCostumeId(Integer costumeId) {
-        // Tìm danh sách phụ phí liên quan đến Costume ID
-        return surchargeRepository.findByCostumeId(costumeId);
+    public List<SurchargeResponse> getByCostumeId(Integer costumeId) {
+        if (!costumeRepository.existsById(costumeId)) {
+            throw new RuntimeException("Error: Costume ID " + costumeId + " not found.");
+        }
+        return surchargeRepository.findByCostumeId(costumeId).stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
     }
 
     @Override
     @Transactional
-    public CostumeSurcharge create(Integer costumeId, CostumeSurcharge request) {
-        // Kiểm tra xem Costume có tồn tại không trước khi thêm phụ phí
+    public SurchargeResponse create(Integer costumeId, SurchargeRequest request) {
         Costume costume = costumeRepository.findById(costumeId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy bộ đồ ID: " + costumeId + " để thêm phí!"));
+                .orElseThrow(() -> new RuntimeException("Error: Costume ID " + costumeId + " not found."));
 
-        request.setCostume(costume); // Gán quan hệ
-        return surchargeRepository.save(request);
+        validateRequest(request);
+
+        CostumeSurcharge surcharge = new CostumeSurcharge();
+        surcharge.setCostume(costume);
+        surcharge.setName(request.getName());
+        surcharge.setDescription(request.getDescription());
+        surcharge.setPrice(request.getPrice());
+
+        return mapToResponse(surchargeRepository.save(surcharge));
     }
 
     @Override
     @Transactional
-    public CostumeSurcharge update(Integer id, CostumeSurcharge request) {
-        // Tìm phụ phí cũ để cập nhật
+    public SurchargeResponse update(Integer id, SurchargeRequest request) {
         CostumeSurcharge surcharge = surchargeRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Phụ phí này không tồn tại!"));
+                .orElseThrow(() -> new RuntimeException("Error: Surcharge ID " + id + " not found."));
 
-        if (request.getName() != null && !request.getName().isBlank())
+        // Logic Partial Update (Chỉ update trường khác null/rỗng)
+        if (isValidString(request.getName())) {
             surcharge.setName(request.getName());
+        }
 
-        if (request.getPrice() != null)
-            surcharge.setPrice(request.getPrice());
-
-        if (request.getDescription() != null)
+        if (isValidString(request.getDescription())) {
             surcharge.setDescription(request.getDescription());
+        }
 
-        return surchargeRepository.save(surcharge);
+        if (request.getPrice() != null) {
+            if (request.getPrice().compareTo(BigDecimal.ZERO) < 0) {
+                throw new RuntimeException("Error: Price cannot be negative.");
+            }
+            surcharge.setPrice(request.getPrice());
+        }
+
+        return mapToResponse(surchargeRepository.save(surcharge));
+    }
+
+    // --- Helpers ---
+
+    private void validateRequest(SurchargeRequest request) {
+        if (!isValidString(request.getName())) {
+            throw new RuntimeException("Error: Surcharge name is required.");
+        }
+        if (request.getPrice() == null || request.getPrice().compareTo(BigDecimal.ZERO) < 0) {
+            throw new RuntimeException("Error: Price is required and cannot be negative.");
+        }
+    }
+
+    private boolean isValidString(String input) {
+        return input != null && !input.trim().isEmpty();
+    }
+
+    private SurchargeResponse mapToResponse(CostumeSurcharge entity) {
+        return SurchargeResponse.builder()
+                .id(entity.getId())
+                .name(entity.getName())
+                .description(entity.getDescription())
+                .price(entity.getPrice())
+                .costumeId(entity.getCostume().getId())
+                .build();
     }
 }

@@ -1,5 +1,6 @@
 package com.cosmate.service.impl;
 
+import com.cosmate.dto.response.ImageResponse;
 import com.cosmate.entity.Costume;
 import com.cosmate.entity.CostumeImage;
 import com.cosmate.repository.CostumeImageRepository;
@@ -11,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -21,28 +23,45 @@ public class CostumeImageServiceImpl implements CostumeImageService {
     // private final FirebaseService firebaseService;
 
     @Override
-    public List<CostumeImage> getByCostumeId(Integer costumeId) {
-        // Trả về danh sách ảnh của costume
-        return imageRepository.findByCostumeId(costumeId);
+    public List<ImageResponse> getByCostumeId(Integer costumeId) {
+        if (!costumeRepository.existsById(costumeId)) {
+            throw new RuntimeException("Error: Costume ID " + costumeId + " not found.");
+        }
+        return imageRepository.findByCostumeId(costumeId).stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
     }
 
     @Override
     @Transactional
-    public CostumeImage uploadImage(Integer costumeId, MultipartFile file, String type) {
-        // Kiểm tra xem bộ đồ có tồn tại không
+    public ImageResponse uploadImage(Integer costumeId, MultipartFile file, String type) {
         Costume costume = costumeRepository.findById(costumeId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy bộ đồ ID: " + costumeId + " để thêm ảnh!"));
+                .orElseThrow(() -> new RuntimeException("Error: Costume ID " + costumeId + " not found."));
 
-        // Giả lập logic upload Firebase (giống như mình đã thống nhất)
-        // String imageUrl = firebaseService.upload(file);
-        String imageUrl = "https://firebase-storage/cosmate/" + System.currentTimeMillis() + "_" + file.getOriginalFilename();
+        if (file == null || file.isEmpty()) {
+            throw new RuntimeException("Error: File is empty.");
+        }
+
+        // Mock Firebase Upload
+        // String url = firebaseService.upload(file);
+        String url = "https://firebase-storage/cosmate/" + System.currentTimeMillis() + "_" + file.getOriginalFilename();
 
         CostumeImage img = new CostumeImage();
-        img.setImageUrl(imageUrl);
-        // Nếu không truyền type thì mặc định là DETAIL
-        img.setType(type != null ? type : "DETAIL");
+        img.setImageUrl(url);
+        // Default to DETAIL if type is null or empty
+        img.setType((type != null && !type.isEmpty()) ? type : "DETAIL");
         img.setCostume(costume);
 
-        return imageRepository.save(img);
+        return mapToResponse(imageRepository.save(img));
+    }
+
+    // Mapper helper
+    private ImageResponse mapToResponse(CostumeImage entity) {
+        return ImageResponse.builder()
+                .id(entity.getId())
+                .costumeId(entity.getCostume().getId())
+                .imageUrl(entity.getImageUrl())
+                .type(entity.getType())
+                .build();
     }
 }

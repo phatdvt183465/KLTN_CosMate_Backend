@@ -17,6 +17,14 @@ import java.util.List;
 public class CostumeController {
 
     private final CostumeService costumeService;
+
+    @GetMapping("/provider/{providerId}")
+    public ApiResponse<List<CostumeResponse>> getByProviderId(@PathVariable Integer providerId) {
+        return ApiResponse.<List<CostumeResponse>>builder()
+                .result(costumeService.getByProviderId(providerId))
+                .build();
+    }
+
     // Get all costumes (excluding deleted ones)
     @GetMapping
     public ApiResponse<List<CostumeResponse>> getAll() {
@@ -66,7 +74,7 @@ public class CostumeController {
     public ApiResponse<Void> delete(@PathVariable Integer id) {
         costumeService.deleteCostume(id);
         return ApiResponse.<Void>builder()
-                .message("Xóa bộ đồ thành công (Soft Delete)!")
+                .message("Xóa bộ đồ thành công!")
                 .build();
     }
 }

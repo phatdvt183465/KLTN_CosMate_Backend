@@ -55,6 +55,21 @@ public class CostumeImageServiceImpl implements CostumeImageService {
         return mapToResponse(imageRepository.save(img));
     }
 
+    @Override
+    public ImageResponse getById(Integer id) {
+        return mapToResponse(imageRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Error: Image ID " + id + " not found.")));
+    }
+
+    @Override
+    @Transactional
+    public void deleteImage(Integer id) {
+        if (!imageRepository.existsById(id)) {
+            throw new RuntimeException("Error: Image not found to delete.");
+        }
+        imageRepository.deleteById(id);
+    }
+
     // Mapper helper
     private ImageResponse mapToResponse(CostumeImage entity) {
         return ImageResponse.builder()

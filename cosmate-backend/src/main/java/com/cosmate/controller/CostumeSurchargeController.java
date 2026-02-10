@@ -16,6 +16,13 @@ public class CostumeSurchargeController {
 
     private final CostumeSurchargeService surchargeService;
 
+    @GetMapping("/{id}")
+    public ApiResponse<SurchargeResponse> getById(@PathVariable Integer id) {
+        return ApiResponse.<SurchargeResponse>builder()
+                .result(surchargeService.getById(id))
+                .build();
+    }
+
     @GetMapping("/costume/{costumeId}")
     public ApiResponse<List<SurchargeResponse>> getByCostumeId(@PathVariable Integer costumeId) {
         return ApiResponse.<List<SurchargeResponse>>builder()
@@ -29,7 +36,7 @@ public class CostumeSurchargeController {
             @RequestBody SurchargeRequest request) {
         return ApiResponse.<SurchargeResponse>builder()
                 .code(1000)
-                .message("Created surcharge successfully")
+                .message("Tạo phụ phí thành công!")
                 .result(surchargeService.create(costumeId, request))
                 .build();
     }
@@ -40,8 +47,16 @@ public class CostumeSurchargeController {
             @RequestBody SurchargeRequest request) {
         return ApiResponse.<SurchargeResponse>builder()
                 .code(1000)
-                .message("Updated surcharge successfully")
+                .message("Cập nhật phụ phí thành công!")
                 .result(surchargeService.update(id, request))
+                .build();
+    }
+
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> delete(@PathVariable Integer id) {
+        surchargeService.deleteSurcharge(id);
+        return ApiResponse.<Void>builder()
+                .message("Xóa phụ phí!")
                 .build();
     }
 }

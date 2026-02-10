@@ -11,4 +11,5 @@ public interface CostumeService {
     CostumeResponse updateCostume(Integer id, CostumeRequest request);
     void deleteCostume(Integer id);
     void changeStatus(Integer id, String newStatus);
+    List<CostumeResponse> getByProviderId(Integer providerId);
 }

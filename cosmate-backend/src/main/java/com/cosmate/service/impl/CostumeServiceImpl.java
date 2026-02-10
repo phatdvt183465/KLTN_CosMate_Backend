@@ -28,6 +28,13 @@ public class CostumeServiceImpl implements CostumeService {
     // private final FirebaseService firebaseService;
 
     @Override
+    public List<CostumeResponse> getByProviderId(Integer providerId) {
+        return costumeRepository.findByProviderIdAndStatusNotIgnoreCase(providerId, "DELETED").stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     @Transactional
     public CostumeResponse createCostume(CostumeRequest request) {
         validateCreateRequest(request);

@@ -7,4 +7,6 @@ import java.util.List;
 public interface CostumeImageService {
     List<ImageResponse> getByCostumeId(Integer costumeId);
     ImageResponse uploadImage(Integer costumeId, MultipartFile file, String type);
+    ImageResponse getById(Integer id);
+    void deleteImage(Integer id);
 }

@@ -18,9 +18,18 @@ public class CostumeResponse {
     private String size;
     private String rentPurpose;
     private Integer numberOfItems;
-    private BigDecimal pricePerDay;   // Trả về đúng tên
-    private BigDecimal depositAmount; // Trả về đúng tên
+    private BigDecimal pricePerDay;
+    private BigDecimal depositAmount;
     private String status;
-    private Integer providerId;          // Trả về đúng tên
+    private Integer providerId;
     private List<String> imageUrls;
+    private List<SurchargeResponse> surcharges; // Thêm list phụ phí ở đây nè anh [cite: 2]
+
+    @Data
+    @Builder
+    public static class SurchargeResponse {
+        private String name;
+        private String description;
+        private BigDecimal price;
+    }
 }

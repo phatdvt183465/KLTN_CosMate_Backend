@@ -25,7 +25,6 @@ public class CostumeServiceImpl implements CostumeService {
     private final CostumeRepository costumeRepository;
     private final ProviderRepository providerRepository;
     private final ObjectMapper objectMapper;
-    // private final FirebaseService firebaseService;
 
     @Override
     public List<CostumeResponse> getByProviderId(Integer providerId) {
@@ -40,20 +39,15 @@ public class CostumeServiceImpl implements CostumeService {
         validateCreateRequest(request);
 
         Costume costume = new Costume();
-
-        // Mapping toàn bộ dữ liệu cho trường hợp tạo mới
+        mapBaseInfo(costume, request);
         costume.setProviderId(request.getProviderId());
-        costume.setName(request.getName());
-        costume.setDescription(request.getDescription());
-        costume.setSize(request.getSize());
-        costume.setRentPurpose(request.getRentPurpose());
-        costume.setNumberOfItems(request.getNumberOfItems());
-        costume.setPricePerDay(request.getPricePerDay());
-        costume.setDepositAmount(request.getDepositAmount());
         costume.setStatus("AVAILABLE");
 
+        // Xử lý các thành phần liên quan
         handleImages(costume, request.getImageFiles());
         handleSurcharges(costume, request.getSurcharges());
+        handleAccessories(costume, request.getAccessories());
+        handleRentalOptions(costume, request.getRentalOptions());
 
         return mapToResponse(costumeRepository.save(costume));
     }
@@ -64,7 +58,7 @@ public class CostumeServiceImpl implements CostumeService {
         Costume costume = costumeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Error: Costume ID " + id + " not found."));
 
-        // 1. Validate Provider (nếu có thay đổi)
+        // 1. Cập nhật Provider nếu hợp lệ
         if (request.getProviderId() != null) {
             if (!providerRepository.existsById(request.getProviderId())) {
                 throw new RuntimeException("Error: Provider ID " + request.getProviderId() + " does not exist.");
@@ -72,59 +66,43 @@ public class CostumeServiceImpl implements CostumeService {
             costume.setProviderId(request.getProviderId());
         }
 
-        // 2. Partial Update (Logic: Chỉ update khi giá trị != null VÀ không phải chuỗi rỗng)
-        // Fix lỗi: Form-data gửi chuỗi rỗng "" khiến dữ liệu cũ bị mất.
-        if (isValidString(request.getName())) costume.setName(request.getName());
-        if (isValidString(request.getDescription())) costume.setDescription(request.getDescription());
-        if (isValidString(request.getSize())) costume.setSize(request.getSize());
-        if (isValidString(request.getRentPurpose())) costume.setRentPurpose(request.getRentPurpose());
+        // 2. Cập nhật thông tin cơ bản (Partial Update)
+        updateBaseInfo(costume, request);
 
-        // Với số thì chỉ cần check != null
-        if (request.getNumberOfItems() != null) costume.setNumberOfItems(request.getNumberOfItems());
-
-        if (request.getPricePerDay() != null) {
-            if (request.getPricePerDay().compareTo(BigDecimal.ZERO) <= 0)
-                throw new RuntimeException("Price must be greater than 0");
-            costume.setPricePerDay(request.getPricePerDay());
-        }
-
-        if (request.getDepositAmount() != null) {
-            if (request.getDepositAmount().compareTo(BigDecimal.ZERO) < 0)
-                throw new RuntimeException("Deposit cannot be negative");
-            costume.setDepositAmount(request.getDepositAmount());
-        }
-
-        // 3. Xử lý Ảnh (Image Handling)
-        // Logic: Chỉ xóa ảnh cũ và thêm mới nếu request có chứa ít nhất 1 file hợp lệ (size > 0).
-        // Nếu request.getImageFiles() là null hoặc list rỗng hoặc toàn file rỗng -> Giữ nguyên ảnh cũ.
-        boolean hasNewValidImage = request.getImageFiles() != null &&
+        // 3. Xử lý Ảnh (Chỉ thay thế nếu có ít nhất 1 file mới hợp lệ)
+        boolean hasNewImage = request.getImageFiles() != null &&
                 request.getImageFiles().stream().anyMatch(f -> f != null && !f.isEmpty());
-
-        if (hasNewValidImage) {
-            costume.getImages().clear(); // Xóa ảnh cũ (orphanRemoval = true sẽ xóa trong DB)
+        if (hasNewImage) {
+            costume.getImages().clear();
             handleImages(costume, request.getImageFiles());
         }
 
-        // 4. Xử lý Phụ phí (Surcharges)
-        // Tương tự: Chỉ update nếu chuỗi JSON có dữ liệu
+        // 4. Xử lý Phụ phí
         if (isValidString(request.getSurcharges())) {
             costume.getSurcharges().clear();
             handleSurcharges(costume, request.getSurcharges());
         }
 
-        return mapToResponse(costumeRepository.save(costume));
-    }
+        // 5. Xử lý Phụ kiện (Task 4)
+        if (isValidString(request.getAccessories())) {
+            costume.getAccessories().clear();
+            handleAccessories(costume, request.getAccessories());
+        }
 
-    // Helper check chuỗi: Không null và không rỗng
-    private boolean isValidString(String input) {
-        return input != null && !input.trim().isEmpty();
+        // 6. Xử lý Gói thuê (Task 4)
+        if (isValidString(request.getRentalOptions())) {
+            costume.getRentalOptions().clear();
+            handleRentalOptions(costume, request.getRentalOptions());
+        }
+
+        return mapToResponse(costumeRepository.save(costume));
     }
 
     @Override
     @Transactional
     public void deleteCostume(Integer id) {
         Costume costume = costumeRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Error: Costume not found for deletion."));
+                .orElseThrow(() -> new RuntimeException("Error: Costume not found."));
         costume.setStatus("DELETED");
         costumeRepository.save(costume);
     }
@@ -151,7 +129,7 @@ public class CostumeServiceImpl implements CostumeService {
 
         List<String> validStatuses = Arrays.asList("AVAILABLE", "DISABLED", "MAINTENANCE");
         if (!validStatuses.contains(newStatus)) {
-            throw new RuntimeException("Invalid status. Allowed: AVAILABLE, DISABLED, MAINTENANCE");
+            throw new RuntimeException("Invalid status. Allowed: " + validStatuses);
         }
         if ("DELETED".equals(costume.getStatus())) {
             throw new RuntimeException("Cannot change status of a deleted costume.");
@@ -161,67 +139,102 @@ public class CostumeServiceImpl implements CostumeService {
         costumeRepository.save(costume);
     }
 
-    // --- PRIVATE HELPERS ---
+    // --- Private Business Logic Helpers ---
 
-    private void validateCreateRequest(CostumeRequest request) {
-        if (request.getProviderId() == null) throw new RuntimeException("Provider ID is required.");
-        if (!providerRepository.existsById(request.getProviderId())) throw new RuntimeException("Provider does not exist.");
+    private void mapBaseInfo(Costume costume, CostumeRequest request) {
+        costume.setName(request.getName());
+        costume.setDescription(request.getDescription());
+        costume.setSize(request.getSize());
+        costume.setRentPurpose(request.getRentPurpose());
+        costume.setNumberOfItems(request.getNumberOfItems());
+        costume.setPricePerDay(request.getPricePerDay());
+        costume.setDepositAmount(request.getDepositAmount());
+    }
 
-        if (!isValidString(request.getName())) throw new RuntimeException("Costume name is required.");
-        if (request.getPricePerDay() == null || request.getPricePerDay().compareTo(BigDecimal.ZERO) <= 0)
-            throw new RuntimeException("Price must be > 0.");
+    private void updateBaseInfo(Costume costume, CostumeRequest request) {
+        if (isValidString(request.getName())) costume.setName(request.getName());
+        if (isValidString(request.getDescription())) costume.setDescription(request.getDescription());
+        if (isValidString(request.getSize())) costume.setSize(request.getSize());
+        if (isValidString(request.getRentPurpose())) costume.setRentPurpose(request.getRentPurpose());
+        if (request.getNumberOfItems() != null) costume.setNumberOfItems(request.getNumberOfItems());
 
-        // Validate Image on Create
-        boolean hasValidImage = request.getImageFiles() != null &&
-                request.getImageFiles().stream().anyMatch(f -> f != null && !f.isEmpty());
-        if (!hasValidImage) throw new RuntimeException("At least one image is required.");
+        if (request.getPricePerDay() != null) {
+            if (request.getPricePerDay().compareTo(BigDecimal.ZERO) <= 0)
+                throw new RuntimeException("Price must be > 0");
+            costume.setPricePerDay(request.getPricePerDay());
+        }
+        if (request.getDepositAmount() != null) {
+            if (request.getDepositAmount().compareTo(BigDecimal.ZERO) < 0)
+                throw new RuntimeException("Deposit cannot be negative");
+            costume.setDepositAmount(request.getDepositAmount());
+        }
     }
 
     private void handleImages(Costume costume, List<MultipartFile> files) {
         if (files == null || files.isEmpty()) return;
-
-        int validImageCount = 0;
-
+        int count = 0;
         for (MultipartFile file : files) {
             if (file == null || file.isEmpty()) continue;
-
-            // Mock Firebase Upload
-            // String url = firebaseService.upload(file);
-            String url = "https://firebase-storage/mock/" + System.currentTimeMillis() + "_" + file.getOriginalFilename();
-
             CostumeImage img = new CostumeImage();
-            img.setImageUrl(url);
-
-            // Ảnh đầu tiên hợp lệ sẽ là MAIN
-            img.setType(validImageCount == 0 ? "MAIN" : "DETAIL");
+            img.setImageUrl("https://firebase-storage/mock/" + System.currentTimeMillis() + "_" + file.getOriginalFilename());
+            img.setType(count == 0 ? "MAIN" : "DETAIL");
             img.setCostume(costume);
-
             costume.getImages().add(img);
-            validImageCount++;
+            count++;
         }
     }
 
     private void handleSurcharges(Costume costume, String json) {
         if (!isValidString(json)) return;
         try {
-            Map<String, Map<String, Object>> surchargeData = objectMapper.readValue(json,
-                    new TypeReference<Map<String, Map<String, Object>>>() {});
-
-            surchargeData.forEach((name, details) -> {
+            Map<String, Map<String, Object>> data = objectMapper.readValue(json, new TypeReference<>() {});
+            data.forEach((name, details) -> {
                 CostumeSurcharge s = new CostumeSurcharge();
                 s.setName(name);
-
-                Object price = details.get("price");
-                s.setPrice(price != null ? new BigDecimal(price.toString()) : BigDecimal.ZERO);
-
-                Object desc = details.get("description");
-                s.setDescription(desc != null ? desc.toString() : "");
-
+                s.setPrice(new BigDecimal(details.get("price").toString()));
+                s.setDescription(details.getOrDefault("description", "").toString());
                 s.setCostume(costume);
                 costume.getSurcharges().add(s);
             });
         } catch (IOException e) {
             throw new RuntimeException("Invalid Surcharge JSON format.");
+        }
+    }
+
+    private void handleAccessories(Costume costume, String json) {
+        if (!isValidString(json)) return;
+        try {
+            List<Map<String, Object>> data = objectMapper.readValue(json, new TypeReference<>() {});
+            for (Map<String, Object> item : data) {
+                CostumeAccessory acc = new CostumeAccessory();
+                acc.setName(item.get("name").toString());
+                acc.setPrice(new BigDecimal(item.get("price").toString()));
+                acc.setDescription(item.getOrDefault("description", "").toString());
+                acc.setIsRequired(Boolean.parseBoolean(item.getOrDefault("isRequired", "false").toString()));
+                acc.setStatus("ACTIVE");
+                acc.setCostume(costume);
+                costume.getAccessories().add(acc);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Invalid Accessories JSON format.");
+        }
+    }
+
+    private void handleRentalOptions(Costume costume, String json) {
+        if (!isValidString(json)) return;
+        try {
+            List<Map<String, Object>> data = objectMapper.readValue(json, new TypeReference<>() {});
+            for (Map<String, Object> item : data) {
+                CostumeRentalOption opt = new CostumeRentalOption();
+                opt.setName(item.get("name").toString());
+                opt.setPrice(new BigDecimal(item.get("price").toString()));
+                opt.setDescription(item.getOrDefault("description", "").toString());
+                opt.setStatus("ACTIVE");
+                opt.setCostume(costume);
+                costume.getRentalOptions().add(opt);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Invalid Rental Options JSON format.");
         }
     }
 
@@ -240,11 +253,33 @@ public class CostumeServiceImpl implements CostumeService {
                 .imageUrls(costume.getImages().stream().map(CostumeImage::getImageUrl).collect(Collectors.toList()))
                 .surcharges(costume.getSurcharges().stream()
                         .map(s -> CostumeResponse.SurchargeResponse.builder()
-                                .name(s.getName())
-                                .description(s.getDescription())
-                                .price(s.getPrice())
-                                .build())
+                                .id(s.getId()).name(s.getName()).description(s.getDescription()).price(s.getPrice()).build())
+                        .collect(Collectors.toList()))
+                .accessories(costume.getAccessories().stream()
+                        .map(a -> CostumeResponse.AccessoryResponse.builder()
+                                .id(a.getId()).name(a.getName()).description(a.getDescription()).price(a.getPrice()).isRequired(a.getIsRequired()).build())
+                        .collect(Collectors.toList()))
+                .rentalOptions(costume.getRentalOptions().stream()
+                        .map(o -> CostumeResponse.RentalOptionResponse.builder()
+                                .id(o.getId()).name(o.getName()).description(o.getDescription()).price(o.getPrice()).build())
                         .collect(Collectors.toList()))
                 .build();
+    }
+
+    private void validateCreateRequest(CostumeRequest request) {
+        if (request.getProviderId() == null || !providerRepository.existsById(request.getProviderId())) {
+            throw new RuntimeException("Valid Provider ID is required.");
+        }
+        if (!isValidString(request.getName())) throw new RuntimeException("Costume name is required.");
+        if (request.getPricePerDay() == null || request.getPricePerDay().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RuntimeException("Price must be greater than 0.");
+        }
+        boolean hasImage = request.getImageFiles() != null &&
+                request.getImageFiles().stream().anyMatch(f -> f != null && !f.isEmpty());
+        if (!hasImage) throw new RuntimeException("At least one valid image is required.");
+    }
+
+    private boolean isValidString(String input) {
+        return input != null && !input.trim().isEmpty();
     }
 }

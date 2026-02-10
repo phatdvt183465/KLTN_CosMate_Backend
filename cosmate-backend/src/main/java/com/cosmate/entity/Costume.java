@@ -45,4 +45,10 @@ public class Costume {
 
     @OneToMany(mappedBy = "costume", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CostumeSurcharge> surcharges = new ArrayList<>();
+
+    @OneToMany(mappedBy = "costume", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<CostumeAccessory> accessories = new ArrayList<>();
+
+    @OneToMany(mappedBy = "costume", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<CostumeRentalOption> rentalOptions = new ArrayList<>();
 }

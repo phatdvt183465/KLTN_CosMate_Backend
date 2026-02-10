@@ -6,9 +6,9 @@ import org.hibernate.annotations.Nationalized;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "Costume_Surcharge")
+@Table(name = "Costume_Accessories")
 @Data
-public class CostumeSurcharge {
+public class CostumeAccessory {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
@@ -24,4 +24,9 @@ public class CostumeSurcharge {
     private String description;
 
     private BigDecimal price;
+
+    @Column(name = "is_required")
+    private Boolean isRequired;
+
+    private String status;
 }

@@ -17,4 +17,6 @@ public class CostumeRequest {
     private Integer providerId;
     private List<MultipartFile> imageFiles;
     private String surcharges;
+    private String accessories;
+    private String rentalOptions;
 }

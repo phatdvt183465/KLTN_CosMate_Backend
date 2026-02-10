@@ -23,13 +23,35 @@ public class CostumeResponse {
     private String status;
     private Integer providerId;
     private List<String> imageUrls;
-    private List<SurchargeResponse> surcharges; // Thêm list phụ phí ở đây nè anh [cite: 2]
+    private List<SurchargeResponse> surcharges;
+    private List<AccessoryResponse> accessories;
+    private List<RentalOptionResponse> rentalOptions;
 
     @Data
     @Builder
     public static class SurchargeResponse {
+        private Integer id;
         private String name;
         private String description;
         private BigDecimal price;
+    }
+
+    @Data
+    @Builder
+    public static class AccessoryResponse {
+        private Integer id;
+        private String name;
+        private String description;
+        private BigDecimal price;
+        private Boolean isRequired;
+    }
+
+    @Data
+    @Builder
+    public static class RentalOptionResponse {
+        private Integer id;
+        private String name;
+        private BigDecimal price;
+        private String description;
     }
 }

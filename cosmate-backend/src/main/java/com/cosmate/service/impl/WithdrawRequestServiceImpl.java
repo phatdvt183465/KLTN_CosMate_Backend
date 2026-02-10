@@ -11,6 +11,7 @@ import com.cosmate.repository.TransactionRepository;
 import com.cosmate.repository.WithdrawRequestRepository;
 import com.cosmate.service.WalletService;
 import com.cosmate.service.WithdrawRequestService;
+import com.cosmate.util.RoleUtils;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -42,7 +43,7 @@ public class WithdrawRequestServiceImpl implements WithdrawRequestService {
         String bankName = req.getBankName();
 
         // if provider and bank details missing, try provider default
-        if (user.getRoles() != null && user.getRoles().stream().anyMatch(r -> r.name().equals("PROVIDER"))) {
+        if (user.getRoles() != null && user.getRoles().stream().anyMatch(RoleUtils::isProviderRole)) {
             if ((bankAccount == null || bankAccount.isBlank()) || (bankName == null || bankName.isBlank())) {
                 Optional<Provider> provOpt = providerRepository.findByUserId(user.getId());
                 if (provOpt.isPresent()) {

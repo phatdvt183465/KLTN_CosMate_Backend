@@ -46,15 +46,24 @@ public class JwtUtils {
         this.expirationMs = expirationMs;
     }
 
-    public String generateToken(Long userId, List<String> roles) {
+    // New: providerId optional parameter; include providerId claim when non-null
+    public String generateToken(Long userId, List<String> roles, Long providerId) {
         Date now = new Date();
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .setSubject(String.valueOf(userId))
                 .claim("roles", roles)
                 .setIssuedAt(now)
                 .setExpiration(new Date(now.getTime() + expirationMs))
-                .signWith(key, SignatureAlgorithm.HS256)
-                .compact();
+                .signWith(key, SignatureAlgorithm.HS256);
+        if (providerId != null) {
+            builder.claim("providerId", providerId);
+        }
+        return builder.compact();
+    }
+
+    // Keep convenience method for older callers (calls new method with null providerId)
+    public String generateToken(Long userId, List<String> roles) {
+        return generateToken(userId, roles, null);
     }
 
     public Jws<Claims> parse(String token) {

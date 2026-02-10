@@ -50,9 +50,9 @@ public class ProviderController {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) return false;
         Integer currentUserId = getCurrentUserId();
-        // owner (provider role and owner) can view
+        // owner (provider user) can view
         if (currentUserId != null && currentUserId.equals(p.getUserId())) {
-            // if owner has PROVIDER role we allow; but we can't check roles on User here easily.
+            // if owner has a provider-type role we allow; but we can't check roles on User here easily.
             // We'll allow owner access regardless of role to be safe (owner sees own bank info).
             return true;
         }

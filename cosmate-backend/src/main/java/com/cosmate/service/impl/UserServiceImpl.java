@@ -15,6 +15,7 @@ import com.cosmate.service.UserService;
 import com.cosmate.service.FirebaseStorageService;
 import com.cosmate.service.WalletService;
 import com.cosmate.service.ProviderService;
+import com.cosmate.util.RoleUtils;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -138,10 +139,10 @@ public class UserServiceImpl implements UserService {
         }
 
         User saved = userRepository.save(user);
-        // Automatically create wallet for COSPLAYER or PROVIDER
+        // Automatically create wallet for COSPLAYER or PROVIDER-type roles
         try {
             if (saved.getRoles() != null) {
-                boolean createWallet = saved.getRoles().stream().anyMatch(r -> r == Role.COSPLAYER || r == Role.PROVIDER);
+                boolean createWallet = saved.getRoles().stream().anyMatch(r -> r == Role.COSPLAYER || RoleUtils.isProviderRole(r));
                 if (createWallet) {
                     walletService.createForUser(saved);
                 }
@@ -150,9 +151,9 @@ public class UserServiceImpl implements UserService {
             logger.error("Failed to create wallet for user {}: {}", saved.getId(), e.getMessage(), e);
         }
 
-        // If the user was created with PROVIDER role, create a Provider entity (fields null by default). The Providers table references Users by user_id.
+        // If the user was created with a PROVIDER-type role, create a Provider entity (fields null by default). The Providers table references Users by user_id.
         try {
-            if (saved.getRoles() != null && saved.getRoles().stream().anyMatch(r -> r == Role.PROVIDER)) {
+            if (saved.getRoles() != null && saved.getRoles().stream().anyMatch(RoleUtils::isProviderRole)) {
                 providerService.createForUser(saved.getId());
             }
         } catch (Exception e) {
@@ -181,7 +182,18 @@ public class UserServiceImpl implements UserService {
         List<String> roles = user.getRoles().stream().map(Enum::name).collect(Collectors.toList());
         // convert Integer id to Long to match JwtUtils.generateToken signature
         Long userIdLong = user.getId() == null ? null : user.getId().longValue();
-        return jwtUtils.generateToken(userIdLong, roles);
+
+        Long providerIdLong = null;
+        if (user.getRoles() != null && user.getRoles().stream().anyMatch(RoleUtils::isProviderRole)) {
+            try {
+                var prov = providerService.getByUserId(user.getId());
+                if (prov != null && prov.getId() != null) providerIdLong = prov.getId().longValue();
+            } catch (AppException ignored) {
+                // no provider record found - skip providerId
+            }
+        }
+
+        return jwtUtils.generateToken(userIdLong, roles, providerIdLong);
     }
 
     @Override
@@ -201,9 +213,9 @@ public class UserServiceImpl implements UserService {
                 String destination = "users/" + userId + "/avatar_" + System.currentTimeMillis() + "_" + filename;
                 String url = firebaseStorageService.uploadFile(avatar, destination);
                 user.setAvatarUrl(url);
-                // If user is a PROVIDER, mirror avatar to Provider record
+                // If user is a provider-type role, mirror avatar to Provider record
                 try {
-                    if (user.getRoles() != null && user.getRoles().stream().anyMatch(r -> r == Role.PROVIDER)) {
+                    if (user.getRoles() != null && user.getRoles().stream().anyMatch(RoleUtils::isProviderRole)) {
                         providerService.updateAvatarForUser(userId, url);
                     }
                 } catch (Exception e) {
@@ -230,9 +242,9 @@ public class UserServiceImpl implements UserService {
             String destination = "users/" + userId + "/avatar_" + System.currentTimeMillis() + "_" + filename;
             String url = firebaseStorageService.uploadFile(avatar, destination);
             user.setAvatarUrl(url);
-            // If user is a PROVIDER, mirror avatar to Provider record
+            // If user is a provider-type role, mirror avatar to Provider record
             try {
-                if (user.getRoles() != null && user.getRoles().stream().anyMatch(r -> r == Role.PROVIDER)) {
+                if (user.getRoles() != null && user.getRoles().stream().anyMatch(RoleUtils::isProviderRole)) {
                     providerService.updateAvatarForUser(userId, url);
                 }
             } catch (Exception e) {
@@ -333,7 +345,18 @@ public class UserServiceImpl implements UserService {
         }
         List<String> roles = user.getRoles().stream().map(Enum::name).collect(Collectors.toList());
         Long userIdLong = user.getId() == null ? null : user.getId().longValue();
-        return jwtUtils.generateToken(userIdLong, roles);
+
+        Long providerIdLong = null;
+        if (user.getRoles() != null && user.getRoles().stream().anyMatch(RoleUtils::isProviderRole)) {
+            try {
+                var prov = providerService.getByUserId(user.getId());
+                if (prov != null && prov.getId() != null) providerIdLong = prov.getId().longValue();
+            } catch (AppException ignored) {
+                // skip
+            }
+        }
+
+        return jwtUtils.generateToken(userIdLong, roles, providerIdLong);
     }
 
     @Override
@@ -367,7 +390,18 @@ public class UserServiceImpl implements UserService {
 
         List<String> roles = user.getRoles().stream().map(Enum::name).collect(Collectors.toList());
         Long userIdLong = user.getId() == null ? null : user.getId().longValue();
-        return jwtUtils.generateToken(userIdLong, roles);
+
+        Long providerIdLong = null;
+        if (user.getRoles() != null && user.getRoles().stream().anyMatch(RoleUtils::isProviderRole)) {
+            try {
+                var prov = providerService.getByUserId(user.getId());
+                if (prov != null && prov.getId() != null) providerIdLong = prov.getId().longValue();
+            } catch (AppException ignored) {
+                // skip
+            }
+        }
+
+        return jwtUtils.generateToken(userIdLong, roles, providerIdLong);
     }
 
     @Override

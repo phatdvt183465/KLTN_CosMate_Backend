@@ -28,7 +28,7 @@ public class RegisterRequest {
     // optional
     private String fullName;
 
-    // optional role requested by the client (ADMIN, COSPLAYER, PROVIDER, STAFF)
+    // optional role requested by the client (ADMIN, COSPLAYER, PROVIDER_RENTAL, PROVIDER_PHOTOGRAPH, PROVIDER_EVENT_STAFF, STAFF)
     private String role;
 
     // avatarUrl removed: uploads are handled via multipart file and passed separately to service

@@ -10,6 +10,7 @@ import com.cosmate.dto.response.UserResponse;
 import com.cosmate.entity.User;
 import com.cosmate.security.JwtUtils;
 import com.cosmate.service.UserService;
+import com.cosmate.service.ProviderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +26,7 @@ public class AuthController {
 
     private final UserService userService;
     private final JwtUtils jwtUtils;
+    private final ProviderService providerService;
 
     // Only accept JSON register requests (no avatar upload through this API)
     @PostMapping(value = "/register", consumes = { MediaType.APPLICATION_JSON_VALUE })
@@ -70,7 +72,16 @@ public class AuthController {
         User user = userService.register(r, true, request.getAvatarUrl());
         List<String> roles = user.getRoles().stream().map(Enum::name).collect(Collectors.toList());
         Long userIdLong = user.getId() == null ? null : user.getId().longValue();
-        String token = jwtUtils.generateToken(userIdLong, roles);
+
+        Long providerIdLong = null;
+        try {
+            var prov = providerService.getByUserId(user.getId());
+            if (prov != null && prov.getId() != null) providerIdLong = prov.getId().longValue();
+        } catch (Exception ignored) {
+            // no provider record
+        }
+
+        String token = jwtUtils.generateToken(userIdLong, roles, providerIdLong);
 
         AuthResponse auth = new AuthResponse();
         auth.setToken(token);

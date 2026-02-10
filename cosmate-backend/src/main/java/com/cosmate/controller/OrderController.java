@@ -13,6 +13,9 @@ import com.cosmate.repository.OrderRepository;
 import com.cosmate.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -99,10 +102,25 @@ public class OrderController {
 
     // List all orders (staff role required). Simple role check via header X-User-Role for demo.
     @GetMapping
-    public ApiResponse<List<OrderFullResponse>> listAll(@RequestHeader(value = "X-User-Role", required = false) String role) {
-        if (role == null || !(role.equalsIgnoreCase("STAFF") || role.equalsIgnoreCase("ADMIN"))) {
-            return ApiResponse.<List<OrderFullResponse>>builder().code(403).message("Không có quyền truy cập danh sách đơn").build();
+    public ResponseEntity<ApiResponse<List<OrderFullResponse>>> listAll() {
+        ApiResponse<List<OrderFullResponse>> api = new ApiResponse<>();
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            api.setCode(1001);
+            api.setMessage("Chưa xác thực - Vui lòng đăng nhập");
+            return ResponseEntity.status(401).body(api);
         }
+
+        boolean allowed = auth.getAuthorities().stream().anyMatch(a ->
+                "ROLE_ADMIN".equals(a.getAuthority()) || "ROLE_STAFF".equals(a.getAuthority()) || "ROLE_SUPERADMIN".equals(a.getAuthority())
+        );
+        if (!allowed) {
+            api.setCode(1006);
+            api.setMessage("Không có quyền truy cập danh sách đơn");
+            return ResponseEntity.status(403).body(api);
+        }
+
         List<Order> orders = orderRepository.findAllByOrderByCreatedAtDesc();
         List<OrderFullResponse> resp = orders.stream().map(o -> {
             OrderFullResponse r = new OrderFullResponse();
@@ -117,7 +135,10 @@ public class OrderController {
             r.setSurcharges(orderCostumeSurchargeRepository.findByOrderId(o.getId()));
             return r;
         }).collect(Collectors.toList());
-        return ApiResponse.<List<OrderFullResponse>>builder().result(resp).build();
+        api.setCode(0);
+        api.setMessage("OK");
+        api.setResult(resp);
+        return ResponseEntity.ok(api);
     }
 
     // List orders by provider id

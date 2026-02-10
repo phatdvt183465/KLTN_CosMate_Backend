@@ -2,13 +2,7 @@ package com.cosmate.service.impl;
 
 import com.cosmate.dto.request.CreateOrderRequest;
 import com.cosmate.dto.response.OrderResponse;
-import com.cosmate.entity.Costume;
-import com.cosmate.entity.Order;
-import com.cosmate.entity.OrderDetail;
-import com.cosmate.entity.Transaction;
-import com.cosmate.entity.Wallet;
-import com.cosmate.entity.CostumeSurcharge;
-import com.cosmate.entity.OrderCostumeSurcharge;
+import com.cosmate.entity.*;
 import com.cosmate.exception.InsufficientBalanceException;
 import com.cosmate.repository.OrderCostumeSurchargeRepository;
 import com.cosmate.repository.CostumeRepository;
@@ -19,6 +13,9 @@ import com.cosmate.service.OrderService;
 import com.cosmate.service.VnPayService;
 import com.cosmate.service.WalletService;
 import com.cosmate.service.MomoService;
+import com.cosmate.repository.OrderAddressRepository;
+import com.cosmate.repository.AddressRepository;
+import com.cosmate.service.ProviderService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -42,6 +39,9 @@ public class OrderServiceImpl implements OrderService {
     private final TransactionRepository transactionRepository;
     private final VnPayService vnPayService;
     private final MomoService momoService;
+    private final AddressRepository addressRepository;
+    private final OrderAddressRepository orderAddressRepository;
+    private final ProviderService providerService;
     private final OrderCostumeSurchargeRepository orderCostumeSurchargeRepository;
 
     @Override
@@ -111,6 +111,8 @@ public class OrderServiceImpl implements OrderService {
                 .createdAt(LocalDateTime.now())
                 .build();
         order = orderRepository.save(order);
+        // capture saved order id into a final variable for use inside lambdas
+        final Integer savedOrderId = order.getId();
 
         // Create OrderDetails and mark costumes rented
         for (Costume c : costumes) {
@@ -161,6 +163,73 @@ public class OrderServiceImpl implements OrderService {
             // update costume status
             c.setStatus("RENTED");
             costumeRepository.save(c);
+        }
+
+        // store addresses: cosplayer selected address + provider shop address (if exists)
+        // save cosplayer address
+        Integer cosplayerAddrId = request.getCosplayerAddressId();
+        if (cosplayerAddrId != null) {
+            addressRepository.findById(cosplayerAddrId).ifPresent(a -> {
+                OrderAddress oa = OrderAddress.builder()
+                        .orderId(savedOrderId)
+                        .addressFrom("COSPLAYER")
+                        .name(a.getName())
+                        .city(a.getCity())
+                        .district(a.getDistrict())
+                        .address(a.getAddress())
+                        .phone(a.getPhone())
+                        .build();
+                orderAddressRepository.save(oa);
+            });
+        }
+
+        // save provider address if provider has shopAddressId
+        Provider prov = null;
+        // Try to fetch Provider by id; if that fails, try fetching by userId (some data may store provider.userId)
+        try {
+            prov = providerService.getById(providerId);
+        } catch (Exception e1) {
+            try {
+                prov = providerService.getByUserId(providerId);
+            } catch (Exception e2) {
+                prov = null;
+            }
+        }
+        if (prov != null) {
+            // Prefer explicit shopAddressId; otherwise try provider user's first address as fallback
+            Integer shopAddrId = prov.getShopAddressId();
+            if (shopAddrId != null) {
+                addressRepository.findById(shopAddrId).ifPresent(a -> {
+                    OrderAddress oa = OrderAddress.builder()
+                            .orderId(savedOrderId)
+                            .addressFrom("PROVIDER")
+                            .name(a.getName())
+                            .city(a.getCity())
+                            .district(a.getDistrict())
+                            .address(a.getAddress())
+                            .phone(a.getPhone())
+                            .build();
+                    orderAddressRepository.save(oa);
+                });
+            } else {
+                // fallback: find any address records for the provider user and use the first one
+                if (prov.getUserId() != null) {
+                    var addrs = addressRepository.findAllByUserId(prov.getUserId());
+                    if (addrs != null && !addrs.isEmpty()) {
+                        var a = addrs.get(0);
+                        OrderAddress oa = OrderAddress.builder()
+                                .orderId(savedOrderId)
+                                .addressFrom("PROVIDER")
+                                .name(a.getName())
+                                .city(a.getCity())
+                                .district(a.getDistrict())
+                                .address(a.getAddress())
+                                .phone(a.getPhone())
+                                .build();
+                        orderAddressRepository.save(oa);
+                    }
+                }
+            }
         }
 
         // Create transaction record depending on payment method

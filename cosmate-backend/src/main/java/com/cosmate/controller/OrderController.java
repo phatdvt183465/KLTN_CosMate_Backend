@@ -10,6 +10,7 @@ import com.cosmate.entity.OrderDetail;
 import com.cosmate.repository.OrderCostumeSurchargeRepository;
 import com.cosmate.repository.OrderDetailRepository;
 import com.cosmate.repository.OrderRepository;
+import com.cosmate.repository.OrderAddressRepository;
 import com.cosmate.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -29,6 +30,36 @@ public class OrderController {
     private final OrderRepository orderRepository;
     private final OrderDetailRepository orderDetailRepository;
     private final OrderCostumeSurchargeRepository orderCostumeSurchargeRepository;
+    private final OrderAddressRepository orderAddressRepository;
+
+    // helper to extract current authenticated user id
+    private Integer getCurrentUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getPrincipal() == null) return null;
+        Object principal = auth.getPrincipal();
+        try {
+            if (principal instanceof String) {
+                String s = (String) principal;
+                if (s.equalsIgnoreCase("anonymousUser")) return null;
+                return Integer.valueOf(s);
+            }
+            if (principal instanceof Integer) return (Integer) principal;
+            if (principal instanceof Long) return ((Long) principal).intValue();
+            return Integer.valueOf(principal.toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // helper to check admin/staff roles (accept both ROLE_ prefixed and raw names)
+    private boolean hasAdminStaffRole(Authentication auth) {
+        if (auth == null || auth.getAuthorities() == null) return false;
+        return auth.getAuthorities().stream().anyMatch(a -> {
+            String at = a.getAuthority();
+            return "ROLE_ADMIN".equals(at) || "ROLE_STAFF".equals(at) || "ROLE_SUPERADMIN".equals(at)
+                    || "ADMIN".equals(at) || "STAFF".equals(at) || "SUPERADMIN".equals(at);
+        });
+    }
 
     @PostMapping
     public ApiResponse<OrderResponse> createOrder(
@@ -85,6 +116,7 @@ public class OrderController {
 
         List<OrderDetail> details = orderDetailRepository.findByOrderId(id);
         List<OrderCostumeSurcharge> sur = orderCostumeSurchargeRepository.findByOrderId(id);
+        var addrs = orderAddressRepository.findByOrderId(id);
 
         OrderFullResponse resp = new OrderFullResponse();
         resp.setId(o.getId());
@@ -96,6 +128,7 @@ public class OrderController {
         resp.setCreatedAt(o.getCreatedAt());
         resp.setDetails(details);
         resp.setSurcharges(sur);
+        resp.setAddresses(addrs);
 
         return ApiResponse.<OrderFullResponse>builder().result(resp).build();
     }
@@ -133,6 +166,7 @@ public class OrderController {
             r.setCreatedAt(o.getCreatedAt());
             r.setDetails(orderDetailRepository.findByOrderId(o.getId()));
             r.setSurcharges(orderCostumeSurchargeRepository.findByOrderId(o.getId()));
+            r.setAddresses(orderAddressRepository.findByOrderId(o.getId()));
             return r;
         }).collect(Collectors.toList());
         api.setCode(0);
@@ -156,8 +190,42 @@ public class OrderController {
             r.setCreatedAt(o.getCreatedAt());
             r.setDetails(orderDetailRepository.findByOrderId(o.getId()));
             r.setSurcharges(orderCostumeSurchargeRepository.findByOrderId(o.getId()));
+            r.setAddresses(orderAddressRepository.findByOrderId(o.getId()));
             return r;
         }).collect(Collectors.toList());
         return ApiResponse.<List<OrderFullResponse>>builder().result(resp).build();
+    }
+
+    // Get orders by a specific userId (owner or admin/staff/superadmin can access)
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<ApiResponse<List<OrderFullResponse>>> listByUserId(@PathVariable Integer userId) {
+        ApiResponse<List<OrderFullResponse>> api = new ApiResponse<>();
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Integer currentUserId = getCurrentUserId();
+        boolean allowed = false;
+        if (currentUserId != null && currentUserId.equals(userId)) allowed = true;
+        else if (auth != null && auth.isAuthenticated()) allowed = hasAdminStaffRole(auth);
+
+        if (!allowed) { api.setCode(1006); api.setMessage("Không có quyền truy cập danh sách đơn"); return ResponseEntity.status(403).body(api); }
+
+        List<Order> orders = orderRepository.findByCosplayerIdOrderByCreatedAtDesc(userId);
+        List<OrderFullResponse> resp = orders.stream().map(o -> {
+            OrderFullResponse r = new OrderFullResponse();
+            r.setId(o.getId());
+            r.setCosplayerId(o.getCosplayerId());
+            r.setProviderId(o.getProviderId());
+            r.setOrderType(o.getOrderType());
+            r.setStatus(o.getStatus());
+            r.setTotalAmount(o.getTotalAmount());
+            r.setCreatedAt(o.getCreatedAt());
+            r.setDetails(orderDetailRepository.findByOrderId(o.getId()));
+            r.setSurcharges(orderCostumeSurchargeRepository.findByOrderId(o.getId()));
+            r.setAddresses(orderAddressRepository.findByOrderId(o.getId()));
+            return r;
+        }).collect(Collectors.toList());
+
+        api.setCode(0); api.setMessage("OK"); api.setResult(resp);
+        return ResponseEntity.ok(api);
     }
 }

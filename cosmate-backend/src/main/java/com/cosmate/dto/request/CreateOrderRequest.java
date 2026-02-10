@@ -11,4 +11,6 @@ public class CreateOrderRequest {
     private String rentStart; // ISO date-time string, will be parsed
     private String paymentMethod; // VNPay, MOMO, WALLET
     private String returnUrl; // optional: redirect url for VNPay/MOMO callback
+    // id of the selected address of the cosplayer (Users_Addresses.id)
+    private Integer cosplayerAddressId;
 }

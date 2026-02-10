@@ -2,6 +2,7 @@ package com.cosmate.dto.response;
 
 import com.cosmate.entity.OrderCostumeSurcharge;
 import com.cosmate.entity.OrderDetail;
+import com.cosmate.entity.OrderAddress;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -20,5 +21,5 @@ public class OrderFullResponse {
 
     private List<OrderDetail> details;
     private List<OrderCostumeSurcharge> surcharges;
+    private List<OrderAddress> addresses;
 }
-

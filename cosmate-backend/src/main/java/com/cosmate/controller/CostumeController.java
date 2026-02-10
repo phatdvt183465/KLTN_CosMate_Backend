@@ -5,7 +5,7 @@ import com.cosmate.dto.response.ApiResponse;
 import com.cosmate.dto.response.CostumeResponse;
 import com.cosmate.service.CostumeService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.MediaType; // Thêm cái này
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 

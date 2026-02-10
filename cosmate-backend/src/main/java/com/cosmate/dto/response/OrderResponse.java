@@ -1,0 +1,20 @@
+package com.cosmate.dto.response;
+
+import lombok.Data;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+@Data
+public class OrderResponse {
+    private Integer id;
+    private Integer cosplayerId;
+    private Integer providerId;
+    private String orderType;
+    private String status;
+    private BigDecimal totalAmount;
+    private LocalDateTime createdAt;
+
+    // When payment requires external redirect, include paymentUrl
+    private String paymentUrl;
+}

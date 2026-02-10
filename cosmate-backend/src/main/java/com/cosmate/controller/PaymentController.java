@@ -1,6 +1,10 @@
 package com.cosmate.controller;
 
 import com.cosmate.dto.response.ApiResponse;
+import com.cosmate.entity.Order;
+import com.cosmate.entity.Transaction;
+import com.cosmate.repository.OrderRepository;
+import com.cosmate.repository.TransactionRepository;
 import com.cosmate.service.MomoService;
 import com.cosmate.service.SubscriptionService;
 import com.cosmate.service.VnPayService;
@@ -11,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/payment")
@@ -20,6 +25,8 @@ public class PaymentController {
     private final VnPayService vnPayService;
     private final SubscriptionService subscriptionService;
     private final MomoService momoService;
+    private final TransactionRepository transactionRepository;
+    private final OrderRepository orderRepository;
 
     @PostMapping("/api/vnpay/create")
     public ResponseEntity<ApiResponse<Map<String, String>>> createPayment(@RequestParam Integer userId,
@@ -99,13 +106,74 @@ public class PaymentController {
             String status = result.get("status");
             if ("OK".equals(status)) {
                 String txnRef = allParams.get("vnp_TxnRef");
-                if (txnRef != null && txnRef.startsWith("SUB")) {
-                    String idPart = txnRef.substring("SUB".length());
-                    try {
-                        Integer txnId = Integer.valueOf(idPart);
-                        subscriptionService.finalizeSubscriptionPayment(txnId);
-                    } catch (Exception e) {
-                        // log and continue; return will still be OK to VNPay
+                if (txnRef != null) {
+                    if (txnRef.startsWith("SUB")) {
+                        String idPart = txnRef.substring("SUB".length());
+                        try {
+                            Integer txnId = Integer.valueOf(idPart);
+                            subscriptionService.finalizeSubscriptionPayment(txnId);
+                        } catch (Exception e) {
+                            // log and continue; return will still be OK to VNPay
+                        }
+                    } else if (txnRef.startsWith("WALLET")) {
+                        // handle wallet prefix, but transaction may be an ORDER payment (we set tx.type = ORDER#<orderId>)
+                        String idPart = txnRef.substring("WALLET".length());
+                        try {
+                            Integer txnId = Integer.valueOf(idPart);
+                            Optional<Transaction> optTx = transactionRepository.findById(txnId);
+                            if (optTx.isPresent()) {
+                                Transaction tx = optTx.get();
+                                String type = tx.getType();
+                                if (type != null && type.startsWith("ORDER#")) {
+                                    try {
+                                        Integer orderId = Integer.valueOf(type.substring("ORDER#".length()));
+                                        Optional<Order> oOpt = orderRepository.findById(orderId);
+                                        if (oOpt.isPresent()) {
+                                            Order o = oOpt.get();
+                                            o.setStatus("PAID");
+                                            orderRepository.save(o);
+                                        }
+                                    } catch (Exception ex) {
+                                        // ignore
+                                    }
+                                }
+                            }
+                        } catch (NumberFormatException ignore) {
+                        }
+                    } else if (txnRef.startsWith("ORDER#")) {
+                        // ORDER#<orderId> mapping: need to find transaction by wallet->id mapping
+                        // Instead we can inspect vnp_TxnRef like ORDER#<orderId><txnId>? but simpler: search transaction by id via vnp_TxnRef mapping in Transaction table
+                        // VNPay returns vnp_TxnRef which in our createPaymentUrlForTransaction uses prefix+transactionId; so we need to parse transactionId
+                        String idPart = null;
+                        if (txnRef.startsWith("ORDER#")) idPart = txnRef.substring("ORDER#".length());
+                        if (idPart != null) {
+                            try {
+                                Integer txnId = Integer.valueOf(idPart);
+                                Optional<Transaction> optTx = transactionRepository.findById(txnId);
+                                if (optTx.isPresent()) {
+                                    Transaction tx = optTx.get();
+                                    // mark completed
+                                    tx.setStatus("COMPLETED");
+                                    transactionRepository.save(tx);
+                                    // find order id embedded in tx.type (we set type=ORDER#<orderId> earlier). If not found, we can try to parse order id from tx.getType()
+                                    String type = tx.getType();
+                                    if (type != null && type.startsWith("ORDER#")) {
+                                        try {
+                                            Integer orderId = Integer.valueOf(type.substring("ORDER#".length()));
+                                            Optional<Order> oOpt = orderRepository.findById(orderId);
+                                            if (oOpt.isPresent()) {
+                                                Order o = oOpt.get();
+                                                o.setStatus("PAID");
+                                                orderRepository.save(o);
+                                            }
+                                        } catch (Exception ex) {
+                                            // ignore
+                                        }
+                                    }
+                                }
+                            } catch (NumberFormatException ignore) {
+                            }
+                        }
                     }
                 }
             }
@@ -125,12 +193,34 @@ public class PaymentController {
         ApiResponse<Map<String, String>> api = new ApiResponse<>();
         try {
             Map<String, String> result = momoService.handleNotification(allParams);
-            // if OK and SUB transaction, finalize subscription
+            // if OK and transactionId present, finalize actions (subscription/order)
             if ("OK".equals(result.get("status")) && result.containsKey("transactionId")) {
                 try {
                     Integer txnId = Integer.valueOf(result.get("transactionId"));
-                    // find transaction by id and if it's a subscription, finalize
-                    subscriptionService.finalizeSubscriptionPayment(txnId);
+                    Optional<Transaction> optTx = transactionRepository.findById(txnId);
+                    if (optTx.isPresent()) {
+                        Transaction tx = optTx.get();
+                        // mark completed
+                        tx.setStatus("COMPLETED");
+                        transactionRepository.save(tx);
+                        // If tx.type indicates subscription, finalize
+                        String type = tx.getType();
+                        if (type != null && type.startsWith("SUB")) {
+                            try { subscriptionService.finalizeSubscriptionPayment(txnId); } catch (Exception ignore) {}
+                        }
+                        // If tx.type indicates order, update order status
+                        if (type != null && type.startsWith("ORDER#")) {
+                            try {
+                                Integer orderId = Integer.valueOf(type.substring("ORDER#".length()));
+                                Optional<Order> oOpt = orderRepository.findById(orderId);
+                                if (oOpt.isPresent()) {
+                                    Order o = oOpt.get();
+                                    o.setStatus("PAID");
+                                    orderRepository.save(o);
+                                }
+                            } catch (Exception ignore) {}
+                        }
+                    }
                 } catch (Exception e) {
                     // ignore
                 }
@@ -151,17 +241,31 @@ public class PaymentController {
         ApiResponse<Map<String, String>> api = new ApiResponse<>();
         try {
             Map<String, String> result = momoService.handleNotification(allParams);
-            if ("OK".equals(result.get("status"))) {
-                String orderId = allParams.get("orderId");
-                if (orderId != null && orderId.startsWith("SUB")) {
-                    String idPart = orderId.substring("SUB".length());
-                    try {
-                        Integer txnId = Integer.valueOf(idPart);
-                        subscriptionService.finalizeSubscriptionPayment(txnId);
-                    } catch (Exception e) {
-                        // ignore
+            if ("OK".equals(result.get("status")) && result.containsKey("transactionId")) {
+                try {
+                    Integer txnId = Integer.valueOf(result.get("transactionId"));
+                    Optional<Transaction> optTx = transactionRepository.findById(txnId);
+                    if (optTx.isPresent()) {
+                        Transaction tx = optTx.get();
+                        tx.setStatus("COMPLETED");
+                        transactionRepository.save(tx);
+                        String type = tx.getType();
+                        if (type != null && type.startsWith("SUB")) {
+                            try { subscriptionService.finalizeSubscriptionPayment(txnId); } catch (Exception ignore) {}
+                        }
+                        if (type != null && type.startsWith("ORDER#")) {
+                            try {
+                                Integer orderId = Integer.valueOf(type.substring("ORDER#".length()));
+                                Optional<Order> oOpt = orderRepository.findById(orderId);
+                                if (oOpt.isPresent()) {
+                                    Order o = oOpt.get();
+                                    o.setStatus("PAID");
+                                    orderRepository.save(o);
+                                }
+                            } catch (Exception ignore) {}
+                        }
                     }
-                }
+                } catch (Exception ignore) {}
             }
             api.setCode(0);
             api.setMessage("OK");

@@ -189,8 +189,12 @@ public class VnPayServiceImpl implements VnPayService {
 
         // For subscription payments (txnRef starting with SUB) we should NOT add money to wallet;
         // we only mark the transaction as COMPLETED and let subscription flow activate the subscription.
-        if (!txnRef.startsWith("SUB")) {
-            // credit wallet for non-subscription topups
+        // detect whether this transaction is an ORDER payment (we shouldn't credit wallet in that case)
+        boolean isOrderTransaction = false;
+        if (t.getType() != null && t.getType().toUpperCase().startsWith("ORDER#")) isOrderTransaction = true;
+
+        if (!txnRef.startsWith("SUB") && !isOrderTransaction) {
+            // credit wallet for non-subscription topups and non-order payments
             Wallet wallet = t.getWallet();
             wallet.setBalance(wallet.getBalance().add(amount));
             walletRepository.save(wallet);

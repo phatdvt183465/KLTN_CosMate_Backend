@@ -74,6 +74,21 @@ public class CostumeSurchargeServiceImpl implements CostumeSurchargeService {
         return mapToResponse(surchargeRepository.save(surcharge));
     }
 
+    @Override
+    public SurchargeResponse getById(Integer id) {
+        return mapToResponse(surchargeRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Error: Surcharge ID " + id + " not found.")));
+    }
+
+    @Override
+    @Transactional
+    public void deleteSurcharge(Integer id) {
+        if (!surchargeRepository.existsById(id)) {
+            throw new RuntimeException("Error: Surcharge not found to delete.");
+        }
+        surchargeRepository.deleteById(id);
+    }
+
     // --- Helpers ---
 
     private void validateRequest(SurchargeRequest request) {

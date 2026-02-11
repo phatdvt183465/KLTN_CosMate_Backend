@@ -197,22 +197,15 @@ public class CostumeServiceImpl implements CostumeService {
     private void handleSurcharges(Costume costume, String json) {
         if (!isValidString(json)) return;
         try {
-            Map<String, Map<String, Object>> surchargeData = objectMapper.readValue(json,
-                    new TypeReference<Map<String, Map<String, Object>>>() {});
-
-            surchargeData.forEach((name, details) -> {
+            List<Map<String, Object>> data = objectMapper.readValue(json, new TypeReference<>() {});
+            for (Map<String, Object> item : data) {
                 CostumeSurcharge s = new CostumeSurcharge();
-                s.setName(name);
-
-                Object price = details.get("price");
-                s.setPrice(price != null ? new BigDecimal(price.toString()) : BigDecimal.ZERO);
-
-                Object desc = details.get("description");
-                s.setDescription(desc != null ? desc.toString() : "");
-
+                s.setName(item.get("name").toString());
+                s.setPrice(new BigDecimal(item.get("price").toString()));
+                s.setDescription(item.getOrDefault("description", "").toString());
                 s.setCostume(costume);
                 costume.getSurcharges().add(s);
-            });
+            }
         } catch (IOException e) {
             throw new RuntimeException("Invalid Surcharge JSON format.");
         }

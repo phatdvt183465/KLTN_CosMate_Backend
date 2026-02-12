@@ -12,21 +12,19 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@IdClass(OrderDetailId.class)
 public class OrderDetail {
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
+
     @Column(name = "order_id")
     private Integer orderId;
 
-    @Id
     @Column(name = "costume_id")
     private Integer costumeId;
 
     @Column(length = 50)
     private String size;
-
-    @Column(name = "rent_purpose", length = 255)
-    private String rentPurpose;
 
     @Column(name = "number_of_items")
     private Integer numberOfItems;
@@ -52,4 +50,10 @@ public class OrderDetail {
     // sum of surcharges applied to this costume in the order
     @Column(name = "surcharge_amount", precision = 12, scale = 2)
     private BigDecimal surchargeAmount;
+
+    @Column(name = "accessories_amount", precision = 12, scale = 2)
+    private BigDecimal accessoriesAmount;
+
+    @Column(name = "rent_option_amount", precision = 12, scale = 2)
+    private BigDecimal rentOptionAmount;
 }

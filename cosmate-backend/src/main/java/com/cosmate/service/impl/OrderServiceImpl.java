@@ -44,15 +44,23 @@ public class OrderServiceImpl implements OrderService {
     private final ProviderService providerService;
     private final OrderCostumeSurchargeRepository orderCostumeSurchargeRepository;
 
+    // New repositories for mapping costume data into order-specific tables
+    private final com.cosmate.repository.CostumeAccessoryRepository costumeAccessoryRepository;
+    private final com.cosmate.repository.CostumeRentalOptionRepository costumeRentalOptionRepository;
+    private final com.cosmate.repository.OrderDetailAccessoryRepository orderDetailAccessoryRepository;
+    private final com.cosmate.repository.OrderRentalOptionRepository orderRentalOptionRepository;
+
     @Override
     @Transactional
     public OrderResponse createOrder(Integer cosplayerId, CreateOrderRequest request) throws Exception {
-        // Basic validations
-        if (request.getCostumesId() == null || request.getCostumesId().isEmpty())
-            throw new IllegalArgumentException("No costumes provided");
-
+        // Validate single costume per order
+        if (request.getCostumeId() == null) throw new IllegalArgumentException("costumeId is required");
         if (request.getRentDay() == null || request.getRentDay() <= 0)
             throw new IllegalArgumentException("rentDay must be greater than 0");
+
+        if (request.getSelectedRentalOptionId() == null) {
+            throw new IllegalArgumentException("selectedRentalOptionId is required (one rental option must be chosen)");
+        }
 
         LocalDateTime rentStart;
         try {
@@ -61,44 +69,58 @@ public class OrderServiceImpl implements OrderService {
             throw new IllegalArgumentException("Invalid rentStart format. Use ISO date-time, e.g. 2026-02-15T10:00:00");
         }
 
-        List<Costume> costumes = new ArrayList<>();
-        for (Integer cid : request.getCostumesId()) {
-            Optional<Costume> co = costumeRepository.findById(cid);
-            if (co.isEmpty()) throw new IllegalArgumentException("Costume id " + cid + " not found");
-            costumes.add(co.get());
-        }
+        // fetch the single costume
+        Optional<Costume> co = costumeRepository.findById(request.getCostumeId());
+        if (co.isEmpty()) throw new IllegalArgumentException("Costume id " + request.getCostumeId() + " not found");
+        Costume c = co.get();
 
-        // Ensure same provider
-        Integer providerId = costumes.get(0).getProviderId();
-        for (Costume c : costumes) {
-            if (!providerId.equals(c.getProviderId())) throw new IllegalArgumentException("All costumes must be from the same provider");
-        }
+        // provider check (single costume => provider is that costume's provider)
+        Integer providerId = c.getProviderId();
 
         int rentDay = request.getRentDay();
 
-        // Compute totals
-        BigDecimal totalRent = BigDecimal.ZERO;
-        BigDecimal totalDeposit = BigDecimal.ZERO;
+        // compute base rent and deposit
+        BigDecimal pricePerDay = c.getPricePerDay() == null ? BigDecimal.ZERO : c.getPricePerDay();
+        BigDecimal rentAmount = pricePerDay.multiply(new BigDecimal(rentDay));
+        BigDecimal deposit = c.getDepositAmount() == null ? BigDecimal.ZERO : c.getDepositAmount();
 
-        for (Costume c : costumes) {
-            BigDecimal pricePerDay = c.getPricePerDay();
-            if (pricePerDay == null) pricePerDay = BigDecimal.ZERO;
-            BigDecimal rentAmount = pricePerDay.multiply(new BigDecimal(rentDay));
-            BigDecimal deposit = c.getDepositAmount() == null ? BigDecimal.ZERO : c.getDepositAmount();
-
-            // sum surcharges for this costume
-            BigDecimal surchargeSum = BigDecimal.ZERO;
-            if (c.getSurcharges() != null) {
-                for (CostumeSurcharge cs : c.getSurcharges()) {
-                    BigDecimal p = cs.getPrice() == null ? BigDecimal.ZERO : cs.getPrice();
-                    surchargeSum = surchargeSum.add(p);
-                }
+        // sum surcharges for this costume
+        BigDecimal surchargeSum = BigDecimal.ZERO;
+        if (c.getSurcharges() != null) {
+            for (CostumeSurcharge cs : c.getSurcharges()) {
+                BigDecimal p = cs.getPrice() == null ? BigDecimal.ZERO : cs.getPrice();
+                surchargeSum = surchargeSum.add(p);
             }
-
-            totalRent = totalRent.add(rentAmount).add(surchargeSum);
-            totalDeposit = totalDeposit.add(deposit);
         }
 
+        // process selected accessories (0..N)
+        BigDecimal accessoriesSum = BigDecimal.ZERO;
+        List<Integer> selectedAcc = request.getSelectedAccessoryIds();
+        if (selectedAcc != null && !selectedAcc.isEmpty()) {
+            for (Integer accId : selectedAcc) {
+                Optional<CostumeAccessory> accOpt = costumeAccessoryRepository.findById(accId);
+                if (accOpt.isEmpty()) throw new IllegalArgumentException("Accessory id " + accId + " not found");
+                CostumeAccessory acc = accOpt.get();
+                if (acc.getCostume() == null || !acc.getCostume().getId().equals(c.getId())) {
+                    throw new IllegalArgumentException("Accessory id " + accId + " does not belong to costume " + c.getId());
+                }
+                accessoriesSum = accessoriesSum.add(acc.getPrice() == null ? BigDecimal.ZERO : acc.getPrice());
+            }
+        }
+
+        // process selected rental option (exactly 1)
+        Integer selectedRentalOptionId = request.getSelectedRentalOptionId();
+        Optional<CostumeRentalOption> ropt = costumeRentalOptionRepository.findById(selectedRentalOptionId);
+        if (ropt.isEmpty()) throw new IllegalArgumentException("Rental option id " + selectedRentalOptionId + " not found");
+        CostumeRentalOption roption = ropt.get();
+        if (roption.getCostume() == null || !roption.getCostume().getId().equals(c.getId())) {
+            throw new IllegalArgumentException("Rental option id " + selectedRentalOptionId + " does not belong to costume " + c.getId());
+        }
+        BigDecimal rentalOptionPrice = roption.getPrice() == null ? BigDecimal.ZERO : roption.getPrice();
+
+        // compute totals
+        BigDecimal totalRent = rentAmount.add(surchargeSum).add(accessoriesSum).add(rentalOptionPrice);
+        BigDecimal totalDeposit = deposit;
         BigDecimal totalAmount = totalRent.add(totalDeposit);
 
         // Create Order
@@ -111,62 +133,67 @@ public class OrderServiceImpl implements OrderService {
                 .createdAt(LocalDateTime.now())
                 .build();
         order = orderRepository.save(order);
-        // capture saved order id into a final variable for use inside lambdas
         final Integer savedOrderId = order.getId();
 
-        // Create OrderDetails and mark costumes rented
-        for (Costume c : costumes) {
-            BigDecimal pricePerDay = c.getPricePerDay() == null ? BigDecimal.ZERO : c.getPricePerDay();
-            BigDecimal rentAmount = pricePerDay.multiply(new BigDecimal(rentDay));
-            BigDecimal deposit = c.getDepositAmount() == null ? BigDecimal.ZERO : c.getDepositAmount();
+        // Create OrderDetail for the single costume
+        OrderDetail od = OrderDetail.builder()
+                .orderId(order.getId())
+                .costumeId(c.getId())
+                .size(c.getSize())
+                .numberOfItems(c.getNumberOfItems())
+                .rentDay(rentDay)
+                .rentStart(rentStart)
+                .rentEnd(rentStart.plusDays(rentDay))
+                .depositAmount(deposit)
+                .rentAmount(rentAmount)
+                .surchargeAmount(surchargeSum)
+                .accessoriesAmount(accessoriesSum)
+                .rentOptionAmount(rentalOptionPrice)
+                .build();
+        orderDetailRepository.save(od);
 
-            // compute surcharges for this costume
-            BigDecimal surchargeSum = BigDecimal.ZERO;
-            if (c.getSurcharges() != null) {
-                for (CostumeSurcharge cs : c.getSurcharges()) {
-                    BigDecimal p = cs.getPrice() == null ? BigDecimal.ZERO : cs.getPrice();
-                    surchargeSum = surchargeSum.add(p);
-                }
+        // persist accessories into OrderDetailAccessory
+        if (selectedAcc != null && !selectedAcc.isEmpty()) {
+            for (Integer accId : selectedAcc) {
+                CostumeAccessory acc = costumeAccessoryRepository.findById(accId).get();
+                OrderDetailAccessory oda = OrderDetailAccessory.builder()
+                        .orderDetail(od)
+                        .accessoryName(acc.getName())
+                        .accessoryDescription(acc.getDescription())
+                        .price(acc.getPrice())
+                        .build();
+                orderDetailAccessoryRepository.save(oda);
             }
-
-            OrderDetail od = OrderDetail.builder()
-                    .orderId(order.getId())
-                    .costumeId(c.getId())
-                    .size(c.getSize())
-                    .rentPurpose(c.getRentPurpose())
-                    .numberOfItems(c.getNumberOfItems())
-                    .rentDay(rentDay)
-                    .rentStart(rentStart)
-                    .rentEnd(rentStart.plusDays(rentDay))
-                    .depositAmount(deposit)
-                    .rentAmount(rentAmount)
-                    .surchargeAmount(surchargeSum)
-                    .build();
-            orderDetailRepository.save(od);
-
-            // persist order-level surcharge entries
-            if (c.getSurcharges() != null) {
-                for (CostumeSurcharge cs : c.getSurcharges()) {
-                    OrderCostumeSurcharge ocs = OrderCostumeSurcharge.builder()
-                            .orderId(order.getId())
-                            .costumeId(c.getId())
-                            .name(cs.getName())
-                            .description(cs.getDescription())
-                            .price(cs.getPrice())
-                            .build();
-                    orderCostumeSurchargeRepository.save(ocs);
-                }
-            }
-
-            // totals already computed before creating the order; do not modify them here
-
-            // update costume status
-            c.setStatus("RENTED");
-            costumeRepository.save(c);
         }
 
+        // persist chosen rental option into OrderRentalOption table
+        OrderRentalOption oro = OrderRentalOption.builder()
+                .orderDetail(od)
+                .optionName(roption.getName())
+                .price(rentalOptionPrice)
+                .description(roption.getDescription())
+                .build();
+        orderRentalOptionRepository.save(oro);
+
+        // persist order-level surcharge entries
+        if (c.getSurcharges() != null) {
+            for (CostumeSurcharge cs : c.getSurcharges()) {
+                OrderCostumeSurcharge ocs = OrderCostumeSurcharge.builder()
+                        .orderId(order.getId())
+                        .costumeId(c.getId())
+                        .name(cs.getName())
+                        .description(cs.getDescription())
+                        .price(cs.getPrice())
+                        .build();
+                orderCostumeSurchargeRepository.save(ocs);
+            }
+        }
+
+        // update costume status
+        c.setStatus("RENTED");
+        costumeRepository.save(c);
+
         // store addresses: cosplayer selected address + provider shop address (if exists)
-        // save cosplayer address
         Integer cosplayerAddrId = request.getCosplayerAddressId();
         if (cosplayerAddrId != null) {
             addressRepository.findById(cosplayerAddrId).ifPresent(a -> {
@@ -185,7 +212,6 @@ public class OrderServiceImpl implements OrderService {
 
         // save provider address if provider has shopAddressId
         Provider prov = null;
-        // Try to fetch Provider by id; if that fails, try fetching by userId (some data may store provider.userId)
         try {
             prov = providerService.getById(providerId);
         } catch (Exception e1) {
@@ -196,7 +222,6 @@ public class OrderServiceImpl implements OrderService {
             }
         }
         if (prov != null) {
-            // Prefer explicit shopAddressId; otherwise try provider user's first address as fallback
             Integer shopAddrId = prov.getShopAddressId();
             if (shopAddrId != null) {
                 addressRepository.findById(shopAddrId).ifPresent(a -> {
@@ -212,7 +237,6 @@ public class OrderServiceImpl implements OrderService {
                     orderAddressRepository.save(oa);
                 });
             } else {
-                // fallback: find any address records for the provider user and use the first one
                 if (prov.getUserId() != null) {
                     var addrs = addressRepository.findAllByUserId(prov.getUserId());
                     if (addrs != null && !addrs.isEmpty()) {

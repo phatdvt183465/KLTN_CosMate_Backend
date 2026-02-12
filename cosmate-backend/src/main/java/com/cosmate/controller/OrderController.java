@@ -7,10 +7,14 @@ import com.cosmate.dto.response.OrderResponse;
 import com.cosmate.entity.Order;
 import com.cosmate.entity.OrderCostumeSurcharge;
 import com.cosmate.entity.OrderDetail;
+import com.cosmate.entity.OrderDetailAccessory;
+import com.cosmate.entity.OrderRentalOption;
 import com.cosmate.repository.OrderCostumeSurchargeRepository;
 import com.cosmate.repository.OrderDetailRepository;
 import com.cosmate.repository.OrderRepository;
 import com.cosmate.repository.OrderAddressRepository;
+import com.cosmate.repository.OrderDetailAccessoryRepository;
+import com.cosmate.repository.OrderRentalOptionRepository;
 import com.cosmate.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -31,6 +35,8 @@ public class OrderController {
     private final OrderDetailRepository orderDetailRepository;
     private final OrderCostumeSurchargeRepository orderCostumeSurchargeRepository;
     private final OrderAddressRepository orderAddressRepository;
+    private final OrderDetailAccessoryRepository orderDetailAccessoryRepository;
+    private final OrderRentalOptionRepository orderRentalOptionRepository;
 
     // helper to extract current authenticated user id
     private Integer getCurrentUserId() {
@@ -118,6 +124,11 @@ public class OrderController {
         List<OrderCostumeSurcharge> sur = orderCostumeSurchargeRepository.findByOrderId(id);
         var addrs = orderAddressRepository.findByOrderId(id);
 
+        // collect detail ids to fetch accessories/options
+        List<Integer> detailIds = details.stream().map(d -> d.getId()).toList();
+        List<OrderDetailAccessory> accessories = detailIds.isEmpty() ? java.util.Collections.emptyList() : orderDetailAccessoryRepository.findByOrderDetailIdIn(detailIds);
+        List<OrderRentalOption> rentalOptions = detailIds.isEmpty() ? java.util.Collections.emptyList() : orderRentalOptionRepository.findByOrderDetailIdIn(detailIds);
+
         OrderFullResponse resp = new OrderFullResponse();
         resp.setId(o.getId());
         resp.setCosplayerId(o.getCosplayerId());
@@ -129,6 +140,8 @@ public class OrderController {
         resp.setDetails(details);
         resp.setSurcharges(sur);
         resp.setAddresses(addrs);
+        resp.setAccessories(accessories);
+        resp.setRentalOptions(rentalOptions);
 
         return ApiResponse.<OrderFullResponse>builder().result(resp).build();
     }
@@ -164,9 +177,13 @@ public class OrderController {
             r.setStatus(o.getStatus());
             r.setTotalAmount(o.getTotalAmount());
             r.setCreatedAt(o.getCreatedAt());
-            r.setDetails(orderDetailRepository.findByOrderId(o.getId()));
+            List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
+            r.setDetails(details);
             r.setSurcharges(orderCostumeSurchargeRepository.findByOrderId(o.getId()));
             r.setAddresses(orderAddressRepository.findByOrderId(o.getId()));
+            List<Integer> detailIds = details.stream().map(d -> d.getId()).toList();
+            r.setAccessories(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderDetailAccessoryRepository.findByOrderDetailIdIn(detailIds));
+            r.setRentalOptions(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderRentalOptionRepository.findByOrderDetailIdIn(detailIds));
             return r;
         }).collect(Collectors.toList());
         api.setCode(0);
@@ -188,9 +205,13 @@ public class OrderController {
             r.setStatus(o.getStatus());
             r.setTotalAmount(o.getTotalAmount());
             r.setCreatedAt(o.getCreatedAt());
-            r.setDetails(orderDetailRepository.findByOrderId(o.getId()));
+            List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
+            r.setDetails(details);
             r.setSurcharges(orderCostumeSurchargeRepository.findByOrderId(o.getId()));
             r.setAddresses(orderAddressRepository.findByOrderId(o.getId()));
+            List<Integer> detailIds = details.stream().map(d -> d.getId()).toList();
+            r.setAccessories(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderDetailAccessoryRepository.findByOrderDetailIdIn(detailIds));
+            r.setRentalOptions(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderRentalOptionRepository.findByOrderDetailIdIn(detailIds));
             return r;
         }).collect(Collectors.toList());
         return ApiResponse.<List<OrderFullResponse>>builder().result(resp).build();
@@ -219,9 +240,13 @@ public class OrderController {
             r.setStatus(o.getStatus());
             r.setTotalAmount(o.getTotalAmount());
             r.setCreatedAt(o.getCreatedAt());
-            r.setDetails(orderDetailRepository.findByOrderId(o.getId()));
+            List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
+            r.setDetails(details);
             r.setSurcharges(orderCostumeSurchargeRepository.findByOrderId(o.getId()));
             r.setAddresses(orderAddressRepository.findByOrderId(o.getId()));
+            List<Integer> detailIds = details.stream().map(d -> d.getId()).toList();
+            r.setAccessories(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderDetailAccessoryRepository.findByOrderDetailIdIn(detailIds));
+            r.setRentalOptions(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderRentalOptionRepository.findByOrderDetailIdIn(detailIds));
             return r;
         }).collect(Collectors.toList());
 

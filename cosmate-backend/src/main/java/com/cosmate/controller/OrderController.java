@@ -760,13 +760,59 @@ public class OrderController {
                     .build();
             ot = orderTrackingRepository.save(ot);
 
+            // --- Funds distribution: sum deposit from order details -> cosplayer; remaining -> provider ---
+            java.math.BigDecimal total = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
+
+            // Sum deposit amounts from order details (deposit may be stored on details)
+            List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
+            java.math.BigDecimal depositTotal = java.math.BigDecimal.ZERO;
+            if (details != null && !details.isEmpty()) {
+                for (OrderDetail d : details) {
+                    try {
+                        java.math.BigDecimal dep = d.getDepositAmount() == null ? java.math.BigDecimal.ZERO : d.getDepositAmount();
+                        depositTotal = depositTotal.add(dep);
+                    } catch (Exception ex) {
+                        // if detail has no deposit field, ignore
+                    }
+                }
+            }
+
+            if (depositTotal == null) depositTotal = java.math.BigDecimal.ZERO;
+            java.math.BigDecimal providerShare = total.subtract(depositTotal);
+            if (providerShare == null) providerShare = java.math.BigDecimal.ZERO;
+            if (providerShare.compareTo(java.math.BigDecimal.ZERO) < 0) providerShare = java.math.BigDecimal.ZERO;
+
+            java.util.List<com.cosmate.entity.Transaction> txs = new java.util.ArrayList<>();
+
+            // return deposit to cosplayer if any
+            if (depositTotal.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                com.cosmate.entity.User cosUser = com.cosmate.entity.User.builder().id(order.getCosplayerId()).build();
+                com.cosmate.entity.Wallet cosWallet = walletService.createForUser(cosUser);
+                com.cosmate.entity.Transaction txDeposit = walletService.credit(cosWallet, depositTotal, "Deposit returned on order completion", "DEPOSIT_RETURN:" + order.getId());
+                if (txDeposit != null) txs.add(txDeposit);
+            }
+
+            // credit provider with remaining amount (if > 0)
+            if (providerShare.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                // NOTE: assumes order.getProviderId() can be used as a user id for wallet. If provider has separate userId, adjust accordingly.
+                com.cosmate.entity.User provUser = com.cosmate.entity.User.builder().id(order.getProviderId()).build();
+                com.cosmate.entity.Wallet provWallet = walletService.createForUser(provUser);
+                com.cosmate.entity.Transaction txProv = walletService.credit(provWallet, providerShare, "Provider payout on order completion", "PROVIDER_PAYOUT:" + order.getId());
+                if (txProv != null) txs.add(txProv);
+            }
+
+            // finalize order status
             order.setStatus("COMPLETED");
             orderRepository.save(order);
 
             java.util.Map<String,Object> res = new java.util.HashMap<>();
             res.put("tracking", ot);
             res.put("orderStatus", order.getStatus());
-            return ApiResponse.<Object>builder().result(res).message("Order marked as COMPLETED").build();
+            res.put("transactions", txs);
+            res.put("depositReturned", depositTotal);
+            res.put("providerPayout", providerShare);
+
+            return ApiResponse.<Object>builder().result(res).message("Order marked as COMPLETED and funds distributed").build();
         } catch (Exception ex) {
             return ApiResponse.<Object>builder().code(500).message("Failed to complete order: " + ex.getMessage()).build();
         }

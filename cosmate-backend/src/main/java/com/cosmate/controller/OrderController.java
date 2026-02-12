@@ -4,11 +4,7 @@ import com.cosmate.dto.request.CreateOrderRequest;
 import com.cosmate.dto.response.ApiResponse;
 import com.cosmate.dto.response.OrderFullResponse;
 import com.cosmate.dto.response.OrderResponse;
-import com.cosmate.entity.Order;
-import com.cosmate.entity.OrderCostumeSurcharge;
-import com.cosmate.entity.OrderDetail;
-import com.cosmate.entity.OrderDetailAccessory;
-import com.cosmate.entity.OrderRentalOption;
+import com.cosmate.entity.*;
 import com.cosmate.repository.OrderCostumeSurchargeRepository;
 import com.cosmate.repository.OrderDetailRepository;
 import com.cosmate.repository.OrderRepository;
@@ -16,6 +12,7 @@ import com.cosmate.repository.OrderAddressRepository;
 import com.cosmate.repository.OrderDetailAccessoryRepository;
 import com.cosmate.repository.OrderRentalOptionRepository;
 import com.cosmate.service.OrderService;
+import com.cosmate.service.ProviderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
@@ -37,6 +34,7 @@ public class OrderController {
     private final OrderAddressRepository orderAddressRepository;
     private final OrderDetailAccessoryRepository orderDetailAccessoryRepository;
     private final OrderRentalOptionRepository orderRentalOptionRepository;
+    private final ProviderService providerService;
 
     // helper to extract current authenticated user id
     private Integer getCurrentUserId() {
@@ -214,6 +212,69 @@ public class OrderController {
             r.setRentalOptions(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderRentalOptionRepository.findByOrderDetailIdIn(detailIds));
             return r;
         }).collect(Collectors.toList());
+        return ApiResponse.<List<OrderFullResponse>>builder().result(resp).build();
+    }
+
+    // New: provider filter endpoint to select orders by provider and multiple statuses
+    @GetMapping("/provider/{providerId}/filter")
+    public ApiResponse<List<OrderFullResponse>> filterByProviderAndStatuses(
+            @PathVariable Integer providerId,
+            @RequestParam(required = false, name = "status") List<String> statuses) {
+
+        // authorization: only provider owner or admin/staff can access
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Integer currentUserId = getCurrentUserId();
+        boolean allowed = false;
+        if (auth != null && auth.isAuthenticated()) {
+            if (hasAdminStaffRole(auth)) allowed = true;
+            else if (currentUserId != null) {
+                try {
+                    Provider p = providerService.getByUserId(currentUserId);
+                    if (p != null && p.getId() != null && p.getId().equals(providerId)) allowed = true;
+                } catch (Exception ex) {
+                    // ignore - not allowed
+                }
+            }
+        }
+        if (!allowed) return ApiResponse.<List<OrderFullResponse>>builder().code(403).message("Không có quyền truy cập danh sách đơn").build();
+
+        // default statuses list if none provided
+        if (statuses == null || statuses.isEmpty()) {
+            statuses = java.util.Arrays.asList(
+                    "UNPAID",
+                    "PAID",
+                    "PREPARING",
+                    "SHIPPING_OUT",
+                    "DELIVERING_OUT",
+                    "IN_USE",
+                    "SHIPPING_BACK",
+                    "COMPLETED",
+                    "DISPUTE",
+                    "CANCELLED",
+                    "EXTENDING"
+            );
+        }
+
+        List<Order> orders = orderRepository.findByProviderIdAndStatusInOrderByCreatedAtDesc(providerId, statuses);
+        List<OrderFullResponse> resp = orders.stream().map(o -> {
+            OrderFullResponse r = new OrderFullResponse();
+            r.setId(o.getId());
+            r.setCosplayerId(o.getCosplayerId());
+            r.setProviderId(o.getProviderId());
+            r.setOrderType(o.getOrderType());
+            r.setStatus(o.getStatus());
+            r.setTotalAmount(o.getTotalAmount());
+            r.setCreatedAt(o.getCreatedAt());
+            List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
+            r.setDetails(details);
+            r.setSurcharges(orderCostumeSurchargeRepository.findByOrderId(o.getId()));
+            r.setAddresses(orderAddressRepository.findByOrderId(o.getId()));
+            List<Integer> detailIds = details.stream().map(d -> d.getId()).toList();
+            r.setAccessories(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderDetailAccessoryRepository.findByOrderDetailIdIn(detailIds));
+            r.setRentalOptions(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderRentalOptionRepository.findByOrderDetailIdIn(detailIds));
+            return r;
+        }).collect(Collectors.toList());
+
         return ApiResponse.<List<OrderFullResponse>>builder().result(resp).build();
     }
 

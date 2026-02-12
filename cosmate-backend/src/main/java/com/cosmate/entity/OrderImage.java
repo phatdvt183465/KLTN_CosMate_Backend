@@ -3,6 +3,7 @@ package com.cosmate.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.Nationalized;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
 @Table(name = "Orders_Image")
@@ -17,6 +18,9 @@ public class OrderImage {
 
     @ManyToOne
     @JoinColumn(name = "order_id")
+    @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private Order order;
 
     @Nationalized
@@ -32,4 +36,3 @@ public class OrderImage {
 
     private Boolean confirm;
 }
-

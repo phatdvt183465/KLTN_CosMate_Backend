@@ -2,6 +2,7 @@ package com.cosmate.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.time.LocalDateTime;
 
@@ -18,6 +19,9 @@ public class OrderTracking {
 
     @ManyToOne
     @JoinColumn(name = "order_id")
+    @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private Order order;
 
     @Column(name = "tracking_code", length = 100)
@@ -37,4 +41,3 @@ public class OrderTracking {
         if (createdAt == null) createdAt = LocalDateTime.now();
     }
 }
-

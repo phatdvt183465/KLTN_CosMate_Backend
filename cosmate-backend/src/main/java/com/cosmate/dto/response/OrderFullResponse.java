@@ -5,6 +5,8 @@ import com.cosmate.entity.OrderDetail;
 import com.cosmate.entity.OrderAddress;
 import com.cosmate.entity.OrderDetailAccessory;
 import com.cosmate.entity.OrderRentalOption;
+import com.cosmate.entity.OrderImage;
+import com.cosmate.entity.OrderTracking;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -26,4 +28,7 @@ public class OrderFullResponse {
     private List<OrderAddress> addresses;
     private List<OrderDetailAccessory> accessories;
     private List<OrderRentalOption> rentalOptions;
+    // New: include images and trackings related to this order
+    private List<OrderImage> images;
+    private List<OrderTracking> trackings;
 }

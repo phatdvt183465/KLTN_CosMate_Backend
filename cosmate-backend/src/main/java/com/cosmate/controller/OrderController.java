@@ -139,6 +139,9 @@ public class OrderController {
         List<Integer> detailIds = details.stream().map(d -> d.getId()).toList();
         List<OrderDetailAccessory> accessories = detailIds.isEmpty() ? java.util.Collections.emptyList() : orderDetailAccessoryRepository.findByOrderDetailIdIn(detailIds);
         List<OrderRentalOption> rentalOptions = detailIds.isEmpty() ? java.util.Collections.emptyList() : orderRentalOptionRepository.findByOrderDetailIdIn(detailIds);
+        // fetch images and tracking for this order
+        List<OrderImage> images = orderImageRepository.findByOrderId(id);
+        List<OrderTracking> trackings = orderTrackingRepository.findByOrderId(id);
 
         OrderFullResponse resp = new OrderFullResponse();
         resp.setId(o.getId());
@@ -153,6 +156,8 @@ public class OrderController {
         resp.setAddresses(addrs);
         resp.setAccessories(accessories);
         resp.setRentalOptions(rentalOptions);
+        resp.setImages(images);
+        resp.setTrackings(trackings);
 
         return ApiResponse.<OrderFullResponse>builder().result(resp).build();
     }
@@ -474,11 +479,134 @@ public class OrderController {
             orderRepository.save(order);
 
             java.util.Map<String, Object> result = new java.util.HashMap<>();
-            result.put("trackingId", ot.getId());
-            result.put("imageIds", savedImageIds);
+            // return the full tracking object and the uploaded image records for client display
+            result.put("tracking", ot);
+            List<OrderImage> uploadedImages = orderImageRepository.findByOrderId(order.getId());
+            result.put("images", uploadedImages);
             return ApiResponse.<Object>builder().result(result).message("Order updated to SHIPPING_OUT").build();
         } catch (Exception ex) {
             return ApiResponse.<Object>builder().code(500).message("Failed to ship order: " + ex.getMessage()).build();
+        }
+    }
+
+    // Provider (owner) or staff/admin marks order as DELIVERING_OUT when shipment is out for delivery
+    @PostMapping("/{id}/deliver-out")
+    public ApiResponse<?> markDeliveringOut(@PathVariable Integer id) {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            Integer currentUserId = getCurrentUserId();
+            if (currentUserId == null) return ApiResponse.<Object>builder().code(401).message("Chưa xác thực - Vui lòng đăng nhập").build();
+
+            Order order = orderRepository.findById(id).orElse(null);
+            if (order == null) return ApiResponse.<Object>builder().code(404).message("Order not found").build();
+
+            boolean isAdminStaff = hasAdminStaffRole(auth);
+            boolean isProviderOwner = false;
+            try {
+                Provider p = providerService.getByUserId(currentUserId);
+                if (p != null && p.getId() != null && p.getId().equals(order.getProviderId())) isProviderOwner = true;
+            } catch (Exception ex) { }
+
+            if (!isAdminStaff && !isProviderOwner) return ApiResponse.<Object>builder().code(403).message("Không có quyền thực hiện").build();
+
+            // must be currently SHIPPING_OUT
+            if (!"SHIPPING_OUT".equals(order.getStatus())) {
+                return ApiResponse.<Object>builder().code(400).message("Order must be in SHIPPING_OUT status to mark delivering out").build();
+            }
+
+            // create tracking entry marking delivering
+            // try to reuse last tracking code if available
+            List<OrderTracking> existing = orderTrackingRepository.findByOrderId(order.getId());
+            String trackingCode = null;
+            if (existing != null && !existing.isEmpty()) {
+                trackingCode = existing.get(existing.size()-1).getTrackingCode();
+            }
+            OrderTracking ot = OrderTracking.builder()
+                    .order(order)
+                    .trackingCode(trackingCode)
+                    .trackingStatus("DELIVERING")
+                    .stage("DELIVERING_OUT")
+                    .build();
+            ot = orderTrackingRepository.save(ot);
+
+            order.setStatus("DELIVERING_OUT");
+            orderRepository.save(order);
+
+            java.util.Map<String,Object> res = new java.util.HashMap<>();
+            res.put("tracking", ot);
+            res.put("orderStatus", order.getStatus());
+            return ApiResponse.<Object>builder().result(res).message("Order updated to DELIVERING_OUT").build();
+        } catch (Exception ex) {
+            return ApiResponse.<Object>builder().code(500).message("Failed to mark delivering out: " + ex.getMessage()).build();
+        }
+    }
+
+    // Cosplayer confirms delivery and marks order as IN_USE. Optionally upload received images before confirming.
+    @PostMapping(path = "/{id}/confirm-delivery", consumes = {"multipart/form-data"})
+    public ApiResponse<?> confirmDelivery(@PathVariable Integer id,
+                                          @RequestPart(value = "images", required = false) MultipartFile[] images,
+                                          @RequestParam(value = "notes", required = false) List<String> notes) {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            Integer currentUserId = getCurrentUserId();
+            if (currentUserId == null) return ApiResponse.<Object>builder().code(401).message("Chưa xác thực - Vui lòng đăng nhập").build();
+
+            Order order = orderRepository.findById(id).orElse(null);
+            if (order == null) return ApiResponse.<Object>builder().code(404).message("Order not found").build();
+
+            if (!currentUserId.equals(order.getCosplayerId())) return ApiResponse.<Object>builder().code(403).message("Order does not belong to user").build();
+
+            if (!"DELIVERING_OUT".equals(order.getStatus())) {
+                return ApiResponse.<Object>builder().code(400).message("Order must be in DELIVERING_OUT status to confirm delivery").build();
+            }
+
+            // If images provided, upload them to Firebase and persist OrderImage with stage IN_USE
+            List<OrderImage> uploadedImages = new java.util.ArrayList<>();
+            if (images != null && images.length > 0) {
+                for (int i = 0; i < images.length; i++) {
+                    MultipartFile file = images[i];
+                    if (file == null || file.isEmpty()) continue;
+                    String original = file.getOriginalFilename();
+                    String safeName = original == null ? String.valueOf(System.currentTimeMillis()) : original.replaceAll("[^a-zA-Z0-9._-]", "_");
+                    String path = String.format("orders/%d/received/%d_%s", order.getId(), System.currentTimeMillis(), safeName);
+                    String url = firebaseStorageService.uploadFile(file, path);
+
+                    String note = (notes != null && notes.size() > i) ? notes.get(i) : null;
+                    OrderImage oi = OrderImage.builder()
+                            .order(order)
+                            .imageUrl(url)
+                            .stage("IN_USE")
+                            .note(note)
+                            .confirm(false)
+                            .build();
+                    oi = orderImageRepository.save(oi);
+                    uploadedImages.add(oi);
+                }
+            }
+
+            // create tracking entry marking delivered
+            List<OrderTracking> existing = orderTrackingRepository.findByOrderId(order.getId());
+            String trackingCode = null;
+            if (existing != null && !existing.isEmpty()) trackingCode = existing.get(existing.size()-1).getTrackingCode();
+
+            OrderTracking ot = OrderTracking.builder()
+                    .order(order)
+                    .trackingCode(trackingCode)
+                    .trackingStatus("DELIVERED")
+                    .stage("IN_USE")
+                    .build();
+            ot = orderTrackingRepository.save(ot);
+
+            order.setStatus("IN_USE");
+            orderRepository.save(order);
+
+            java.util.Map<String,Object> res = new java.util.HashMap<>();
+            res.put("tracking", ot);
+            res.put("orderStatus", order.getStatus());
+            res.put("uploadedImages", uploadedImages);
+            return ApiResponse.<Object>builder().result(res).message("Order updated to IN_USE").build();
+        } catch (Exception ex) {
+            return ApiResponse.<Object>builder().code(500).message("Failed to confirm delivery: " + ex.getMessage()).build();
         }
     }
 
@@ -516,6 +644,131 @@ public class OrderController {
             return ApiResponse.<String>builder().result("OK").message("Order status updated to PREPARING").build();
         } catch (Exception ex) {
             return ApiResponse.<String>builder().code(500).message("Failed to update order to PREPARING: " + ex.getMessage()).build();
+        }
+    }
+
+    // Cosplayer starts return process: upload one or more images and provide tracking code -> move to SHIPPING_BACK
+    @PostMapping(path = "/{id}/return", consumes = {"multipart/form-data"})
+    public ApiResponse<?> startReturn(@PathVariable Integer id,
+                                      @RequestParam("trackingCode") String trackingCode,
+                                      @RequestPart(value = "images", required = false) MultipartFile[] images,
+                                      @RequestParam(value = "notes", required = false) List<String> notes) {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            Integer currentUserId = getCurrentUserId();
+            if (currentUserId == null) return ApiResponse.<Object>builder().code(401).message("Chưa xác thực - Vui lòng đăng nhập").build();
+
+            Order order = orderRepository.findById(id).orElse(null);
+            if (order == null) return ApiResponse.<Object>builder().code(404).message("Order not found").build();
+
+            // only cosplayer (order owner) can initiate return
+            if (!currentUserId.equals(order.getCosplayerId())) return ApiResponse.<Object>builder().code(403).message("Order does not belong to user").build();
+
+            // only allow when currently IN_USE (renter has the items)
+            if (!"IN_USE".equals(order.getStatus())) {
+                return ApiResponse.<Object>builder().code(400).message("Order must be in IN_USE status to start return").build();
+            }
+
+            // validate
+            if (trackingCode == null || trackingCode.isBlank()) {
+                return ApiResponse.<Object>builder().code(400).message("trackingCode is required").build();
+            }
+            if (images == null || images.length == 0) {
+                return ApiResponse.<Object>builder().code(400).message("At least one image file is required to start return").build();
+            }
+
+            // persist return tracking
+            OrderTracking ot = OrderTracking.builder()
+                    .order(order)
+                    .trackingCode(trackingCode)
+                    .trackingStatus("RETURN_CREATED")
+                    .stage("SHIPPING_BACK")
+                    .build();
+            ot = orderTrackingRepository.save(ot);
+
+            // upload images to firebase and persist OrderImage with stage SHIPPING_BACK
+            List<OrderImage> uploadedImages = new java.util.ArrayList<>();
+            for (int i = 0; i < images.length; i++) {
+                MultipartFile file = images[i];
+                if (file == null || file.isEmpty()) continue;
+                String original = file.getOriginalFilename();
+                String safeName = original == null ? String.valueOf(System.currentTimeMillis()) : original.replaceAll("[^a-zA-Z0-9._-]", "_");
+                String path = String.format("orders/%d/return/%d_%s", order.getId(), System.currentTimeMillis(), safeName);
+                String url = firebaseStorageService.uploadFile(file, path);
+
+                String note = (notes != null && notes.size() > i) ? notes.get(i) : null;
+                OrderImage oi = OrderImage.builder()
+                        .order(order)
+                        .imageUrl(url)
+                        .stage("SHIPPING_BACK")
+                        .note(note)
+                        .confirm(false)
+                        .build();
+                oi = orderImageRepository.save(oi);
+                uploadedImages.add(oi);
+            }
+
+            // update order status
+            order.setStatus("SHIPPING_BACK");
+            orderRepository.save(order);
+
+            java.util.Map<String,Object> res = new java.util.HashMap<>();
+            res.put("tracking", ot);
+            res.put("orderStatus", order.getStatus());
+            res.put("uploadedImages", uploadedImages);
+            return ApiResponse.<Object>builder().result(res).message("Order updated to SHIPPING_BACK").build();
+        } catch (Exception ex) {
+            return ApiResponse.<Object>builder().code(500).message("Failed to start return: " + ex.getMessage()).build();
+        }
+    }
+
+    // Provider confirms returned items OK and completes the order
+    @PostMapping("/{id}/complete")
+    public ApiResponse<?> completeOrder(@PathVariable Integer id) {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            Integer currentUserId = getCurrentUserId();
+            if (currentUserId == null) return ApiResponse.<Object>builder().code(401).message("Chưa xác thực - Vui lòng đăng nhập").build();
+
+            Order order = orderRepository.findById(id).orElse(null);
+            if (order == null) return ApiResponse.<Object>builder().code(404).message("Order not found").build();
+
+            boolean isAdminStaff = hasAdminStaffRole(auth);
+            boolean isProviderOwner = false;
+            try {
+                Provider p = providerService.getByUserId(currentUserId);
+                if (p != null && p.getId() != null && p.getId().equals(order.getProviderId())) isProviderOwner = true;
+            } catch (Exception ex) { /* ignore */ }
+
+            if (!isAdminStaff && !isProviderOwner) return ApiResponse.<Object>builder().code(403).message("Không có quyền thực hiện").build();
+
+            // Only allow completion when order is in SHIPPING_BACK (returned and on the way back or arrived)
+            if (!"SHIPPING_BACK".equals(order.getStatus())) {
+                return ApiResponse.<Object>builder().code(400).message("Order must be in SHIPPING_BACK status to complete").build();
+            }
+
+            // create tracking entry marking complete/received
+            List<OrderTracking> existing = orderTrackingRepository.findByOrderId(order.getId());
+            String trackingCode = null;
+            if (existing != null && !existing.isEmpty()) trackingCode = existing.get(existing.size()-1).getTrackingCode();
+
+            OrderTracking ot = OrderTracking.builder()
+                    .order(order)
+                    .trackingCode(trackingCode)
+                    .trackingStatus("RETURN_RECEIVED")
+                    .stage("COMPLETED")
+                    .build();
+            ot = orderTrackingRepository.save(ot);
+
+            order.setStatus("COMPLETED");
+            orderRepository.save(order);
+
+            java.util.Map<String,Object> res = new java.util.HashMap<>();
+            res.put("tracking", ot);
+            res.put("orderStatus", order.getStatus());
+            return ApiResponse.<Object>builder().result(res).message("Order marked as COMPLETED").build();
+        } catch (Exception ex) {
+            return ApiResponse.<Object>builder().code(500).message("Failed to complete order: " + ex.getMessage()).build();
         }
     }
 }

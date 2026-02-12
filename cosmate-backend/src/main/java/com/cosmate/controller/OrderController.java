@@ -13,6 +13,8 @@ import com.cosmate.repository.OrderDetailAccessoryRepository;
 import com.cosmate.repository.OrderRentalOptionRepository;
 import com.cosmate.service.OrderService;
 import com.cosmate.service.ProviderService;
+import com.cosmate.service.WalletService;
+import com.cosmate.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +37,8 @@ public class OrderController {
     private final OrderDetailAccessoryRepository orderDetailAccessoryRepository;
     private final OrderRentalOptionRepository orderRentalOptionRepository;
     private final ProviderService providerService;
+    private final WalletService walletService;
+    private final TransactionRepository transactionRepository;
 
     // helper to extract current authenticated user id
     private Integer getCurrentUserId() {
@@ -313,5 +317,69 @@ public class OrderController {
 
         api.setCode(0); api.setMessage("OK"); api.setResult(resp);
         return ResponseEntity.ok(api);
+    }
+
+    // Cosplayer / Provider / Staff can cancel an order. Cosplayer can cancel only when status is UNPAID or PAID.
+    // Provider owner or admin/staff can cancel most statuses (except COMPLETED or already CANCELLED).
+    @PostMapping("/{id}/cancel")
+    public ApiResponse<String> cancelOrder(@PathVariable Integer id) {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            Integer currentUserId = getCurrentUserId();
+
+            if (currentUserId == null) return ApiResponse.<String>builder().code(401).message("Chưa xác thực - Vui lòng đăng nhập").build();
+
+            Order order = orderRepository.findById(id).orElse(null);
+            if (order == null) return ApiResponse.<String>builder().code(404).message("Order not found").build();
+
+            String status = order.getStatus();
+
+            boolean isAdminStaff = hasAdminStaffRole(auth);
+            boolean isProviderOwner = false;
+            try {
+                Provider p = providerService.getByUserId(currentUserId);
+                if (p != null && p.getId() != null && p.getId().equals(order.getProviderId())) isProviderOwner = true;
+            } catch (Exception ex) {
+                // ignore
+            }
+            boolean isCosplayer = currentUserId.equals(order.getCosplayerId());
+
+            if (!isAdminStaff && !isProviderOwner && !isCosplayer) {
+                return ApiResponse.<String>builder().code(403).message("Không có quyền hủy đơn").build();
+            }
+
+            // Decide allowed statuses depending on caller
+            if (isCosplayer) {
+                // Cosplayer may only cancel when UNPAID or PAID
+                if (status == null || !("UNPAID".equals(status) || "PAID".equals(status))) {
+                    return ApiResponse.<String>builder().code(400).message("Không thể hủy đơn trong trạng thái: " + status).build();
+                }
+            } else {
+                // Provider owner or admin/staff: disallow cancelling COMPLETED or already CANCELLED
+                if ("COMPLETED".equals(status) || "CANCELLED".equals(status)) {
+                    return ApiResponse.<String>builder().code(400).message("Không thể hủy đơn trong trạng thái: " + status).build();
+                }
+            }
+
+            boolean refunded = false;
+            // If order was PAID, refund totalAmount to cosplayer's wallet
+            if ("PAID".equals(status)) {
+                java.math.BigDecimal amount = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
+                com.cosmate.entity.User u = com.cosmate.entity.User.builder().id(order.getCosplayerId()).build();
+                com.cosmate.entity.Wallet wallet = walletService.createForUser(u);
+                com.cosmate.entity.Transaction tx = walletService.credit(wallet, amount, "Order refund for cancellation", "ORDER_REFUND:" + order.getId());
+                refunded = (tx != null);
+            }
+
+            // update order status to CANCELLED
+            order.setStatus("CANCELLED");
+            orderRepository.save(order);
+
+            String actor = isCosplayer ? "cosplayer" : (isProviderOwner ? "provider" : "staff");
+            String msg = "Order cancelled by " + actor + (refunded ? " and refunded" : "");
+            return ApiResponse.<String>builder().result("OK").message(msg).build();
+        } catch (Exception ex) {
+            return ApiResponse.<String>builder().code(500).message("Failed to cancel order: " + ex.getMessage()).build();
+        }
     }
 }

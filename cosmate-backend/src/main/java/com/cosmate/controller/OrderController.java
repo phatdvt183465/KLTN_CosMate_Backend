@@ -1,6 +1,7 @@
 package com.cosmate.controller;
 
 import com.cosmate.dto.request.CreateOrderRequest;
+import com.cosmate.dto.request.ShipOrderRequest;
 import com.cosmate.dto.response.ApiResponse;
 import com.cosmate.dto.response.OrderFullResponse;
 import com.cosmate.dto.response.OrderResponse;
@@ -24,6 +25,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.cosmate.repository.OrderImageRepository;
+import com.cosmate.repository.OrderTrackingRepository;
+import com.cosmate.service.FirebaseStorageService;
+import org.springframework.web.multipart.MultipartFile;
+
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
@@ -39,6 +45,9 @@ public class OrderController {
     private final ProviderService providerService;
     private final WalletService walletService;
     private final TransactionRepository transactionRepository;
+    private final OrderImageRepository orderImageRepository;
+    private final OrderTrackingRepository orderTrackingRepository;
+    private final FirebaseStorageService firebaseStorageService;
 
     // helper to extract current authenticated user id
     private Integer getCurrentUserId() {
@@ -380,6 +389,133 @@ public class OrderController {
             return ApiResponse.<String>builder().result("OK").message(msg).build();
         } catch (Exception ex) {
             return ApiResponse.<String>builder().code(500).message("Failed to cancel order: " + ex.getMessage()).build();
+        }
+    }
+
+    @PostMapping(path = "/{id}/ship", consumes = {"multipart/form-data"})
+    public ApiResponse<?> shipOrder(@PathVariable Integer id,
+                                   @RequestParam("trackingCode") String trackingCode,
+                                   @RequestPart(value = "images", required = false) MultipartFile[] images,
+                                   @RequestParam(value = "notes", required = false) List<String> notes) {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            Integer currentUserId = getCurrentUserId();
+            if (currentUserId == null) return ApiResponse.<Object>builder().code(401).message("Chưa xác thực - Vui lòng đăng nhập").build();
+
+            // only provider owner or admin/staff allowed
+            boolean isAdminStaff = hasAdminStaffRole(auth);
+            boolean isProviderOwner = false;
+            try {
+                Provider p = providerService.getByUserId(currentUserId);
+                if (p != null && p.getId() != null) {
+                    isProviderOwner = true;
+                }
+            } catch (Exception ex) { }
+            if (!isAdminStaff && !isProviderOwner) return ApiResponse.<Object>builder().code(403).message("Không có quyền thực hiện").build();
+
+            Order order = orderRepository.findById(id).orElse(null);
+            if (order == null) return ApiResponse.<Object>builder().code(404).message("Order not found").build();
+
+            // provider owner must match order.providerId
+            if (!isAdminStaff) {
+                Provider p = providerService.getByUserId(currentUserId);
+                if (p == null || p.getId() == null || !p.getId().equals(order.getProviderId())) {
+                    return ApiResponse.<Object>builder().code(403).message("Không có quyền thực hiện cho đơn hàng này").build();
+                }
+            }
+
+            // order must be PREPARING to move to SHIPPING_OUT
+            if (!"PREPARING".equals(order.getStatus())) {
+                return ApiResponse.<Object>builder().code(400).message("Order must be in PREPARING status to ship").build();
+            }
+
+            // validate request
+            if (trackingCode == null || trackingCode.isBlank()) {
+                return ApiResponse.<Object>builder().code(400).message("trackingCode is required").build();
+            }
+            if (images == null || images.length == 0) {
+                return ApiResponse.<Object>builder().code(400).message("At least one image file is required").build();
+            }
+
+            // persist tracking
+            OrderTracking ot = OrderTracking.builder()
+                    .order(order)
+                    .trackingCode(trackingCode)
+                    .trackingStatus("CREATED")
+                    .stage("SHIPPING_OUT")
+                    .build();
+            ot = orderTrackingRepository.save(ot);
+
+            // upload images to firebase and persist OrderImage
+            List<Integer> savedImageIds = new java.util.ArrayList<>();
+            for (int i = 0; i < images.length; i++) {
+                MultipartFile file = images[i];
+                if (file == null || file.isEmpty()) continue;
+                // build path: orders/{orderId}/shipping/{timestamp}_{originalFilename}
+                String original = file.getOriginalFilename();
+                String safeName = original == null ? String.valueOf(System.currentTimeMillis()) : original.replaceAll("[^a-zA-Z0-9._-]", "_");
+                String path = String.format("orders/%d/shipping/%d_%s", order.getId(), System.currentTimeMillis(), safeName);
+                String url = firebaseStorageService.uploadFile(file, path);
+
+                String note = (notes != null && notes.size() > i) ? notes.get(i) : null;
+                OrderImage oi = OrderImage.builder()
+                        .order(order)
+                        .imageUrl(url)
+                        .stage("SHIPPING_OUT")
+                        .note(note)
+                        .confirm(false)
+                        .build();
+                oi = orderImageRepository.save(oi);
+                savedImageIds.add(oi.getId());
+            }
+
+            // update order status
+            order.setStatus("SHIPPING_OUT");
+            orderRepository.save(order);
+
+            java.util.Map<String, Object> result = new java.util.HashMap<>();
+            result.put("trackingId", ot.getId());
+            result.put("imageIds", savedImageIds);
+            return ApiResponse.<Object>builder().result(result).message("Order updated to SHIPPING_OUT").build();
+        } catch (Exception ex) {
+            return ApiResponse.<Object>builder().code(500).message("Failed to ship order: " + ex.getMessage()).build();
+        }
+    }
+
+    // Provider (owner) or staff/admin can mark an order as PREPARING (typically when they start preparing the package).
+    @PostMapping("/{id}/prepare")
+    public ApiResponse<String> prepareOrder(@PathVariable Integer id) {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            Integer currentUserId = getCurrentUserId();
+            if (currentUserId == null) return ApiResponse.<String>builder().code(401).message("Chưa xác thực - Vui lòng đăng nhập").build();
+
+            Order order = orderRepository.findById(id).orElse(null);
+            if (order == null) return ApiResponse.<String>builder().code(404).message("Order not found").build();
+
+            boolean isAdminStaff = hasAdminStaffRole(auth);
+            boolean isProviderOwner = false;
+            try {
+                Provider p = providerService.getByUserId(currentUserId);
+                if (p != null && p.getId() != null && p.getId().equals(order.getProviderId())) isProviderOwner = true;
+            } catch (Exception ex) { /* ignore */ }
+
+            if (!isAdminStaff && !isProviderOwner) {
+                return ApiResponse.<String>builder().code(403).message("Không có quyền thực hiện").build();
+            }
+
+            // only allow transition from PAID -> PREPARING
+            String status = order.getStatus();
+            if (!"PAID".equals(status)) {
+                return ApiResponse.<String>builder().code(400).message("Order must be in PAID status to move to PREPARING").build();
+            }
+
+            order.setStatus("PREPARING");
+            orderRepository.save(order);
+
+            return ApiResponse.<String>builder().result("OK").message("Order status updated to PREPARING").build();
+        } catch (Exception ex) {
+            return ApiResponse.<String>builder().code(500).message("Failed to update order to PREPARING: " + ex.getMessage()).build();
         }
     }
 }

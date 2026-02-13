@@ -25,7 +25,7 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
 
     private final ServiceRepository serviceRepository;
     private final ObjectMapper objectMapper;
-    private final FirebaseConfig firebaseConfig; // Inject config để lấy bucket chuẩn
+    private final FirebaseConfig firebaseConfig;
 
     @Override
     @Transactional

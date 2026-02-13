@@ -15,5 +15,6 @@ public class ServiceAlbum {
     @JoinColumn(name = "service_id")
     private Service service;
 
+    @Column(name = "image_url")
     private String imageUrl;
 }

@@ -9,9 +9,11 @@ import java.util.List;
 @Builder
 public class ServiceResponse {
     private Integer id;
-    private String name;
+    private String serviceType;
     private String description;
-    private BigDecimal price;
+    private Integer slotDurationHours;
+    private BigDecimal pricePerSlot;
+    private BigDecimal equipmentDepreciationCost;
     private String status;
     private Integer providerId;
     private List<String> areas;

@@ -19,13 +19,23 @@ public class Service {
     private Integer providerId;
 
     @Nationalized
-    private String name;
+    @Column(name = "service_type")
+    private String serviceType;
 
     @Nationalized
+    @Column(name = "description")
     private String description;
 
-    private BigDecimal price;
+    @Column(name = "slot_duration_hours")
+    private Integer slotDurationHours;
 
+    @Column(name = "price_per_slot")
+    private BigDecimal pricePerSlot;
+
+    @Column(name = "equipment_depreciation_cost")
+    private BigDecimal equipmentDepreciationCost;
+
+    @Column(name = "status")
     private String status;
 
     @OneToMany(mappedBy = "service", cascade = CascadeType.ALL, orphanRemoval = true)

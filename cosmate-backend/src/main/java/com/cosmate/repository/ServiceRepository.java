@@ -8,5 +8,5 @@ import java.util.List;
 
 @Repository
 public interface ServiceRepository extends JpaRepository<Service, Integer> {
-    List<Service> findByProviderId(Integer providerId);
+    List<Service> findByProviderIdAndStatus(Integer providerId, String status);
 }

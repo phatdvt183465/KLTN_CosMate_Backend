@@ -10,12 +10,18 @@ import org.hibernate.annotations.Nationalized;
 public class ServiceArea {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id")
     private Integer id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "service_id")
     private Service service;
 
     @Nationalized
-    private String areaName;
+    @Column(name = "city")
+    private String city;
+
+    @Nationalized
+    @Column(name = "district")
+    private String district;
 }

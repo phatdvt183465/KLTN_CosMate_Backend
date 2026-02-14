@@ -17,6 +17,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @org.springframework.stereotype.Service
@@ -43,23 +44,41 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
     @Override
     @Transactional
     public ServiceResponse updateService(Integer id, ServiceRequest request) {
+        // 1. Load dữ liệu cũ từ DB (bao gồm cả Albums cũ)
         Service service = serviceRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Service not found"));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy dịch vụ!"));
 
-        if (request.getName() != null) service.setName(request.getName());
-        if (request.getDescription() != null) service.setDescription(request.getDescription());
-        if (request.getPrice() != null) service.setPrice(request.getPrice());
+        // 2. Update thông tin cơ bản (Nếu có gửi lên thì mới sửa)
+        if (hasText(request.getServiceType())) service.setServiceType(request.getServiceType());
+        if (hasText(request.getDescription())) service.setDescription(request.getDescription());
+        if (request.getSlotDurationHours() != null) service.setSlotDurationHours(request.getSlotDurationHours());
+        if (request.getPricePerSlot() != null) service.setPricePerSlot(request.getPricePerSlot());
+        if (request.getEquipmentDepreciationCost() != null)
+            service.setEquipmentDepreciationCost(request.getEquipmentDepreciationCost());
 
-        // Update Areas if provided
-        if (request.getAreas() != null && !request.getAreas().isEmpty()) {
+        // 3. Update Khu vực (Chỉ sửa nếu JSON không rỗng)
+        if (hasText(request.getAreas())) {
             service.getAreas().clear();
             handleAreas(service, request.getAreas());
         }
 
-        // Update Albums if new files provided
-        if (request.getAlbumFiles() != null && !request.getAlbumFiles().isEmpty()) {
+        // 4. Update Ảnh (Logic quan trọng check null/rỗng)
+        List<MultipartFile> newFiles = request.getAlbumFiles();
+        boolean userWantsToChangeImage = false;
+
+        // Kiểm tra xem user có thực sự gửi file nào có dung lượng > 0 không
+        if (newFiles != null && !newFiles.isEmpty()) {
+            for (MultipartFile f : newFiles) {
+                if (!f.isEmpty()) {
+                    userWantsToChangeImage = true;
+                    break;
+                }
+            }
+        }
+
+        if (userWantsToChangeImage) {
             service.getAlbums().clear();
-            handleAlbums(service, request.getAlbumFiles());
+            handleAlbums(service, newFiles);
         }
 
         return mapToResponse(serviceRepository.save(service));
@@ -67,7 +86,7 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
 
     @Override
     public List<ServiceResponse> getByProviderId(Integer providerId) {
-        return serviceRepository.findByProviderId(providerId).stream()
+        return serviceRepository.findByProviderIdAndStatus(providerId, "ACTIVE").stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
@@ -75,38 +94,48 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
     @Override
     public ServiceResponse getById(Integer id) {
         return mapToResponse(serviceRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Service not found")));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy dịch vụ!")));
     }
 
     @Override
     @Transactional
     public void deleteService(Integer id) {
         Service service = serviceRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Service not found"));
-        serviceRepository.delete(service);
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy dịch vụ!"));
+        service.setStatus("DELETED"); // Xóa mềm
+        serviceRepository.save(service);
     }
 
     // --- Helpers ---
 
+    private boolean hasText(String s) {
+        return s != null && !s.trim().isEmpty();
+    }
+
     private void handleAreas(Service service, String json) {
-        if (json == null || json.isEmpty()) return;
+        if (!hasText(json)) return;
         try {
-            List<String> areaNames = objectMapper.readValue(json, new TypeReference<>() {});
-            for (String name : areaNames) {
+            List<Map<String, String>> areaData = objectMapper.readValue(json, new TypeReference<>() {});
+            for (Map<String, String> data : areaData) {
                 ServiceArea area = new ServiceArea();
-                area.setAreaName(name);
+                area.setCity(data.get("city"));
+                area.setDistrict(data.get("district"));
                 area.setService(service);
                 service.getAreas().add(area);
             }
-        } catch (IOException e) { throw new RuntimeException("Area JSON error"); }
+        } catch (IOException e) {
+            throw new RuntimeException("JSON lỗi rồi đại ca ơi! Check lại format: [{\"city\":\"...\",\"district\":\"...\"}]");
+        }
     }
 
     private void handleAlbums(Service service, List<MultipartFile> files) {
         if (files == null || files.isEmpty()) return;
-        Bucket bucket = firebaseConfig.getBucket(); // Lấy bucket từ config
-        if (bucket == null) throw new RuntimeException("Firebase Bucket not initialized");
+        Bucket bucket = firebaseConfig.getBucket();
+        if (bucket == null) throw new RuntimeException("Firebase chưa kết nối được!");
 
         for (MultipartFile file : files) {
+            if (file.isEmpty()) continue;
+
             try {
                 String fileName = "services/" + System.currentTimeMillis() + "_" + file.getOriginalFilename();
                 bucket.create(fileName, file.getBytes(), file.getContentType());
@@ -115,23 +144,35 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
                 album.setImageUrl("https://storage.googleapis.com/" + bucket.getName() + "/" + fileName);
                 album.setService(service);
                 service.getAlbums().add(album);
-            } catch (IOException e) { throw new RuntimeException("Firebase Upload Error"); }
+            } catch (IOException e) { throw new RuntimeException("Upload ảnh xịt rồi: " + e.getMessage()); }
         }
     }
 
     private void mapBaseInfo(Service s, ServiceRequest r) {
-        s.setName(r.getName());
+        s.setServiceType(r.getServiceType());
         s.setDescription(r.getDescription());
-        s.setPrice(r.getPrice());
+        s.setSlotDurationHours(r.getSlotDurationHours());
+        s.setPricePerSlot(r.getPricePerSlot());
+        s.setEquipmentDepreciationCost(r.getEquipmentDepreciationCost());
         s.setProviderId(r.getProviderId());
     }
 
     private ServiceResponse mapToResponse(Service s) {
         return ServiceResponse.builder()
-                .id(s.getId()).name(s.getName()).description(s.getDescription())
-                .price(s.getPrice()).status(s.getStatus()).providerId(s.getProviderId())
-                .areas(s.getAreas().stream().map(ServiceArea::getAreaName).collect(Collectors.toList()))
-                .imageUrls(s.getAlbums().stream().map(ServiceAlbum::getImageUrl).collect(Collectors.toList()))
+                .id(s.getId())
+                .serviceType(s.getServiceType())
+                .description(s.getDescription())
+                .slotDurationHours(s.getSlotDurationHours())
+                .pricePerSlot(s.getPricePerSlot())
+                .equipmentDepreciationCost(s.getEquipmentDepreciationCost())
+                .status(s.getStatus())
+                .providerId(s.getProviderId())
+                .areas(s.getAreas().stream()
+                        .map(a -> a.getDistrict() + ", " + a.getCity())
+                        .collect(Collectors.toList()))
+                .imageUrls(s.getAlbums().stream()
+                        .map(ServiceAlbum::getImageUrl)
+                        .collect(Collectors.toList()))
                 .build();
     }
 }

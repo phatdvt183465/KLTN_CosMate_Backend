@@ -19,7 +19,4 @@ public class CostumeImage {
     private String imageUrl;
 
     private String type;
-
-    @Column(name = "image_vector")
-    private String imageVector;
 }

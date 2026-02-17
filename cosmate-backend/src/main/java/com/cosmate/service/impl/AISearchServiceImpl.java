@@ -1,5 +1,6 @@
 package com.cosmate.service.impl;
 
+import com.cosmate.dto.request.RecommendationRequest;
 import com.cosmate.dto.request.SearchByImageRequest;
 import com.cosmate.dto.response.SearchResponse;
 import com.cosmate.entity.CostumeImage;
@@ -8,6 +9,8 @@ import com.cosmate.service.AISearchService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -150,5 +153,54 @@ public class AISearchServiceImpl implements AISearchService {
 
         if (normA == 0 || normB == 0) return 0.0;
         return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+    }
+
+    // Gợi ý nhân vật dựa trên sở thích
+    public List<SearchResponse> recommendCosplay(RecommendationRequest request) {
+        // 1. Tạo Prompt dựa trên câu trả lời của User
+        String userProfile = String.format(
+                "Giới tính: %s. Phong cách: %s. Màu yêu thích: %s. Ngân sách: %s. Sở thích: %s.",
+                request.getGender(), request.getStyle(), request.getFavoriteColor(), request.getBudgetRange(), request.getHobby()
+        );
+
+        String prompt = "Dựa trên hồ sơ người dùng sau: [" + userProfile + "]. " +
+                "Hãy gợi ý duy nhất 01 nhân vật Anime/Game/Manga nổi tiếng phù hợp nhất để họ cosplay. " +
+                "Chỉ trả về 01 câu mô tả ngắn gọn về đặc điểm trang phục của nhân vật đó bằng tiếng Việt để tôi dùng làm từ khóa tìm kiếm. " +
+                "Ví dụ output: 'Trang phục Kimono màu hồng ống tre xanh'. Không giải thích gì thêm.";
+
+        // 2. Gọi Gemini (Dùng hàm generate content như cái tạo prompt ảnh)
+        String suggestedKeyword = callGeminiGenerateText(prompt); // Hàm này em viết ở dưới
+
+        // 3. Có từ khóa rồi -> Gọi lại hàm Search cũ để tìm đồ trong DB
+        SearchByImageRequest searchRequest = new SearchByImageRequest();
+        searchRequest.setText(suggestedKeyword);
+
+        System.out.println("AI Gợi ý tìm kiếm: " + suggestedKeyword); // Log ra để debug xem nó gợi ý gì
+
+        return searchSimilarCostumes(searchRequest); // TÁI SỬ DỤNG code cũ
+    }
+
+    private String callGeminiGenerateText(String prompt) {
+        try {
+            String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + apiKey;
+
+            // Body JSON
+            ObjectNode contentPart = objectMapper.createObjectNode().put("text", prompt);
+            ArrayNode parts = objectMapper.createArrayNode().add(contentPart);
+            ObjectNode content = objectMapper.createObjectNode().set("parts", parts);
+            ObjectNode body = objectMapper.createObjectNode().set("contents", objectMapper.createArrayNode().add(content));
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
+
+            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
+
+            return response.path("candidates").get(0)
+                    .path("content").path("parts").get(0)
+                    .path("text").asText();
+        } catch (Exception e) {
+            return "Trang phục anime nổi tiếng"; // Fallback nếu lỗi
+        }
     }
 }

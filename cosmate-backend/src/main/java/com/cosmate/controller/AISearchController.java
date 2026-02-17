@@ -1,5 +1,6 @@
 package com.cosmate.controller;
 
+import com.cosmate.dto.request.RecommendationRequest;
 import com.cosmate.dto.request.SearchByImageRequest;
 import com.cosmate.dto.response.ApiResponse;
 import com.cosmate.dto.response.SearchResponse;
@@ -31,5 +32,13 @@ public class AISearchController {
     public ApiResponse<Void> generateVector(@PathVariable Integer costumeImageId) {
         aiSearchService.generateAndSaveVector(costumeImageId);
         return ApiResponse.<Void>builder().message("Đã tạo vector thành công!").build();
+    }
+
+    @PostMapping("/recommend")
+    public ApiResponse<List<SearchResponse>> recommend(@RequestBody RecommendationRequest request) {
+        return ApiResponse.<List<SearchResponse>>builder()
+                .result(aiSearchService.recommendCosplay(request))
+                .message("Đây là các bộ đồ phù hợp với cá tính của bạn!")
+                .build();
     }
 }

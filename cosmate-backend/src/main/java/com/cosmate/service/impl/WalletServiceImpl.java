@@ -53,10 +53,17 @@ public class WalletServiceImpl implements WalletService {
         wallet.setBalance(wallet.getBalance().add(amount));
         walletRepository.save(wallet);
 
+        // If reference contains a prefix (e.g. "DISPUTE_PAYOUT:123"), use the prefix as the transaction type
+        String txType = "CREDIT";
+        try {
+            if (reference != null && reference.contains(":")) txType = reference.split(":", 2)[0];
+        } catch (Exception ignored) {
+        }
+
         Transaction t = Transaction.builder()
                 .wallet(wallet)
                 .amount(amount)
-                .type("CREDIT")
+                .type(txType)
                 .status("COMPLETED")
                 .createdAt(LocalDateTime.now())
                 .build();
@@ -70,10 +77,16 @@ public class WalletServiceImpl implements WalletService {
         wallet.setBalance(wallet.getBalance().subtract(amount));
         walletRepository.save(wallet);
 
+        String txType = "DEBIT";
+        try {
+            if (reference != null && reference.contains(":")) txType = reference.split(":", 2)[0];
+        } catch (Exception ignored) {
+        }
+
         Transaction t = Transaction.builder()
                 .wallet(wallet)
                 .amount(amount)
-                .type("DEBIT")
+                .type(txType)
                 .status("COMPLETED")
                 .createdAt(LocalDateTime.now())
                 .build();

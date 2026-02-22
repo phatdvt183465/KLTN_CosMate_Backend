@@ -14,7 +14,7 @@ import com.google.cloud.storage.Bucket;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import com.cosmate.service.AISearchService;
+import com.cosmate.service.AIService;
 
 import java.io.IOException;
 import java.util.List;
@@ -28,7 +28,7 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
     private final ServiceRepository serviceRepository;
     private final ObjectMapper objectMapper;
     private final FirebaseConfig firebaseConfig;
-    private final AISearchService aiService;
+    private final AIService aiService;
 
     @Override
     @Transactional

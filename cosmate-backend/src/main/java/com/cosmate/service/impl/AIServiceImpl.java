@@ -7,7 +7,7 @@ import com.cosmate.dto.response.PoseScoringResponse;
 import com.cosmate.dto.response.SearchResponse;
 import com.cosmate.entity.CostumeImage;
 import com.cosmate.repository.CostumeImageRepository;
-import com.cosmate.service.AISearchService;
+import com.cosmate.service.AIService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,13 +22,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-public class AISearchServiceImpl implements AISearchService {
+public class AIServiceImpl implements AIService {
 
     private final CostumeImageRepository costumeImageRepository;
     private final ObjectMapper objectMapper;

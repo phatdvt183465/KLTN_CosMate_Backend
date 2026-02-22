@@ -5,7 +5,7 @@ import com.cosmate.dto.response.CostumeResponse;
 import com.cosmate.entity.*;
 import com.cosmate.repository.CostumeRepository;
 import com.cosmate.repository.ProviderRepository;
-import com.cosmate.service.AISearchService;
+import com.cosmate.service.AIService;
 import com.cosmate.service.CostumeService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,7 +26,7 @@ public class CostumeServiceImpl implements CostumeService {
     private final CostumeRepository costumeRepository;
     private final ProviderRepository providerRepository;
     private final ObjectMapper objectMapper;
-    private final AISearchService aiService;
+    private final AIService aiService;
 
     @Override
     public List<CostumeResponse> getByProviderId(Integer providerId) {

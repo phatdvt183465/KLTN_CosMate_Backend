@@ -1,7 +1,9 @@
 package com.cosmate.service.impl;
 
+import com.cosmate.dto.request.PoseScoringRequest;
 import com.cosmate.dto.request.RecommendationRequest;
 import com.cosmate.dto.request.SearchByImageRequest;
+import com.cosmate.dto.response.PoseScoringResponse;
 import com.cosmate.dto.response.SearchResponse;
 import com.cosmate.entity.CostumeImage;
 import com.cosmate.repository.CostumeImageRepository;
@@ -18,7 +20,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -201,6 +205,114 @@ public class AISearchServiceImpl implements AISearchService {
                     .path("text").asText();
         } catch (Exception e) {
             return "Trang phục anime nổi tiếng"; // Fallback nếu lỗi
+        }
+    }
+
+    // Check 18+
+    @Override
+    public void validateImageContent(MultipartFile file) {
+        try {
+            String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=" + apiKey;
+
+            // 1. Encode ảnh sang Base64
+            String base64Image = Base64.getEncoder().encodeToString(file.getBytes());
+
+            // 2. Tạo Prompt Check
+            String promptText = "Bạn là hệ thống kiểm duyệt nội dung (Content Moderator). " +
+                    "Hãy phân tích hình ảnh này. Nếu nó chứa nội dung người lớn (nudity, sexual), bạo lực máu me, hoặc phản cảm, hãy trả lời 'UNSAFE'. " +
+                    "Nếu hình ảnh an toàn, phù hợp cho mọi lứa tuổi (bao gồm cả trang phục cosplay gợi cảm nhưng không hở hang quá mức), hãy trả lời 'SAFE'. " +
+                    "Chỉ trả về đúng 1 từ: SAFE hoặc UNSAFE.";
+
+            // 3. Build Body JSON cho Gemini Vision
+            // Cấu trúc: { contents: [{ parts: [{ text: ... }, { inline_data: { mime_type: ..., data: ... } }] }] }
+            Map<String, Object> textPart = Map.of("text", promptText);
+            Map<String, Object> imagePart = Map.of("inline_data", Map.of(
+                    "mime_type", file.getContentType() != null ? file.getContentType() : "image/jpeg",
+                    "data", base64Image
+            ));
+
+            Map<String, Object> content = Map.of("parts", List.of(textPart, imagePart));
+            Map<String, Object> body = Map.of("contents", List.of(content));
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+
+            // 4. Gọi API
+            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
+            String result = response.path("candidates").get(0)
+                    .path("content").path("parts").get(0)
+                    .path("text").asText().trim();
+
+            // 5. Xử lý kết quả
+            if ("UNSAFE".equalsIgnoreCase(result)) {
+                throw new RuntimeException("Ảnh vi phạm tiêu chuẩn cộng đồng (18+ hoặc bạo lực).");
+            }
+
+        } catch (Exception e) {
+            // Bắt tất cả lỗi (bao gồm IOException) và ném ra RuntimeException
+            // RuntimeException không bắt buộc phải khai báo "throws" nên Interface sẽ chịu nhận
+            if (e.getMessage().contains("Ảnh vi phạm")) {
+                throw new RuntimeException(e.getMessage());
+            }
+            throw new RuntimeException("Lỗi xử lý ảnh AI: " + e.getMessage());
+        }
+    }
+
+    // --- HÀM MỚI: AI Chấm điểm Pose ---
+    @Override
+    public PoseScoringResponse scorePose(PoseScoringRequest request) {
+        try {
+            // Vẫn dùng model vision như lúc check ảnh 18+
+            String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=" + apiKey;
+
+            // Encode ảnh gửi lên
+            String base64Image = Base64.getEncoder().encodeToString(request.getImage().getBytes());
+
+            // Prompt mớm cho giám khảo AI
+            String promptText = "Bạn là một giám khảo chấm điểm Cosplay chuyên nghiệp. " +
+                    "Hãy xem bức ảnh này và so sánh mức độ hóa trang, tạo dáng, biểu cảm của người trong ảnh với nhân vật gốc là: '" + request.getCharacterName() + "'. " +
+                    "Chấm điểm từ 1 đến 100. " +
+                    "Chỉ trả về ĐÚNG một chuỗi JSON hợp lệ với định dạng như sau, KHÔNG có markdown, KHÔNG có văn bản thừa: " +
+                    "{\"score\": 85, \"comment\": \"Lời nhận xét ngắn gọn, vui nhộn của bạn ở đây...\"}";
+
+            // Build Body JSON
+            Map<String, Object> textPart = Map.of("text", promptText);
+            Map<String, Object> imagePart = Map.of("inline_data", Map.of(
+                    "mime_type", request.getImage().getContentType() != null ? request.getImage().getContentType() : "image/jpeg",
+                    "data", base64Image
+            ));
+
+            Map<String, Object> content = Map.of("parts", List.of(textPart, imagePart));
+            Map<String, Object> body = Map.of("contents", List.of(content));
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+
+            // Gọi API
+            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
+            String resultJson = response.path("candidates").get(0)
+                    .path("content").path("parts").get(0)
+                    .path("text").asText().trim();
+
+            // Dọn dẹp nếu AI trả về cục markdown (```json ... ```)
+            if (resultJson.startsWith("```json")) {
+                resultJson = resultJson.substring(7, resultJson.length() - 3).trim();
+            } else if (resultJson.startsWith("```")) {
+                resultJson = resultJson.substring(3, resultJson.length() - 3).trim();
+            }
+
+            // Convert String JSON thành Object trả về
+            JsonNode resultNode = objectMapper.readTree(resultJson);
+            return PoseScoringResponse.builder()
+                    .score(resultNode.path("score").asInt())
+                    .comment(resultNode.path("comment").asText())
+                    .build();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Lỗi khi giám khảo AI chấm điểm: " + e.getMessage());
         }
     }
 }

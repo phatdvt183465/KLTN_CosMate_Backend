@@ -1,8 +1,10 @@
 package com.cosmate.controller;
 
+import com.cosmate.dto.request.PoseScoringRequest;
 import com.cosmate.dto.request.RecommendationRequest;
 import com.cosmate.dto.request.SearchByImageRequest;
 import com.cosmate.dto.response.ApiResponse;
+import com.cosmate.dto.response.PoseScoringResponse;
 import com.cosmate.dto.response.SearchResponse;
 import com.cosmate.service.AISearchService;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +41,15 @@ public class AISearchController {
         return ApiResponse.<List<SearchResponse>>builder()
                 .result(aiSearchService.recommendCosplay(request))
                 .message("Đây là các bộ đồ phù hợp với cá tính của bạn!")
+                .build();
+    }
+
+    // API Chấm điểm Pose: POST /api/search/pose-score
+    @PostMapping(value = "/pose-score", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<PoseScoringResponse> scorePose(@ModelAttribute PoseScoringRequest request) {
+        return ApiResponse.<PoseScoringResponse>builder()
+                .result(aiSearchService.scorePose(request))
+                .message("Chấm điểm thành công!")
                 .build();
     }
 }

@@ -5,6 +5,7 @@ import com.cosmate.dto.response.CostumeResponse;
 import com.cosmate.entity.*;
 import com.cosmate.repository.CostumeRepository;
 import com.cosmate.repository.ProviderRepository;
+import com.cosmate.service.AIService;
 import com.cosmate.service.CostumeService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,6 +26,7 @@ public class CostumeServiceImpl implements CostumeService {
     private final CostumeRepository costumeRepository;
     private final ProviderRepository providerRepository;
     private final ObjectMapper objectMapper;
+    private final AIService aiService;
 
     @Override
     public List<CostumeResponse> getByProviderId(Integer providerId) {
@@ -175,6 +177,7 @@ public class CostumeServiceImpl implements CostumeService {
         int count = 0;
         for (MultipartFile file : files) {
             if (file == null || file.isEmpty()) continue;
+            aiService.validateImageContent(file);
             CostumeImage img = new CostumeImage();
             img.setImageUrl("https://firebase-storage/mock/" + System.currentTimeMillis() + "_" + file.getOriginalFilename());
             img.setType(count == 0 ? "MAIN" : "DETAIL");

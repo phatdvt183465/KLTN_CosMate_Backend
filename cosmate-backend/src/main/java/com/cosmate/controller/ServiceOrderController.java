@@ -393,4 +393,52 @@ public class ServiceOrderController {
             return ApiResponse.<OrderResponse>builder().code(500).message("Failed to cancel order: " + ex.getMessage()).build();
         }
     }
+
+    // Provider: list service orders (RENT_SERVICE) belonging to provider, optional filter by comma-separated statuses
+    @GetMapping("/provider")
+    public ApiResponse<java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse>> listProviderServiceOrders(@RequestParam(required = false) String statuses) {
+        try {
+            Integer currentUserId = getCurrentUserId();
+            if (currentUserId == null) return ApiResponse.<java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse>>builder().code(401).message("Chưa xác thực - Vui lòng đăng nhập").build();
+
+            Provider prov = providerService.getByUserId(currentUserId);
+            if (prov == null) return ApiResponse.<java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse>>builder().code(403).message("User is not a provider").build();
+
+            java.util.List<String> statusList = null;
+            if (statuses != null && !statuses.trim().isEmpty()) {
+                statusList = java.util.Arrays.stream(statuses.split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .toList();
+            }
+
+            java.util.List<Order> orders;
+            if (statusList == null) {
+                orders = orderRepository.findByProviderIdOrderByCreatedAtDesc(prov.getId());
+            } else {
+                orders = orderRepository.findByProviderIdAndStatusInOrderByCreatedAtDesc(prov.getId(), statusList);
+            }
+
+            // filter only RENT_SERVICE
+            java.util.List<Order> serviceOrders = orders.stream().filter(o -> "RENT_SERVICE".equals(o.getOrderType())).toList();
+
+            java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse> respList = new java.util.ArrayList<>();
+            for (Order o : serviceOrders) {
+                com.cosmate.dto.response.ServiceOrderItemResponse item = new com.cosmate.dto.response.ServiceOrderItemResponse();
+                item.setId(o.getId());
+                item.setCosplayerId(o.getCosplayerId());
+                item.setProviderId(o.getProviderId());
+                item.setOrderType(o.getOrderType());
+                item.setStatus(o.getStatus());
+                item.setTotalAmount(o.getTotalAmount());
+                item.setCreatedAt(o.getCreatedAt());
+                item.setBookings(orderServiceBookingRepository.findByOrderId(o.getId()));
+                respList.add(item);
+            }
+
+            return ApiResponse.<java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse>>builder().result(respList).build();
+        } catch (Exception ex) {
+            return ApiResponse.<java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse>>builder().code(500).message("Failed to list provider service orders: " + ex.getMessage()).build();
+        }
+    }
 }

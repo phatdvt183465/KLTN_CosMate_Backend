@@ -33,6 +33,7 @@ public class ServiceOrderController {
     private final VnPayService vnPayService;
     private final MomoService momoService;
     private final TransactionRepository transactionRepository;
+    private final com.cosmate.repository.UserRepository userRepository;
 
     // helper to extract current authenticated user id
     private Integer getCurrentUserId() {
@@ -293,8 +294,36 @@ public class ServiceOrderController {
 
             if (!"IN_SERVICE".equals(order.getStatus())) return ApiResponse.<OrderResponse>builder().code(400).message("Order must be IN_SERVICE to be completed").build();
 
+            // set to COMPLETED
             order.setStatus("COMPLETED");
             orderRepository.save(order);
+
+            // Transfer money to provider's wallet when service completes
+            try {
+                // provider.userId is the user account id for the provider
+                Integer providerUserId = prov.getUserId();
+                java.util.Optional<com.cosmate.entity.Wallet> wopt = walletService.getByUserId(providerUserId);
+                if (wopt.isPresent()) {
+                    com.cosmate.entity.Wallet wallet = wopt.get();
+                    java.math.BigDecimal amount = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
+                    walletService.credit(wallet, amount, "Payout for completed order", "ORDER_PAYOUT:" + order.getId());
+                } else {
+                    // wallet not found - optional: create wallet and credit
+                    java.util.Optional<com.cosmate.entity.User> providerUserOpt = userRepository.findById(providerUserId);
+                    if (providerUserOpt.isPresent()) {
+                        walletService.createForUser(providerUserOpt.get());
+                        java.util.Optional<com.cosmate.entity.Wallet> wopt2 = walletService.getByUserId(providerUserId);
+                        if (wopt2.isPresent()) {
+                            com.cosmate.entity.Wallet wallet = wopt2.get();
+                            java.math.BigDecimal amount = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
+                            walletService.credit(wallet, amount, "Payout for completed order", "ORDER_PAYOUT:" + order.getId());
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                // Log but do not fail the API call
+                // If logging framework not available here, swallow silently or consider notifying admin
+            }
 
             OrderResponse resp = new OrderResponse();
             resp.setId(order.getId());

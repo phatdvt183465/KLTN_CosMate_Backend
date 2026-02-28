@@ -5,7 +5,6 @@ import com.cosmate.entity.Costume;
 import com.cosmate.entity.CostumeImage;
 import com.cosmate.repository.CostumeImageRepository;
 import com.cosmate.repository.CostumeRepository;
-import com.cosmate.service.AIService;
 import com.cosmate.service.CostumeImageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -21,7 +20,6 @@ public class CostumeImageServiceImpl implements CostumeImageService {
 
     private final CostumeImageRepository imageRepository;
     private final CostumeRepository costumeRepository;
-    private final AIService aiService;
     // private final FirebaseService firebaseService;
 
     @Override
@@ -43,8 +41,6 @@ public class CostumeImageServiceImpl implements CostumeImageService {
         if (file == null || file.isEmpty()) {
             throw new RuntimeException("Error: File is empty.");
         }
-
-        aiService.validateImageContent(file);
 
         // Mock Firebase Upload
         // String url = firebaseService.upload(file);

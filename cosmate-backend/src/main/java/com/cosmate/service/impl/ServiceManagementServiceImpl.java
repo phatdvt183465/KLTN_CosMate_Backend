@@ -14,7 +14,6 @@ import com.google.cloud.storage.Bucket;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import com.cosmate.service.AIService;
 
 import java.io.IOException;
 import java.util.List;
@@ -28,7 +27,6 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
     private final ServiceRepository serviceRepository;
     private final ObjectMapper objectMapper;
     private final FirebaseConfig firebaseConfig;
-    private final AIService aiService;
 
     @Override
     @Transactional
@@ -134,9 +132,10 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
         if (files == null || files.isEmpty()) return;
         Bucket bucket = firebaseConfig.getBucket();
         if (bucket == null) throw new RuntimeException("Firebase chưa kết nối được!");
+
         for (MultipartFile file : files) {
             if (file.isEmpty()) continue;
-            aiService.validateImageContent(file);
+
             try {
                 String fileName = "services/" + System.currentTimeMillis() + "_" + file.getOriginalFilename();
                 bucket.create(fileName, file.getBytes(), file.getContentType());

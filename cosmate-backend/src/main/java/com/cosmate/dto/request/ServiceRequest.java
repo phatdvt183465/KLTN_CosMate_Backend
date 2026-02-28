@@ -15,4 +15,6 @@ public class ServiceRequest {
     private Integer providerId;
     private String areas; // JSON chuỗi: [{"city":"...","district":"..."}]
     private List<MultipartFile> albumFiles;
+    private BigDecimal minPrice;
+    private BigDecimal maxPrice;
 }

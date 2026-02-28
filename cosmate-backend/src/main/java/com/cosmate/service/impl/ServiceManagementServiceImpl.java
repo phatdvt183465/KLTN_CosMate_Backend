@@ -55,6 +55,8 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
         if (hasText(request.getDescription())) service.setDescription(request.getDescription());
         if (request.getSlotDurationHours() != null) service.setSlotDurationHours(request.getSlotDurationHours());
         if (request.getPricePerSlot() != null) service.setPricePerSlot(request.getPricePerSlot());
+        if (request.getMinPrice() != null) service.setMinPrice(request.getMinPrice());
+        if (request.getMaxPrice() != null) service.setMaxPrice(request.getMaxPrice());
         if (request.getEquipmentDepreciationCost() != null)
             service.setEquipmentDepreciationCost(request.getEquipmentDepreciationCost());
 
@@ -154,6 +156,8 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
         s.setDescription(r.getDescription());
         s.setSlotDurationHours(r.getSlotDurationHours());
         s.setPricePerSlot(r.getPricePerSlot());
+        s.setMinPrice(r.getMinPrice());
+        s.setMaxPrice(r.getMaxPrice());
         s.setEquipmentDepreciationCost(r.getEquipmentDepreciationCost());
         s.setProviderId(r.getProviderId());
     }
@@ -165,6 +169,8 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
                 .description(s.getDescription())
                 .slotDurationHours(s.getSlotDurationHours())
                 .pricePerSlot(s.getPricePerSlot())
+                .minPrice(s.getMinPrice())
+                .maxPrice(s.getMaxPrice())
                 .equipmentDepreciationCost(s.getEquipmentDepreciationCost())
                 .status(s.getStatus())
                 .providerId(s.getProviderId())

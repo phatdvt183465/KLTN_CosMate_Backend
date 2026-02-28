@@ -18,4 +18,6 @@ public class ServiceResponse {
     private Integer providerId;
     private List<String> areas;
     private List<String> imageUrls;
+    private BigDecimal minPrice;
+    private BigDecimal maxPrice;
 }

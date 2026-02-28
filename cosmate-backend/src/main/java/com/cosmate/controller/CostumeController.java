@@ -77,4 +77,12 @@ public class CostumeController {
                 .message("Xóa bộ đồ thành công!")
                 .build();
     }
+
+    // API tìm kiếm chủ động: GET /api/costumes/search?keyword=naruto
+    @GetMapping("/search")
+    public ApiResponse<List<CostumeResponse>> searchCostumes(@RequestParam String keyword) {
+        return ApiResponse.<List<CostumeResponse>>builder()
+                .result(costumeService.searchCostumes(keyword)) // Anh tự thêm hàm này vào Service gọi repo nhé
+                .build();
+    }
 }

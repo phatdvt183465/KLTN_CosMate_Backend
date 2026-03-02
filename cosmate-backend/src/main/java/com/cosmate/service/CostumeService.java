@@ -12,4 +12,5 @@ public interface CostumeService {
     void deleteCostume(Integer id);
     void changeStatus(Integer id, String newStatus);
     List<CostumeResponse> getByProviderId(Integer providerId);
+    List<CostumeResponse> searchCostumes(String keyword);
 }

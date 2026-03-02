@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface CostumeRepository extends JpaRepository<Costume, Integer> {
     List<Costume> findByProviderIdAndStatusNotIgnoreCase(Integer providerId, String status);
+    List<Costume> findByNameContainingIgnoreCaseAndStatusNot(String keyword, String status);
 }

@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -25,6 +26,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AIServiceImpl implements AIService {
@@ -36,131 +38,86 @@ public class AIServiceImpl implements AIService {
     @Value("${gemini.api.key}")
     private String apiKey;
 
-    private static final String GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent";
+    // Các hằng số cho Model AI của Google
+    private static final String EMBEDDING_MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent";
+    private static final String GENERATION_MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
+    /**
+     * Tìm kiếm các trang phục có độ tương đồng cao bằng thuật toán Cosine Similarity.
+     */
     @Override
     public List<SearchResponse> searchSimilarCostumes(SearchByImageRequest request) {
         try {
-            // 1. Lấy vector từ Text query
             String queryText = request.getText();
-            if (queryText == null || queryText.isEmpty()) throw new RuntimeException("Vui lòng nhập mô tả tìm kiếm");
+            if (queryText == null || queryText.trim().isEmpty()) {
+                throw new IllegalArgumentException("Từ khóa tìm kiếm không được để trống.");
+            }
+
+            // 1. Tạo vector đại diện cho từ khóa tìm kiếm
             List<Double> queryVector = callGeminiGetVector(queryText);
 
-            // 2. Lấy tất cả ảnh có vector
+            // 2. Lấy tất cả hình ảnh đã được mã hóa vector từ Database
             List<CostumeImage> allImages = costumeImageRepository.findAllWithVector();
 
-            // 3. Tính điểm và LỌC TRÙNG (Dùng Map để chỉ giữ lại bộ đồ có điểm cao nhất)
+            // 3. Tính toán điểm tương đồng và lọc các kết quả trùng lặp
             Map<Integer, SearchResponse> uniqueResults = new HashMap<>();
+            final double SIMILARITY_THRESHOLD = 0.55;
 
             for (CostumeImage img : allImages) {
-                // Parse vector từ DB
                 List<Double> dbVector = objectMapper.readValue(img.getImageVector(), new TypeReference<>() {});
+                double score = calculateCosineSimilarity(queryVector, dbVector);
 
-                // Tính điểm giống nhau
-                double score = cosineSimilarity(queryVector, dbVector);
-
-                if (score > 0.55) { // Hạ threshold xuống xíu cho dễ ra kết quả test
+                if (score > SIMILARITY_THRESHOLD) {
                     Integer costumeId = img.getCostume().getId();
 
-                    // Logic lọc trùng:
-                    // Nếu bộ đồ này chưa có trong map HOẶC bộ đồ này đã có nhưng ảnh mới này điểm cao hơn
-                    // -> Thì cập nhật vào map
+                    // Chỉ giữ lại hình ảnh có điểm tương đồng cao nhất cho mỗi bộ trang phục
                     if (!uniqueResults.containsKey(costumeId) || score > uniqueResults.get(costumeId).getSimilarityScore()) {
-
                         uniqueResults.put(costumeId, SearchResponse.builder()
                                 .costumeId(costumeId)
-                                .costumeName(img.getCostume().getName()) // Khớp với entity Costume
-                                .imageUrl(img.getImageUrl()) // Lấy ảnh khớp nhất để hiển thị
-                                .price(img.getCostume().getPricePerDay()) // Khớp với entity Costume
+                                .costumeName(img.getCostume().getName())
+                                .imageUrl(img.getImageUrl())
+                                .price(img.getCostume().getPricePerDay())
                                 .similarityScore(score)
                                 .build());
                     }
                 }
             }
 
-            // 4. Chuyển Map thành List, Sắp xếp và Lấy Top 10
+            // 4. Sắp xếp điểm giảm dần và trả về top 10 kết quả khớp nhất
             return uniqueResults.values().stream()
                     .sorted(Comparator.comparingDouble(SearchResponse::getSimilarityScore).reversed())
                     .limit(10)
                     .collect(Collectors.toList());
 
         } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Lỗi AI Search: " + e.getMessage());
+            log.error("Lỗi trong quá trình AI tìm kiếm: {}", e.getMessage(), e);
+            throw new RuntimeException("Tìm kiếm AI thất bại: " + e.getMessage());
         }
     }
 
+    /**
+     * Tạo vector nhúng (embedding) cho trang phục và lưu vào Database.
+     */
     @Override
     public void generateAndSaveVector(Integer costumeImageId) {
-        // Hàm này dùng để gọi khi Provider vừa up ảnh xong
-        CostumeImage img = costumeImageRepository.findById(costumeImageId).orElse(null);
-        if (img == null) return;
+        costumeImageRepository.findById(costumeImageId).ifPresent(img -> {
+            try {
+                String contentToEmbed = img.getCostume().getName() + " " + img.getCostume().getDescription();
+                List<Double> vector = callGeminiGetVector(contentToEmbed);
 
-        // Tạo vector từ Tên trang phục + Mô tả (Vì vector hóa text chính xác hơn ảnh raw với model free)
-        String contentToEmbed = img.getCostume().getName() + " " + img.getCostume().getDescription();
-        try {
-            List<Double> vector = callGeminiGetVector(contentToEmbed);
-            img.setImageVector(objectMapper.writeValueAsString(vector)); // Lưu mảng số thành chuỗi JSON
-            costumeImageRepository.save(img);
-        } catch (Exception e) {
-            System.err.println("Lỗi tạo vector cho ảnh ID " + costumeImageId);
-        }
-    }
-
-    // --- Private Helpers ---
-
-    private List<Double> callGeminiGetVector(String text) {
-        try {
-            String url = GEMINI_URL + "?key=" + apiKey;
-
-            // Body JSON chuẩn của Gemini
-            Map<String, Object> contentPart = Map.of("text", text);
-            Map<String, Object> content = Map.of("parts", List.of(contentPart));
-            Map<String, Object> body = Map.of("model", "models/embedding-001", "content", content);
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
-
-            // Gọi API
-            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
-
-            // Parse kết quả
-            JsonNode valuesNode = response.path("embedding").path("values");
-            List<Double> vector = new ArrayList<>();
-            if (valuesNode.isArray()) {
-                for (JsonNode val : valuesNode) {
-                    vector.add(val.asDouble());
-                }
+                img.setImageVector(objectMapper.writeValueAsString(vector));
+                costumeImageRepository.save(img);
+                log.info("Đã tạo và lưu vector thành công cho CostumeImage ID: {}", costumeImageId);
+            } catch (Exception e) {
+                log.error("Tạo vector thất bại cho CostumeImage ID {}: {}", costumeImageId, e.getMessage());
             }
-            return vector;
-        } catch (Exception e) {
-            throw new RuntimeException("Không gọi được Gemini API: " + e.getMessage());
-        }
+        });
     }
 
-    // Thuật toán Cosine Similarity (Toán học cấp 3 :D)
-    private double cosineSimilarity(List<Double> v1, List<Double> v2) {
-        if (v1.size() != v2.size()) return 0.0;
-
-        double dotProduct = 0.0;
-        double normA = 0.0;
-        double normB = 0.0;
-
-        for (int i = 0; i < v1.size(); i++) {
-            dotProduct += v1.get(i) * v2.get(i);
-            normA += Math.pow(v1.get(i), 2);
-            normB += Math.pow(v2.get(i), 2);
-        }
-
-        if (normA == 0 || normB == 0) return 0.0;
-        return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-    }
-
-    // Gợi ý nhân vật dựa trên sở thích
+    /**
+     * Phân tích hồ sơ người dùng và đưa ra gợi ý nhân vật Cosplay phù hợp.
+     */
     public List<SearchResponse> recommendCosplay(RecommendationRequest request) {
-        // 1. Tạo Prompt dựa trên câu trả lời của User
         String userProfile = String.format(
                 "Giới tính: %s. Phong cách: %s. Màu yêu thích: %s. Ngân sách: %s. Sở thích: %s.",
                 request.getGender(), request.getStyle(), request.getFavoriteColor(), request.getBudgetRange(), request.getHobby()
@@ -168,62 +125,32 @@ public class AIServiceImpl implements AIService {
 
         String prompt = "Dựa trên hồ sơ người dùng sau: [" + userProfile + "]. " +
                 "Hãy gợi ý duy nhất 01 nhân vật Anime/Game/Manga nổi tiếng phù hợp nhất để họ cosplay. " +
-                "Chỉ trả về 01 câu mô tả ngắn gọn về đặc điểm trang phục của nhân vật đó bằng tiếng Việt để tôi dùng làm từ khóa tìm kiếm. " +
-                "Ví dụ output: 'Trang phục Kimono màu hồng ống tre xanh'. Không giải thích gì thêm.";
+                "Chỉ trả về 01 câu mô tả ngắn gọn về đặc điểm trang phục của nhân vật đó bằng tiếng Việt để dùng làm từ khóa tìm kiếm. " +
+                "Ví dụ: 'Trang phục Kimono màu hồng ống tre xanh'. Không giải thích thêm.";
 
-        // 2. Gọi Gemini (Dùng hàm generate content như cái tạo prompt ảnh)
-        String suggestedKeyword = callGeminiGenerateText(prompt); // Hàm này em viết ở dưới
+        String suggestedKeyword = callGeminiGenerateText(prompt);
+        log.info("Từ khóa AI gợi ý: {}", suggestedKeyword);
 
-        // 3. Có từ khóa rồi -> Gọi lại hàm Search cũ để tìm đồ trong DB
         SearchByImageRequest searchRequest = new SearchByImageRequest();
         searchRequest.setText(suggestedKeyword);
 
-        System.out.println("AI Gợi ý tìm kiếm: " + suggestedKeyword); // Log ra để debug xem nó gợi ý gì
-
-        return searchSimilarCostumes(searchRequest); // TÁI SỬ DỤNG code cũ
+        return searchSimilarCostumes(searchRequest);
     }
 
-    private String callGeminiGenerateText(String prompt) {
-        try {
-            String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + apiKey;
-
-            // Body JSON
-            ObjectNode contentPart = objectMapper.createObjectNode().put("text", prompt);
-            ArrayNode parts = objectMapper.createArrayNode().add(contentPart);
-            ObjectNode content = objectMapper.createObjectNode().set("parts", parts);
-            ObjectNode body = objectMapper.createObjectNode().set("contents", objectMapper.createArrayNode().add(content));
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
-
-            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
-
-            return response.path("candidates").get(0)
-                    .path("content").path("parts").get(0)
-                    .path("text").asText();
-        } catch (Exception e) {
-            return "Trang phục anime nổi tiếng"; // Fallback nếu lỗi
-        }
-    }
-
-    // Check 18+
+    /**
+     * Kiểm duyệt nội dung hình ảnh để đảm bảo tuân thủ tiêu chuẩn cộng đồng (Kiểm tra 18+/Bạo lực).
+     */
     @Override
     public void validateImageContent(MultipartFile file) {
         try {
-            String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=" + apiKey;
-
-            // 1. Encode ảnh sang Base64
+            String url = GENERATION_MODEL_URL + "?key=" + apiKey;
             String base64Image = Base64.getEncoder().encodeToString(file.getBytes());
 
-            // 2. Tạo Prompt Check
             String promptText = "Bạn là hệ thống kiểm duyệt nội dung (Content Moderator). " +
-                    "Hãy phân tích hình ảnh này. Nếu nó chứa nội dung người lớn (nudity, sexual), bạo lực máu me, hoặc phản cảm, hãy trả lời 'UNSAFE'. " +
-                    "Nếu hình ảnh an toàn, phù hợp cho mọi lứa tuổi (bao gồm cả trang phục cosplay gợi cảm nhưng không hở hang quá mức), hãy trả lời 'SAFE'. " +
+                    "Phân tích hình ảnh này. Nếu chứa nội dung người lớn (nudity, sexual), bạo lực máu me, phản cảm, trả lời 'UNSAFE'. " +
+                    "Nếu an toàn cho mọi lứa tuổi (bao gồm trang phục cosplay gợi cảm nhưng không phản cảm), trả lời 'SAFE'. " +
                     "Chỉ trả về đúng 1 từ: SAFE hoặc UNSAFE.";
 
-            // 3. Build Body JSON cho Gemini Vision
-            // Cấu trúc: { contents: [{ parts: [{ text: ... }, { inline_data: { mime_type: ..., data: ... } }] }] }
             Map<String, Object> textPart = Map.of("text", promptText);
             Map<String, Object> imagePart = Map.of("inline_data", Map.of(
                     "mime_type", file.getContentType() != null ? file.getContentType() : "image/jpeg",
@@ -237,45 +164,43 @@ public class AIServiceImpl implements AIService {
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
 
-            // 4. Gọi API
             JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
-            String result = response.path("candidates").get(0)
-                    .path("content").path("parts").get(0)
-                    .path("text").asText().trim();
 
-            // 5. Xử lý kết quả
-            if ("UNSAFE".equalsIgnoreCase(result)) {
-                throw new RuntimeException("Ảnh vi phạm tiêu chuẩn cộng đồng (18+ hoặc bạo lực).");
+            if (response != null && response.has("candidates")) {
+                String result = response.path("candidates").get(0)
+                        .path("content").path("parts").get(0)
+                        .path("text").asText().trim();
+
+                if ("UNSAFE".equalsIgnoreCase(result)) {
+                    throw new IllegalArgumentException("Ảnh vi phạm tiêu chuẩn cộng đồng (18+ hoặc bạo lực).");
+                }
+            } else {
+                throw new RuntimeException("Định dạng phản hồi từ dịch vụ AI không hợp lệ.");
             }
 
+        } catch (IllegalArgumentException e) {
+            throw e; // Ném lại trực tiếp các lỗi vi phạm nghiệp vụ
         } catch (Exception e) {
-            // Bắt tất cả lỗi (bao gồm IOException) và ném ra RuntimeException
-            // RuntimeException không bắt buộc phải khai báo "throws" nên Interface sẽ chịu nhận
-            if (e.getMessage().contains("Ảnh vi phạm")) {
-                throw new RuntimeException(e.getMessage());
-            }
-            throw new RuntimeException("Lỗi xử lý ảnh AI: " + e.getMessage());
+            log.error("Kiểm duyệt ảnh AI thất bại: {}", e.getMessage(), e);
+            throw new RuntimeException("Lỗi hệ thống khi kiểm duyệt ảnh: " + e.getMessage());
         }
     }
 
-    // --- HÀM MỚI: AI Chấm điểm Pose ---
+    /**
+     * Đánh giá tư thế (pose) cosplay so với nhân vật gốc và trả về điểm số kèm nhận xét.
+     */
     @Override
     public PoseScoringResponse scorePose(PoseScoringRequest request) {
         try {
-            // Vẫn dùng model vision như lúc check ảnh 18+
-            String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=" + apiKey;
-
-            // Encode ảnh gửi lên
+            String url = GENERATION_MODEL_URL + "?key=" + apiKey;
             String base64Image = Base64.getEncoder().encodeToString(request.getImage().getBytes());
 
-            // Prompt mớm cho giám khảo AI
             String promptText = "Bạn là một giám khảo chấm điểm Cosplay chuyên nghiệp. " +
-                    "Hãy xem bức ảnh này và so sánh mức độ hóa trang, tạo dáng, biểu cảm của người trong ảnh với nhân vật gốc là: '" + request.getCharacterName() + "'. " +
+                    "So sánh mức độ hóa trang, tạo dáng, biểu cảm của người trong ảnh với nhân vật gốc: '" + request.getCharacterName() + "'. " +
                     "Chấm điểm từ 1 đến 100. " +
-                    "Chỉ trả về ĐÚNG một chuỗi JSON hợp lệ với định dạng như sau, KHÔNG có markdown, KHÔNG có văn bản thừa: " +
-                    "{\"score\": 85, \"comment\": \"Lời nhận xét ngắn gọn, vui nhộn của bạn ở đây...\"}";
+                    "Chỉ trả về ĐÚNG một chuỗi JSON hợp lệ, KHÔNG có markdown: " +
+                    "{\"score\": 85, \"comment\": \"Lời nhận xét ngắn gọn...\"}";
 
-            // Build Body JSON
             Map<String, Object> textPart = Map.of("text", promptText);
             Map<String, Object> imagePart = Map.of("inline_data", Map.of(
                     "mime_type", request.getImage().getContentType() != null ? request.getImage().getContentType() : "image/jpeg",
@@ -289,20 +214,18 @@ public class AIServiceImpl implements AIService {
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
 
-            // Gọi API
             JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
             String resultJson = response.path("candidates").get(0)
                     .path("content").path("parts").get(0)
                     .path("text").asText().trim();
 
-            // Dọn dẹp nếu AI trả về cục markdown (```json ... ```)
+            // Làm sạch chuỗi JSON để loại bỏ định dạng Markdown nếu AI sinh ra
             if (resultJson.startsWith("```json")) {
                 resultJson = resultJson.substring(7, resultJson.length() - 3).trim();
             } else if (resultJson.startsWith("```")) {
                 resultJson = resultJson.substring(3, resultJson.length() - 3).trim();
             }
 
-            // Convert String JSON thành Object trả về
             JsonNode resultNode = objectMapper.readTree(resultJson);
             return PoseScoringResponse.builder()
                     .score(resultNode.path("score").asInt())
@@ -310,8 +233,71 @@ public class AIServiceImpl implements AIService {
                     .build();
 
         } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Lỗi khi giám khảo AI chấm điểm: " + e.getMessage());
+            log.error("AI chấm điểm Pose thất bại: {}", e.getMessage(), e);
+            throw new RuntimeException("Lỗi khi chấm điểm Pose: " + e.getMessage());
         }
+    }
+
+    // --- Các hàm tiện ích (Utility Methods) ---
+
+    private List<Double> callGeminiGetVector(String text) {
+        try {
+            String url = EMBEDDING_MODEL_URL + "?key=" + apiKey;
+            Map<String, Object> body = Map.of("model", "models/embedding-001", "content", Map.of("parts", List.of(Map.of("text", text))));
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+
+            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
+            JsonNode valuesNode = response.path("embedding").path("values");
+
+            List<Double> vector = new ArrayList<>();
+            if (valuesNode.isArray()) {
+                valuesNode.forEach(val -> vector.add(val.asDouble()));
+            }
+            return vector;
+        } catch (Exception e) {
+            throw new RuntimeException("Gọi API Gemini Embedding thất bại: " + e.getMessage());
+        }
+    }
+
+    private String callGeminiGenerateText(String prompt) {
+        try {
+            String url = GENERATION_MODEL_URL + "?key=" + apiKey;
+            ObjectNode contentPart = objectMapper.createObjectNode().put("text", prompt);
+            ArrayNode parts = objectMapper.createArrayNode().add(contentPart);
+            ObjectNode content = objectMapper.createObjectNode().set("parts", parts);
+            ObjectNode body = objectMapper.createObjectNode().set("contents", objectMapper.createArrayNode().add(content));
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
+
+            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
+
+            if (response != null && response.has("candidates")) {
+                return response.path("candidates").get(0)
+                        .path("content").path("parts").get(0)
+                        .path("text").asText();
+            }
+            return "Trang phục cosplay chung";
+        } catch (Exception e) {
+            log.error("Gọi API Gemini Generation thất bại: {}", e.getMessage(), e);
+            return "Trang phục cosplay nổi bật"; // Trả về kết quả mặc định an toàn nếu có lỗi
+        }
+    }
+
+    private double calculateCosineSimilarity(List<Double> vectorA, List<Double> vectorB) {
+        if (vectorA.size() != vectorB.size() || vectorA.isEmpty()) return 0.0;
+
+        double dotProduct = 0.0, normA = 0.0, normB = 0.0;
+        for (int i = 0; i < vectorA.size(); i++) {
+            dotProduct += vectorA.get(i) * vectorB.get(i);
+            normA += Math.pow(vectorA.get(i), 2);
+            normB += Math.pow(vectorB.get(i), 2);
+        }
+
+        return (normA == 0 || normB == 0) ? 0.0 : dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 }

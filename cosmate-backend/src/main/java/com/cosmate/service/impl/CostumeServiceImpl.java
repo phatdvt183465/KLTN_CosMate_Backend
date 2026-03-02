@@ -1,5 +1,6 @@
 package com.cosmate.service.impl;
 
+import com.cosmate.configuration.FirebaseConfig;
 import com.cosmate.dto.request.CostumeRequest;
 import com.cosmate.dto.response.CostumeResponse;
 import com.cosmate.entity.*;
@@ -27,6 +28,7 @@ public class CostumeServiceImpl implements CostumeService {
     private final ProviderRepository providerRepository;
     private final ObjectMapper objectMapper;
     private final AIService aiService;
+    private final com.cosmate.configuration.FirebaseConfig firebaseConfig;
 
     @Override
     public List<CostumeResponse> getByProviderId(Integer providerId) {
@@ -174,16 +176,32 @@ public class CostumeServiceImpl implements CostumeService {
 
     private void handleImages(Costume costume, List<MultipartFile> files) {
         if (files == null || files.isEmpty()) return;
+
+        com.google.cloud.storage.Bucket bucket = firebaseConfig.getBucket();
+        if (bucket == null) throw new RuntimeException("Firebase chưa kết nối được!");
+
         int count = 0;
         for (MultipartFile file : files) {
             if (file == null || file.isEmpty()) continue;
+
+            // AI Check 18+
             aiService.validateImageContent(file);
-            CostumeImage img = new CostumeImage();
-            img.setImageUrl("https://firebase-storage/mock/" + System.currentTimeMillis() + "_" + file.getOriginalFilename());
-            img.setType(count == 0 ? "MAIN" : "DETAIL");
-            img.setCostume(costume);
-            costume.getImages().add(img);
-            count++;
+
+            try {
+                // Upload Firebase
+                String fileName = "costumes/" + System.currentTimeMillis() + "_" + file.getOriginalFilename();
+                bucket.create(fileName, file.getBytes(), file.getContentType());
+                String fileUrl = "https://storage.googleapis.com/" + bucket.getName() + "/" + fileName;
+
+                CostumeImage img = new CostumeImage();
+                img.setImageUrl(fileUrl); // Lưu link thật
+                img.setType(count == 0 ? "MAIN" : "DETAIL");
+                img.setCostume(costume);
+                costume.getImages().add(img);
+                count++;
+            } catch (Exception e) {
+                throw new RuntimeException("Upload ảnh xịt rồi: " + e.getMessage());
+            }
         }
     }
 
@@ -284,5 +302,15 @@ public class CostumeServiceImpl implements CostumeService {
 
     private boolean isValidString(String input) {
         return input != null && !input.trim().isEmpty();
+    }
+
+    // --- API SEARCH CHỦ ĐỘNG ---
+    @Override
+    public List<CostumeResponse> searchCostumes(String keyword) {
+        List<Costume> costumes = costumeRepository.findByNameContainingIgnoreCaseAndStatusNot(keyword, "DELETED");
+
+        return costumes.stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
     }
 }

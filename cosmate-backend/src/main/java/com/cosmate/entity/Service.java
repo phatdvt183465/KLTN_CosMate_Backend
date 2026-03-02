@@ -38,6 +38,12 @@ public class Service {
     @Column(name = "status")
     private String status;
 
+    @Column(name = "min_price")
+    private BigDecimal minPrice;
+
+    @Column(name = "max_price")
+    private BigDecimal maxPrice;
+
     @OneToMany(mappedBy = "service", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ServiceArea> areas = new ArrayList<>();
 

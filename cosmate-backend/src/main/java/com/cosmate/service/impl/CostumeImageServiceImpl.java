@@ -1,5 +1,7 @@
 package com.cosmate.service.impl;
 
+import com.cosmate.configuration.FirebaseConfig; // Thêm import này
+import com.google.cloud.storage.Bucket; // Thêm import này
 import com.cosmate.dto.response.ImageResponse;
 import com.cosmate.entity.Costume;
 import com.cosmate.entity.CostumeImage;
@@ -22,7 +24,7 @@ public class CostumeImageServiceImpl implements CostumeImageService {
     private final CostumeImageRepository imageRepository;
     private final CostumeRepository costumeRepository;
     private final AIService aiService;
-    // private final FirebaseService firebaseService;
+    private final FirebaseConfig firebaseConfig; // INJECT FIREBASE VÀO ĐÂY
 
     @Override
     public List<ImageResponse> getByCostumeId(Integer costumeId) {
@@ -44,19 +46,30 @@ public class CostumeImageServiceImpl implements CostumeImageService {
             throw new RuntimeException("Error: File is empty.");
         }
 
+        // 1. Check AI (18+)
         aiService.validateImageContent(file);
 
-        // Mock Firebase Upload
-        // String url = firebaseService.upload(file);
-        String url = "https://firebase-storage/cosmate/" + System.currentTimeMillis() + "_" + file.getOriginalFilename();
+        // 2. Upload thật lên Firebase
+        Bucket bucket = firebaseConfig.getBucket();
+        if (bucket == null) throw new RuntimeException("Firebase chưa kết nối được!");
 
-        CostumeImage img = new CostumeImage();
-        img.setImageUrl(url);
-        // Default to DETAIL if type is null or empty
-        img.setType((type != null && !type.isEmpty()) ? type : "DETAIL");
-        img.setCostume(costume);
+        try {
+            String fileName = "costumes/" + System.currentTimeMillis() + "_" + file.getOriginalFilename();
+            bucket.create(fileName, file.getBytes(), file.getContentType());
 
-        return mapToResponse(imageRepository.save(img));
+            // Link chuẩn Google Storage
+            String fileUrl = "https://storage.googleapis.com/" + bucket.getName() + "/" + fileName;
+
+            CostumeImage img = new CostumeImage();
+            img.setImageUrl(fileUrl); // Lưu link thật
+            img.setType((type != null && !type.isEmpty()) ? type : "DETAIL");
+            img.setCostume(costume);
+
+            return mapToResponse(imageRepository.save(img));
+
+        } catch (Exception e) {
+            throw new RuntimeException("Upload ảnh xịt rồi: " + e.getMessage());
+        }
     }
 
     @Override
@@ -74,7 +87,6 @@ public class CostumeImageServiceImpl implements CostumeImageService {
         imageRepository.deleteById(id);
     }
 
-    // Mapper helper
     private ImageResponse mapToResponse(CostumeImage entity) {
         return ImageResponse.builder()
                 .id(entity.getId())

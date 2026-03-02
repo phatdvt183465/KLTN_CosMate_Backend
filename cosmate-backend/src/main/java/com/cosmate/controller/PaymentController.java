@@ -9,6 +9,7 @@ import com.cosmate.service.MomoService;
 import com.cosmate.service.SubscriptionService;
 import com.cosmate.service.VnPayService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -31,6 +32,16 @@ public class PaymentController {
     private final MomoService momoService;
     private final TransactionRepository transactionRepository;
     private final OrderRepository orderRepository;
+
+    // Read frontend URL from application.properties; fallback to http://localhost:5173 if not set
+    @Value("${frontend.url:http://localhost:5173}")
+    private String frontendUrl;
+
+    private String getFrontendBase() {
+        if (frontendUrl == null || frontendUrl.isBlank()) return "http://localhost:5173";
+        // remove trailing slash to make joining predictable
+        return frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
+    }
 
     @PostMapping("/api/vnpay/create")
     public ResponseEntity<ApiResponse<Map<String, String>>> createPayment(@RequestParam Integer userId,
@@ -183,7 +194,7 @@ public class PaymentController {
                 }
             }
             // Build redirect URL to frontend with params status, transactionId, orderId (if available)
-            StringBuilder redirect = new StringBuilder("http://localhost:5173/payment/result");
+            StringBuilder redirect = new StringBuilder(getFrontendBase() + "/payment/result");
             redirect.append("?status=");
             // Map internal status to frontend-only values: 'success' or 'failed'
             String frontendStatus = "failed";
@@ -296,7 +307,7 @@ public class PaymentController {
             }
 
             // Build redirect URL to frontend with params status, transactionId, orderId (if available)
-            StringBuilder redirect = new StringBuilder("http://localhost:5173/payment/result");
+            StringBuilder redirect = new StringBuilder(getFrontendBase() + "/payment/result");
             redirect.append("?status=");
             // Map internal status to frontend-only values: 'success' or 'failed'
             String frontendStatus = "failed";

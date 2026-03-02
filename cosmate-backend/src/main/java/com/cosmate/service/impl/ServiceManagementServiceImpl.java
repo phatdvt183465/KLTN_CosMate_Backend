@@ -46,43 +46,16 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
     @Override
     @Transactional
     public ServiceResponse updateService(Integer id, ServiceRequest request) {
-        // 1. Load dữ liệu cũ từ DB (bao gồm cả Albums cũ)
         Service service = serviceRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy dịch vụ!"));
 
-        // 2. Update thông tin cơ bản (Nếu có gửi lên thì mới sửa)
-        if (hasText(request.getServiceType())) service.setServiceType(request.getServiceType());
-        if (hasText(request.getDescription())) service.setDescription(request.getDescription());
-        if (request.getSlotDurationHours() != null) service.setSlotDurationHours(request.getSlotDurationHours());
-        if (request.getPricePerSlot() != null) service.setPricePerSlot(request.getPricePerSlot());
-        if (request.getMinPrice() != null) service.setMinPrice(request.getMinPrice());
-        if (request.getMaxPrice() != null) service.setMaxPrice(request.getMaxPrice());
-        if (request.getEquipmentDepreciationCost() != null)
-            service.setEquipmentDepreciationCost(request.getEquipmentDepreciationCost());
+        // PHẦN 1: CẬP NHẬT THÔNG TIN CƠ BẢN VÀ KHU VỰC
+        updateBasicInfo(service, request);
 
-        // 3. Update Khu vực (Chỉ sửa nếu JSON không rỗng)
-        if (hasText(request.getAreas())) {
-            service.getAreas().clear();
-            handleAreas(service, request.getAreas());
-        }
-
-        // 4. Update Ảnh (Logic quan trọng check null/rỗng)
-        List<MultipartFile> newFiles = request.getAlbumFiles();
-        boolean userWantsToChangeImage = false;
-
-        // Kiểm tra xem user có thực sự gửi file nào có dung lượng > 0 không
-        if (newFiles != null && !newFiles.isEmpty()) {
-            for (MultipartFile f : newFiles) {
-                if (!f.isEmpty()) {
-                    userWantsToChangeImage = true;
-                    break;
-                }
-            }
-        }
-
-        if (userWantsToChangeImage) {
-            service.getAlbums().clear();
-            handleAlbums(service, newFiles);
+        // PHẦN 2: CẬP NHẬT ẢNH
+        if (hasValidNewImages(request.getAlbumFiles())) {
+            service.getAlbums().clear(); // Xóa sạch record ảnh cũ trong DB
+            handleAlbums(service, request.getAlbumFiles()); // Up ảnh mới và lưu DB
         }
 
         return mapToResponse(serviceRepository.save(service));
@@ -110,10 +83,41 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
         serviceRepository.save(service);
     }
 
-    // --- Helpers ---
+    // =========================================================
+    // --- CÁC HÀM TIỆN ÍCH (HELPERS) TÁCH RỜI LOGIC ---
+    // =========================================================
 
     private boolean hasText(String s) {
         return s != null && !s.trim().isEmpty();
+    }
+
+    // Hàm 1: Chỉ chuyên lo việc cập nhật chữ và số
+    private void updateBasicInfo(Service service, ServiceRequest request) {
+        if (hasText(request.getServiceType())) service.setServiceType(request.getServiceType());
+        if (hasText(request.getDescription())) service.setDescription(request.getDescription());
+        if (request.getSlotDurationHours() != null) service.setSlotDurationHours(request.getSlotDurationHours());
+        if (request.getPricePerSlot() != null) service.setPricePerSlot(request.getPricePerSlot());
+        if (request.getMinPrice() != null) service.setMinPrice(request.getMinPrice());
+        if (request.getMaxPrice() != null) service.setMaxPrice(request.getMaxPrice());
+        if (request.getEquipmentDepreciationCost() != null)
+            service.setEquipmentDepreciationCost(request.getEquipmentDepreciationCost());
+
+        if (hasText(request.getAreas())) {
+            service.getAreas().clear();
+            handleAreas(service, request.getAreas());
+        }
+    }
+
+    // Hàm 2: Thám tử kiểm tra xem mảng File truyền lên có thật sự chứa ảnh không
+    private boolean hasValidNewImages(List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) return false;
+        for (MultipartFile file : files) {
+            // Phải khác null và kích thước > 0 mới tính là có ảnh thật
+            if (file != null && !file.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void handleAreas(Service service, String json) {
@@ -137,7 +141,7 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
         Bucket bucket = firebaseConfig.getBucket();
         if (bucket == null) throw new RuntimeException("Firebase chưa kết nối được!");
         for (MultipartFile file : files) {
-            if (file.isEmpty()) continue;
+            if (file == null || file.isEmpty()) continue;
             aiService.validateImageContent(file);
             try {
                 String fileName = "services/" + System.currentTimeMillis() + "_" + file.getOriginalFilename();

@@ -10,9 +10,13 @@ import com.cosmate.service.SubscriptionService;
 import com.cosmate.service.VnPayService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -104,6 +108,8 @@ public class PaymentController {
             Map<String, String> result = vnPayService.handleReturn(allParams);
             // If transaction is SUB and completed, activate subscription
             String status = result.get("status");
+            Integer forwardedTxnId = null;
+            Integer forwardedOrderId = null;
             if ("OK".equals(status)) {
                 String txnRef = allParams.get("vnp_TxnRef");
                 if (txnRef != null) {
@@ -111,15 +117,16 @@ public class PaymentController {
                         String idPart = txnRef.substring("SUB".length());
                         try {
                             Integer txnId = Integer.valueOf(idPart);
+                            forwardedTxnId = txnId;
                             subscriptionService.finalizeSubscriptionPayment(txnId);
                         } catch (Exception e) {
                             // log and continue; return will still be OK to VNPay
                         }
                     } else if (txnRef.startsWith("WALLET")) {
-                        // handle wallet prefix, but transaction may be an ORDER payment (we set tx.type = ORDER#<orderId>)
                         String idPart = txnRef.substring("WALLET".length());
                         try {
                             Integer txnId = Integer.valueOf(idPart);
+                            forwardedTxnId = txnId;
                             Optional<Transaction> optTx = transactionRepository.findById(txnId);
                             if (optTx.isPresent()) {
                                 Transaction tx = optTx.get();
@@ -127,6 +134,7 @@ public class PaymentController {
                                 if (type != null && type.startsWith("ORDER#")) {
                                     try {
                                         Integer orderId = Integer.valueOf(type.substring("ORDER#".length()));
+                                        forwardedOrderId = orderId;
                                         Optional<Order> oOpt = orderRepository.findById(orderId);
                                         if (oOpt.isPresent()) {
                                             Order o = oOpt.get();
@@ -141,25 +149,22 @@ public class PaymentController {
                         } catch (NumberFormatException ignore) {
                         }
                     } else if (txnRef.startsWith("ORDER#")) {
-                        // ORDER#<orderId> mapping: need to find transaction by wallet->id mapping
-                        // Instead we can inspect vnp_TxnRef like ORDER#<orderId><txnId>? but simpler: search transaction by id via vnp_TxnRef mapping in Transaction table
-                        // VNPay returns vnp_TxnRef which in our createPaymentUrlForTransaction uses prefix+transactionId; so we need to parse transactionId
                         String idPart = null;
                         if (txnRef.startsWith("ORDER#")) idPart = txnRef.substring("ORDER#".length());
                         if (idPart != null) {
                             try {
                                 Integer txnId = Integer.valueOf(idPart);
+                                forwardedTxnId = txnId;
                                 Optional<Transaction> optTx = transactionRepository.findById(txnId);
                                 if (optTx.isPresent()) {
                                     Transaction tx = optTx.get();
-                                    // mark completed
                                     tx.setStatus("COMPLETED");
                                     transactionRepository.save(tx);
-                                    // find order id embedded in tx.type (we set type=ORDER#<orderId> earlier). If not found, we can try to parse order id from tx.getType()
                                     String type = tx.getType();
                                     if (type != null && type.startsWith("ORDER#")) {
                                         try {
                                             Integer orderId = Integer.valueOf(type.substring("ORDER#".length()));
+                                            forwardedOrderId = orderId;
                                             Optional<Order> oOpt = orderRepository.findById(orderId);
                                             if (oOpt.isPresent()) {
                                                 Order o = oOpt.get();
@@ -177,10 +182,27 @@ public class PaymentController {
                     }
                 }
             }
-            api.setCode(0);
-            api.setMessage("OK");
-            api.setResult(result);
-            return ResponseEntity.ok(api);
+            // Build redirect URL to frontend with params status, transactionId, orderId (if available)
+            StringBuilder redirect = new StringBuilder("http://localhost:5173/payment/result");
+            redirect.append("?status=");
+            // Map internal status to frontend-only values: 'success' or 'failed'
+            String frontendStatus = "failed";
+            if (status != null) {
+                String s = status.trim();
+                if (s.equalsIgnoreCase("OK") || s.equalsIgnoreCase("SUCCESS") || s.equals("00") || s.equals("0")) {
+                    frontendStatus = "success";
+                }
+            }
+            String encodedStatus = "";
+            try {
+                encodedStatus = URLEncoder.encode(frontendStatus, StandardCharsets.UTF_8);
+            } catch (Exception ignore) {}
+            redirect.append(encodedStatus);
+            if (forwardedTxnId != null) redirect.append("&transactionId=").append(URLEncoder.encode(forwardedTxnId.toString(), StandardCharsets.UTF_8));
+            if (forwardedOrderId != null) redirect.append("&orderId=").append(URLEncoder.encode(forwardedOrderId.toString(), StandardCharsets.UTF_8));
+
+            URI location = URI.create(redirect.toString());
+            return ResponseEntity.status(HttpStatus.FOUND).location(location).build();
         } catch (Exception e) {
             api.setCode(9999);
             api.setMessage("Error handling return: " + e.getMessage());
@@ -241,9 +263,13 @@ public class PaymentController {
         ApiResponse<Map<String, String>> api = new ApiResponse<>();
         try {
             Map<String, String> result = momoService.handleNotification(allParams);
-            if ("OK".equals(result.get("status")) && result.containsKey("transactionId")) {
+            String status = result.get("status");
+            Integer forwardedTxnId = null;
+            Integer forwardedOrderId = null;
+            if ("OK".equals(status) && result.containsKey("transactionId")) {
                 try {
                     Integer txnId = Integer.valueOf(result.get("transactionId"));
+                    forwardedTxnId = txnId;
                     Optional<Transaction> optTx = transactionRepository.findById(txnId);
                     if (optTx.isPresent()) {
                         Transaction tx = optTx.get();
@@ -256,6 +282,7 @@ public class PaymentController {
                         if (type != null && type.startsWith("ORDER#")) {
                             try {
                                 Integer orderId = Integer.valueOf(type.substring("ORDER#".length()));
+                                forwardedOrderId = orderId;
                                 Optional<Order> oOpt = orderRepository.findById(orderId);
                                 if (oOpt.isPresent()) {
                                     Order o = oOpt.get();
@@ -267,10 +294,28 @@ public class PaymentController {
                     }
                 } catch (Exception ignore) {}
             }
-            api.setCode(0);
-            api.setMessage("OK");
-            api.setResult(result);
-            return ResponseEntity.ok(api);
+
+            // Build redirect URL to frontend with params status, transactionId, orderId (if available)
+            StringBuilder redirect = new StringBuilder("http://localhost:5173/payment/result");
+            redirect.append("?status=");
+            // Map internal status to frontend-only values: 'success' or 'failed'
+            String frontendStatus = "failed";
+            if (status != null) {
+                String s = status.trim();
+                if (s.equalsIgnoreCase("OK") || s.equalsIgnoreCase("SUCCESS") || s.equals("00") || s.equals("0")) {
+                    frontendStatus = "success";
+                }
+            }
+            String encodedStatus = "";
+            try {
+                encodedStatus = URLEncoder.encode(frontendStatus, StandardCharsets.UTF_8);
+            } catch (Exception ignore) {}
+            redirect.append(encodedStatus);
+            if (forwardedTxnId != null) redirect.append("&transactionId=").append(URLEncoder.encode(forwardedTxnId.toString(), StandardCharsets.UTF_8));
+            if (forwardedOrderId != null) redirect.append("&orderId=").append(URLEncoder.encode(forwardedOrderId.toString(), StandardCharsets.UTF_8));
+
+            URI location = URI.create(redirect.toString());
+            return ResponseEntity.status(HttpStatus.FOUND).location(location).build();
         } catch (Exception e) {
             api.setCode(9999);
             api.setMessage("Error handling Momo return: " + e.getMessage());

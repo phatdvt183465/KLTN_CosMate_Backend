@@ -78,6 +78,30 @@ public class OrderController {
         });
     }
 
+    // helper to map Order entity to OrderFullResponse (reused by multiple endpoints)
+    private OrderFullResponse toFullResponse(Order o) {
+        OrderFullResponse resp = new OrderFullResponse();
+        resp.setId(o.getId());
+        resp.setCosplayerId(o.getCosplayerId());
+        resp.setProviderId(o.getProviderId());
+        resp.setOrderType(o.getOrderType());
+        resp.setStatus(o.getStatus());
+        resp.setTotalAmount(o.getTotalAmount());
+        resp.setCreatedAt(o.getCreatedAt());
+
+        List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
+        resp.setDetails(details);
+        resp.setSurcharges(orderCostumeSurchargeRepository.findByOrderId(o.getId()));
+        resp.setAddresses(orderAddressRepository.findByOrderId(o.getId()));
+        List<Integer> detailIds = details.stream().map(d -> d.getId()).toList();
+        resp.setAccessories(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderDetailAccessoryRepository.findByOrderDetailIdIn(detailIds));
+        resp.setRentalOptions(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderRentalOptionRepository.findByOrderDetailIdIn(detailIds));
+        // images and trackings if available
+        resp.setImages(orderImageRepository.findByOrderId(o.getId()));
+        resp.setTrackings(orderTrackingRepository.findByOrderId(o.getId()));
+        return resp;
+    }
+
     @PostMapping
     public ApiResponse<OrderResponse> createOrder(
             @RequestParam Integer cosplayerId,
@@ -131,34 +155,7 @@ public class OrderController {
         Order o = orderRepository.findById(id).orElse(null);
         if (o == null) return ApiResponse.<OrderFullResponse>builder().code(404).message("Không tìm thấy đơn hàng").build();
 
-        List<OrderDetail> details = orderDetailRepository.findByOrderId(id);
-        List<OrderCostumeSurcharge> sur = orderCostumeSurchargeRepository.findByOrderId(id);
-        var addrs = orderAddressRepository.findByOrderId(id);
-
-        // collect detail ids to fetch accessories/options
-        List<Integer> detailIds = details.stream().map(d -> d.getId()).toList();
-        List<OrderDetailAccessory> accessories = detailIds.isEmpty() ? java.util.Collections.emptyList() : orderDetailAccessoryRepository.findByOrderDetailIdIn(detailIds);
-        List<OrderRentalOption> rentalOptions = detailIds.isEmpty() ? java.util.Collections.emptyList() : orderRentalOptionRepository.findByOrderDetailIdIn(detailIds);
-        // fetch images and tracking for this order
-        List<OrderImage> images = orderImageRepository.findByOrderId(id);
-        List<OrderTracking> trackings = orderTrackingRepository.findByOrderId(id);
-
-        OrderFullResponse resp = new OrderFullResponse();
-        resp.setId(o.getId());
-        resp.setCosplayerId(o.getCosplayerId());
-        resp.setProviderId(o.getProviderId());
-        resp.setOrderType(o.getOrderType());
-        resp.setStatus(o.getStatus());
-        resp.setTotalAmount(o.getTotalAmount());
-        resp.setCreatedAt(o.getCreatedAt());
-        resp.setDetails(details);
-        resp.setSurcharges(sur);
-        resp.setAddresses(addrs);
-        resp.setAccessories(accessories);
-        resp.setRentalOptions(rentalOptions);
-        resp.setImages(images);
-        resp.setTrackings(trackings);
-
+        OrderFullResponse resp = toFullResponse(o);
         return ApiResponse.<OrderFullResponse>builder().result(resp).build();
     }
 
@@ -816,5 +813,77 @@ public class OrderController {
         } catch (Exception ex) {
             return ApiResponse.<Object>builder().code(500).message("Failed to complete order: " + ex.getMessage()).build();
         }
+    }
+
+    // New endpoint: dropdown list for orders filtered by orderType and statuses
+    @GetMapping("/dropdown")
+    public ApiResponse<?> dropdown(
+            @RequestParam(required = false) String orderType,
+            @RequestParam(required = false, name = "status") List<String> statuses,
+            @RequestParam(required = false) Integer providerId,
+            @RequestParam(required = false) Integer cosplayerId,
+            @RequestParam(required = false, defaultValue = "false") boolean full) {
+        try {
+            if (statuses == null) {
+                // leave null -> service will apply defaults
+            } else if (statuses.size() == 1 && statuses.get(0) != null && statuses.get(0).contains(",")) {
+                String combined = statuses.get(0);
+                statuses = java.util.Arrays.asList(combined.split(","));
+            }
+
+            if (!full) {
+                List<com.cosmate.dto.response.OrderDropdownResponse> list = orderService.listOrdersForDropdown(orderType, statuses, providerId, cosplayerId);
+                return ApiResponse.<List<com.cosmate.dto.response.OrderDropdownResponse>>builder().result(list).build();
+            } else {
+                // For full=true, get compact list then fetch full details per id (preserves filtering logic in service)
+                List<com.cosmate.dto.response.OrderDropdownResponse> compact = orderService.listOrdersForDropdown(orderType, statuses, providerId, cosplayerId);
+                List<OrderFullResponse> fullList = compact.stream().map(d -> {
+                    Order ord = orderRepository.findById(d.getId()).orElse(null);
+                    return ord == null ? null : toFullResponse(ord);
+                }).filter(x -> x != null).toList();
+                return ApiResponse.<List<OrderFullResponse>>builder().result(fullList).build();
+            }
+        } catch (Exception ex) {
+            return ApiResponse.<List<com.cosmate.dto.response.OrderDropdownResponse>>builder().code(500).message("Failed to get dropdown list: " + ex.getMessage()).build();
+        }
+    }
+
+    // New endpoint: provide dropdown options for orderType and statuses
+    @GetMapping("/dropdown-options")
+    public ApiResponse<java.util.Map<String, Object>> dropdownOptions() {
+        java.util.Map<String, Object> res = new java.util.HashMap<>();
+        // order types
+        java.util.List<String> orderTypes = java.util.Arrays.asList("RENT_COSTUME", "RENT_SERVICE");
+        res.put("orderTypes", orderTypes);
+
+        // statuses per type
+        java.util.List<String> rentCostumeStatuses = java.util.Arrays.asList(
+                "UNPAID",
+                "PAID",
+                "PREPARING",
+                "SHIPPING_OUT",
+                "DELIVERING_OUT",
+                "IN_USE",
+                "SHIPPING_BACK",
+                "COMPLETED",
+                "DISPUTE",
+                "CANCELLED",
+                "EXTENDING"
+        );
+        java.util.List<String> rentServiceStatuses = java.util.Arrays.asList(
+                "UNPAID",
+                "PAID",
+                "WAITING_SERVICE_DATE",
+                "IN_SERVICE",
+                "COMPLETED",
+                "DISPUTE",
+                "CANCELLED"
+        );
+        java.util.Map<String, java.util.List<String>> statusesMap = new java.util.HashMap<>();
+        statusesMap.put("RENT_COSTUME", rentCostumeStatuses);
+        statusesMap.put("RENT_SERVICE", rentServiceStatuses);
+        res.put("statusesByType", statusesMap);
+
+        return ApiResponse.<java.util.Map<String, Object>>builder().result(res).build();
     }
 }

@@ -1,6 +1,7 @@
 package com.cosmate.service.impl;
 
 import com.cosmate.dto.request.CreateOrderRequest;
+import com.cosmate.dto.response.OrderDropdownResponse;
 import com.cosmate.dto.response.OrderResponse;
 import com.cosmate.entity.*;
 import com.cosmate.exception.InsufficientBalanceException;
@@ -374,5 +375,91 @@ public class OrderServiceImpl implements OrderService {
         }
         resp.setPaymentUrl(paymentUrl);
         return resp;
+    }
+
+    @Override
+    public List<OrderDropdownResponse> listOrdersForDropdown(String orderType, List<String> statuses, Integer providerId, Integer cosplayerId) {
+        // Default status sets per order type
+        final List<String> RENT_COSTUME_STATUSES = java.util.Arrays.asList(
+                "UNPAID",
+                "PAID",
+                "PREPARING",
+                "SHIPPING_OUT",
+                "DELIVERING_OUT",
+                "IN_USE",
+                "SHIPPING_BACK",
+                "COMPLETED",
+                "DISPUTE",
+                "CANCELLED",
+                "EXTENDING"
+        );
+        final List<String> RENT_SERVICE_STATUSES = java.util.Arrays.asList(
+                "UNPAID",
+                "PAID",
+                "WAITING_SERVICE_DATE",
+                "IN_SERVICE",
+                "COMPLETED",
+                "DISPUTE",
+                "CANCELLED"
+        );
+
+        // Determine an effectively-final statuses list to use in lambdas
+        final List<String> effectiveStatuses;
+        if (statuses == null || statuses.isEmpty()) {
+            if (orderType == null || orderType.isEmpty()) {
+                // union of both lists (remove duplicates)
+                java.util.Set<String> set = new java.util.LinkedHashSet<>();
+                set.addAll(RENT_COSTUME_STATUSES);
+                set.addAll(RENT_SERVICE_STATUSES);
+                effectiveStatuses = new java.util.ArrayList<>(set);
+            } else if ("RENT_COSTUME".equalsIgnoreCase(orderType)) {
+                effectiveStatuses = RENT_COSTUME_STATUSES;
+            } else if ("RENT_SERVICE".equalsIgnoreCase(orderType)) {
+                effectiveStatuses = RENT_SERVICE_STATUSES;
+            } else {
+                effectiveStatuses = new java.util.ArrayList<>();
+            }
+        } else {
+            effectiveStatuses = statuses;
+        }
+
+        List<Order> orders = new ArrayList<>();
+        if (providerId != null && providerId > 0) {
+            if (orderType != null && !orderType.isEmpty()) {
+                orders = orderRepository.findByProviderIdAndOrderTypeAndStatusInOrderByCreatedAtDesc(providerId, orderType, effectiveStatuses);
+            } else {
+                // fallback: if no orderType provided, get by provider and statuses using existing method by providerId and statuses
+                orders = orderRepository.findByProviderIdAndStatusInOrderByCreatedAtDesc(providerId, effectiveStatuses);
+            }
+        } else if (cosplayerId != null && cosplayerId > 0) {
+            if (orderType != null && !orderType.isEmpty()) {
+                orders = orderRepository.findByCosplayerIdAndOrderTypeAndStatusInOrderByCreatedAtDesc(cosplayerId, orderType, effectiveStatuses);
+            } else {
+                orders = orderRepository.findByCosplayerIdOrderByCreatedAtDesc(cosplayerId);
+                // filter by statuses if provided
+                if (effectiveStatuses != null && !effectiveStatuses.isEmpty()) {
+                    orders.removeIf(o -> o.getStatus() == null || !effectiveStatuses.contains(o.getStatus()));
+                }
+            }
+        } else {
+            // global listing by orderType + statuses
+            if (orderType != null && !orderType.isEmpty()) {
+                orders = orderRepository.findByOrderTypeAndStatusInOrderByCreatedAtDesc(orderType, effectiveStatuses);
+            } else {
+                orders = orderRepository.findAllByOrderByCreatedAtDesc();
+                if (effectiveStatuses != null && !effectiveStatuses.isEmpty()) {
+                    orders.removeIf(o -> o.getStatus() == null || !effectiveStatuses.contains(o.getStatus()));
+                }
+            }
+        }
+
+        List<OrderDropdownResponse> result = new ArrayList<>();
+        DateTimeFormatter fmt = DateTimeFormatter.ISO_LOCAL_DATE;
+        for (Order o : orders) {
+            String datePart = (o.getCreatedAt() != null) ? o.getCreatedAt().format(fmt) : "";
+            String label = "#" + o.getId() + " - " + datePart + " - " + o.getStatus();
+            result.add(new OrderDropdownResponse(o.getId(), label));
+        }
+        return result;
     }
 }

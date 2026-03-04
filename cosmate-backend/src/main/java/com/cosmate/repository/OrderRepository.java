@@ -12,4 +12,7 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
     List<Order> findByProviderIdOrderByCreatedAtDesc(Integer providerId);
     List<Order> findAllByOrderByCreatedAtDesc();
     List<Order> findByProviderIdAndStatusInOrderByCreatedAtDesc(Integer providerId, List<String> statuses);
+    List<Order> findByOrderTypeAndStatusInOrderByCreatedAtDesc(String orderType, List<String> statuses);
+    List<Order> findByProviderIdAndOrderTypeAndStatusInOrderByCreatedAtDesc(Integer providerId, String orderType, List<String> statuses);
+    List<Order> findByCosplayerIdAndOrderTypeAndStatusInOrderByCreatedAtDesc(Integer cosplayerId, String orderType, List<String> statuses);
 }

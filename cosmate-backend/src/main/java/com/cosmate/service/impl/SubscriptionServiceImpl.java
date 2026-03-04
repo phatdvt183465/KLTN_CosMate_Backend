@@ -16,7 +16,6 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -121,7 +120,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     @Override
     @Transactional
-    public ProviderSubscription finalizeSubscriptionPayment(Integer transactionId) throws Exception {
+    public ProviderSubscription finalizeSubscriptionPayment(Integer transactionId) {
         // Find transaction
         Transaction t = transactionRepository.findById(transactionId).orElseThrow(() -> new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION));
         if (!"COMPLETED".equalsIgnoreCase(t.getStatus())) {
@@ -136,6 +135,14 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         // If startDate is null, set to now
         if (ps.getStartDate() == null) ps.setStartDate(LocalDateTime.now());
         if (ps.getEndDate() == null) ps.setEndDate(ps.getStartDate().plusMonths(ps.getSubscriptionPlan().getCycleMonths()));
+
+        // If provider is not yet verified, mark them verified when this payment is successfully completed
+        Provider provider = ps.getProvider();
+        if (provider != null && (provider.getVerified() == null || !provider.getVerified())) {
+            provider.setVerified(true);
+            providerRepository.save(provider);
+        }
+
         return subscriptionRepository.save(ps);
     }
 

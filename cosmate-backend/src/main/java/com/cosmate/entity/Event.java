@@ -3,6 +3,8 @@ package com.cosmate.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "Events")
@@ -32,4 +34,7 @@ public class Event {
 
     @Column(name = "created_by")
     private Integer createdBy;
+
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
+    private List<EventParticipant> participants = new ArrayList<>();
 }

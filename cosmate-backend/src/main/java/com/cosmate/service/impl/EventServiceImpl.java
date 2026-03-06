@@ -131,6 +131,16 @@ public class EventServiceImpl implements EventService {
     }
 
     private EventResponse mapToResponse(Event event) {
+        // Tự động map và tính tổng số lượt Vote của từng thí sinh
+        List<EventResponse.ParticipantDto> participantDtos = event.getParticipants().stream()
+                .map(p -> EventResponse.ParticipantDto.builder()
+                        .participantId(p.getId())
+                        .cosplayerId(p.getCosplayerId())
+                        .submissionImageUrl(p.getSubmissionImageUrl())
+                        .totalVotes(p.getVotes() != null ? p.getVotes().size() : 0) // Tính tổng Vote
+                        .build())
+                .collect(Collectors.toList());
+
         return EventResponse.builder()
                 .id(event.getId())
                 .title(event.getTitle())
@@ -139,6 +149,7 @@ public class EventServiceImpl implements EventService {
                 .endDate(event.getEndDate())
                 .status(event.getStatus())
                 .createdBy(event.getCreatedBy())
+                .participants(participantDtos) // Gắn danh sách thí sinh vào JSON
                 .build();
     }
 }

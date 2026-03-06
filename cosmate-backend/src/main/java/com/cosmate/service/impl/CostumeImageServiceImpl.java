@@ -1,7 +1,6 @@
 package com.cosmate.service.impl;
 
-import com.cosmate.configuration.FirebaseConfig; // Thêm import này
-import com.google.cloud.storage.Bucket; // Thêm import này
+import com.google.cloud.storage.Bucket;
 import com.cosmate.dto.response.ImageResponse;
 import com.cosmate.entity.Costume;
 import com.cosmate.entity.CostumeImage;
@@ -24,7 +23,7 @@ public class CostumeImageServiceImpl implements CostumeImageService {
     private final CostumeImageRepository imageRepository;
     private final CostumeRepository costumeRepository;
     private final AIService aiService;
-    private final FirebaseConfig firebaseConfig; // INJECT FIREBASE VÀO ĐÂY
+    private final com.cosmate.service.FirebaseStorageService firebaseStorageService;
 
     @Override
     public List<ImageResponse> getByCostumeId(Integer costumeId) {
@@ -49,26 +48,26 @@ public class CostumeImageServiceImpl implements CostumeImageService {
         // 1. Check AI (18+)
         aiService.validateImageContent(file);
 
-        // 2. Upload thật lên Firebase
-        Bucket bucket = firebaseConfig.getBucket();
-        if (bucket == null) throw new RuntimeException("Firebase chưa kết nối được!");
-
         try {
-            String fileName = "costumes/" + System.currentTimeMillis() + "_" + file.getOriginalFilename();
-            bucket.create(fileName, file.getBytes(), file.getContentType());
+            // Dọn dẹp tên file
+            String original = file.getOriginalFilename();
+            String safeName = original == null ? String.valueOf(System.currentTimeMillis()) : original.replaceAll("[^a-zA-Z0-9._-]", "_");
 
-            // Link chuẩn Google Storage
-            String fileUrl = "https://storage.googleapis.com/" + bucket.getName() + "/" + fileName;
+            // Build path: costumes/{costumeId}/{timestamp}_{safeName}
+            String path = String.format("costumes/%d/%d_%s", costume.getId(), System.currentTimeMillis(), safeName);
+
+            // Upload lấy link public
+            String imageUrl = firebaseStorageService.uploadFile(file, path);
 
             CostumeImage img = new CostumeImage();
-            img.setImageUrl(fileUrl); // Lưu link thật
+            img.setImageUrl(imageUrl);
             img.setType((type != null && !type.isEmpty()) ? type : "DETAIL");
             img.setCostume(costume);
 
             return mapToResponse(imageRepository.save(img));
 
         } catch (Exception e) {
-            throw new RuntimeException("Upload ảnh xịt rồi: " + e.getMessage());
+            throw new RuntimeException("Upload ảnh lẻ xịt rồi: " + e.getMessage());
         }
     }
 

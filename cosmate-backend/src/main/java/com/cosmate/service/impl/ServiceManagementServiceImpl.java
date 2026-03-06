@@ -1,16 +1,15 @@
 package com.cosmate.service.impl;
 
-import com.cosmate.configuration.FirebaseConfig;
 import com.cosmate.dto.request.ServiceRequest;
 import com.cosmate.dto.response.ServiceResponse;
 import com.cosmate.entity.Service;
 import com.cosmate.entity.ServiceAlbum;
 import com.cosmate.entity.ServiceArea;
 import com.cosmate.repository.ServiceRepository;
+import com.cosmate.service.FirebaseStorageService;
 import com.cosmate.service.ServiceManagementService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.cloud.storage.Bucket;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -27,8 +26,8 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
 
     private final ServiceRepository serviceRepository;
     private final ObjectMapper objectMapper;
-    private final FirebaseConfig firebaseConfig;
     private final AIService aiService;
+    private final FirebaseStorageService firebaseStorageService;
 
     @Override
     @Transactional
@@ -138,20 +137,35 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
 
     private void handleAlbums(Service service, List<MultipartFile> files) {
         if (files == null || files.isEmpty()) return;
-        Bucket bucket = firebaseConfig.getBucket();
-        if (bucket == null) throw new RuntimeException("Firebase chưa kết nối được!");
+
         for (MultipartFile file : files) {
             if (file == null || file.isEmpty()) continue;
-            aiService.validateImageContent(file);
-            try {
-                String fileName = "services/" + System.currentTimeMillis() + "_" + file.getOriginalFilename();
-                bucket.create(fileName, file.getBytes(), file.getContentType());
 
+            // AI soi ảnh 18+
+            aiService.validateImageContent(file);
+
+            try {
+                // Xử lý tên file cho an toàn
+                String original = file.getOriginalFilename();
+                String safeName = original == null ? String.valueOf(System.currentTimeMillis()) : original.replaceAll("[^a-zA-Z0-9._-]", "_");
+
+                // Build đường dẫn: services/{serviceId}/{timestamp}_{safeName}
+                // (Vì lúc tạo mới service chưa có ID nên mình dùng tạm System.currentTimeMillis() làm folder)
+                String folderName = service.getId() != null ? String.valueOf(service.getId()) : "new_" + System.currentTimeMillis();
+                String path = String.format("services/%s/%d_%s", folderName, System.currentTimeMillis(), safeName);
+
+                // Gọi hàm để up và lấy link Public
+                String imageUrl = firebaseStorageService.uploadFile(file, path);
+
+                // Lưu vào DB
                 ServiceAlbum album = new ServiceAlbum();
-                album.setImageUrl("https://storage.googleapis.com/" + bucket.getName() + "/" + fileName);
+                album.setImageUrl(imageUrl);
                 album.setService(service);
                 service.getAlbums().add(album);
-            } catch (IOException e) { throw new RuntimeException("Upload ảnh xịt rồi: " + e.getMessage()); }
+
+            } catch (Exception e) {
+                throw new RuntimeException("Upload ảnh xịt rồi: " + e.getMessage());
+            }
         }
     }
 

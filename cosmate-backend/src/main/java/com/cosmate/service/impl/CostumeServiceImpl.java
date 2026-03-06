@@ -1,6 +1,5 @@
 package com.cosmate.service.impl;
 
-import com.cosmate.configuration.FirebaseConfig;
 import com.cosmate.dto.request.CostumeRequest;
 import com.cosmate.dto.response.CostumeResponse;
 import com.cosmate.entity.*;
@@ -28,7 +27,7 @@ public class CostumeServiceImpl implements CostumeService {
     private final ProviderRepository providerRepository;
     private final ObjectMapper objectMapper;
     private final AIService aiService;
-    private final com.cosmate.configuration.FirebaseConfig firebaseConfig;
+    private final com.cosmate.service.FirebaseStorageService firebaseStorageService;
 
     @Override
     public List<CostumeResponse> getByProviderId(Integer providerId) {
@@ -177,9 +176,6 @@ public class CostumeServiceImpl implements CostumeService {
     private void handleImages(Costume costume, List<MultipartFile> files) {
         if (files == null || files.isEmpty()) return;
 
-        com.google.cloud.storage.Bucket bucket = firebaseConfig.getBucket();
-        if (bucket == null) throw new RuntimeException("Firebase chưa kết nối được!");
-
         int count = 0;
         for (MultipartFile file : files) {
             if (file == null || file.isEmpty()) continue;
@@ -188,13 +184,19 @@ public class CostumeServiceImpl implements CostumeService {
             aiService.validateImageContent(file);
 
             try {
+                // Xử lý tên file cho an toàn
+                String original = file.getOriginalFilename();
+                String safeName = original == null ? String.valueOf(System.currentTimeMillis()) : original.replaceAll("[^a-zA-Z0-9._-]", "_");
+
+                // Build path: costumes/{costumeId}/{timestamp}_{safeName}
+                String folderName = costume.getId() != null ? String.valueOf(costume.getId()) : "new_" + System.currentTimeMillis();
+                String path = String.format("costumes/%s/%d_%s", folderName, System.currentTimeMillis(), safeName);
+
                 // Upload Firebase
-                String fileName = "costumes/" + System.currentTimeMillis() + "_" + file.getOriginalFilename();
-                bucket.create(fileName, file.getBytes(), file.getContentType());
-                String fileUrl = "https://storage.googleapis.com/" + bucket.getName() + "/" + fileName;
+                String imageUrl = firebaseStorageService.uploadFile(file, path);
 
                 CostumeImage img = new CostumeImage();
-                img.setImageUrl(fileUrl); // Lưu link thật
+                img.setImageUrl(imageUrl); // Lưu link thật public
                 img.setType(count == 0 ? "MAIN" : "DETAIL");
                 img.setCostume(costume);
                 costume.getImages().add(img);

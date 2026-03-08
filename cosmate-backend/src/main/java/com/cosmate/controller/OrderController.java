@@ -48,6 +48,7 @@ public class OrderController {
     private final OrderImageRepository orderImageRepository;
     private final OrderTrackingRepository orderTrackingRepository;
     private final FirebaseStorageService firebaseStorageService;
+    private final com.cosmate.repository.CostumeRepository costumeRepository;
 
     // helper to extract current authenticated user id
     private Integer getCurrentUserId() {
@@ -385,6 +386,23 @@ public class OrderController {
             // update order status to CANCELLED
             order.setStatus("CANCELLED");
             orderRepository.save(order);
+
+            // set related costumes back to AVAILABLE when order is cancelled
+            try {
+                List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
+                if (details != null && !details.isEmpty()) {
+                    for (OrderDetail d : details) {
+                        if (d.getCostumeId() == null) continue;
+                        Costume c = costumeRepository.findById(d.getCostumeId()).orElse(null);
+                        if (c != null) {
+                            c.setStatus("AVAILABLE");
+                            costumeRepository.save(c);
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                // ignore failures to update costume statuses - do not block cancellation
+            }
 
             String actor = isCosplayer ? "cosplayer" : (isProviderOwner ? "provider" : "staff");
             String msg = "Order cancelled by " + actor + (refunded ? " and refunded" : "");
@@ -801,6 +819,22 @@ public class OrderController {
             // finalize order status
             order.setStatus("COMPLETED");
             orderRepository.save(order);
+
+            // set related costumes back to AVAILABLE when order completes
+            try {
+                if (details != null && !details.isEmpty()) {
+                    for (OrderDetail d : details) {
+                        if (d.getCostumeId() == null) continue;
+                        Costume c = costumeRepository.findById(d.getCostumeId()).orElse(null);
+                        if (c != null) {
+                            c.setStatus("AVAILABLE");
+                            costumeRepository.save(c);
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                // ignore failures to update costume statuses - do not block completion
+            }
 
             java.util.Map<String,Object> res = new java.util.HashMap<>();
             res.put("tracking", ot);

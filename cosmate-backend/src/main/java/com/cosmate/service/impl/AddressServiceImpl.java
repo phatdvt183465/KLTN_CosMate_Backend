@@ -31,6 +31,7 @@ public class AddressServiceImpl implements AddressService {
                 .district(a.getDistrict())
                 .address(a.getAddress())
                 .phone(a.getPhone())
+                .addressName(a.getAddressName())
                 .build();
     }
 
@@ -44,6 +45,7 @@ public class AddressServiceImpl implements AddressService {
                 .district(request.getDistrict())
                 .address(request.getAddress())
                 .phone(request.getPhone())
+                .addressName(request.getAddressName())
                 .user(user)
                 .build();
         a = addressRepository.save(a);
@@ -61,6 +63,7 @@ public class AddressServiceImpl implements AddressService {
         if (request.getDistrict() != null) a.setDistrict(request.getDistrict());
         if (request.getAddress() != null) a.setAddress(request.getAddress());
         if (request.getPhone() != null) a.setPhone(request.getPhone());
+        if (request.getAddressName() != null) a.setAddressName(request.getAddressName());
 
         a = addressRepository.save(a);
         return toResponse(a);

@@ -35,6 +35,9 @@ public class ProviderServiceImpl implements ProviderService {
                 .bio(null)
                 .bankAccountNumber(null)
                 .bankName(null)
+                .completedOrders(0)
+                .totalRating(0)
+                .totalReviews(0)
                 .verified(false)
                 .build();
         Provider saved = providerRepository.save(p);

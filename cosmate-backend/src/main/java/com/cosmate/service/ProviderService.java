@@ -12,5 +12,6 @@ public interface ProviderService {
     Provider updateOwnProvider(Integer userId, UpdateProviderRequest request);
     Provider setVerified(Integer providerId, boolean verified);
     Provider updateAvatarForUser(Integer userId, String avatarUrl);
+    Provider updateCoverImageForUser(Integer userId, String coverImageUrl);
     List<Provider> listAllProviders();
 }

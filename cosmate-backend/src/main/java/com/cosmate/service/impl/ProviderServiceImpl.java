@@ -84,6 +84,16 @@ public class ProviderServiceImpl implements ProviderService {
     }
 
     @Override
+    @Transactional
+    public Provider updateCoverImageForUser(Integer userId, String coverImageUrl) {
+        Optional<Provider> opt = providerRepository.findByUserId(userId);
+        if (opt.isEmpty()) return null;
+        Provider p = opt.get();
+        p.setCoverImageUrl(coverImageUrl);
+        return providerRepository.save(p);
+    }
+
+    @Override
     public List<Provider> listAllProviders() {
         return providerRepository.findAll();
     }

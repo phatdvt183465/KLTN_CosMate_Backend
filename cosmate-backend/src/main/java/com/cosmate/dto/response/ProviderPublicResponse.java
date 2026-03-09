@@ -11,6 +11,11 @@ public class ProviderPublicResponse {
     private String shopName;
     private Integer shopAddressId;
     private String avatarUrl;
+    private String coverImageUrl;
     private String bio;
     private Boolean verified;
+
+    private Integer completedOrders;
+    private Integer totalRating;
+    private Integer totalReviews;
 }

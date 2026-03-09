@@ -11,10 +11,12 @@ import com.cosmate.service.ProviderService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -25,6 +27,7 @@ import java.util.stream.Collectors;
 public class ProviderController {
 
     private final ProviderService providerService;
+    private final com.cosmate.service.FirebaseStorageService firebaseStorageService;
     private static final Logger log = LoggerFactory.getLogger(ProviderController.class);
 
     private Integer getCurrentUserId() {
@@ -207,6 +210,49 @@ public class ProviderController {
         }
     }
 
+    @PutMapping(value = "/{id}/cover-image", consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
+    public ResponseEntity<ApiResponse<ProviderResponse>> updateCoverImage(@PathVariable("id") Integer id,
+                                                                          @RequestPart(value = "coverImage") MultipartFile coverImage) {
+        Integer currentUserId = getCurrentUserId();
+        ApiResponse<ProviderResponse> api = new ApiResponse<>();
+        if (currentUserId == null) {
+            api.setCode(1001);
+            api.setMessage("Chưa xác thực - Vui lòng đăng nhập");
+            return ResponseEntity.status(401).body(api);
+        }
+        if (!currentUserId.equals(id)) {
+            api.setCode(1006);
+            api.setMessage("Không có quyền thực hiện thao tác này!");
+            return ResponseEntity.status(403).body(api);
+        }
+
+        try {
+            // upload file to firebase
+            String filename = String.format("providers/%d/cover_%d", id, System.currentTimeMillis());
+            // preserve extension if possible
+            String original = coverImage.getOriginalFilename();
+            if (original != null && original.contains(".")) filename += original.substring(original.lastIndexOf('.'));
+            String url = firebaseStorageService.uploadFile(coverImage, filename);
+
+            Provider p = providerService.updateCoverImageForUser(id, url);
+            api.setCode(0);
+            api.setMessage("OK");
+            api.setResult(toResponse(p));
+            return ResponseEntity.ok(api);
+        } catch (com.cosmate.exception.AppException ae) {
+            ErrorCode ec = ae.getErrorCode();
+            api.setCode(ec.getCode());
+            api.setMessage(ec.getMessage());
+            if (ec == ErrorCode.FORBIDDEN || ec == ErrorCode.ACCOUNT_BANNED) return ResponseEntity.status(403).body(api);
+            return ResponseEntity.badRequest().body(api);
+        } catch (Exception e) {
+            log.error("Unexpected error updating provider cover image for user {}: {}", id, e.getMessage(), e);
+            api.setCode(99999);
+            api.setMessage("Unexpected server error: " + e.getMessage());
+            return ResponseEntity.status(500).body(api);
+        }
+    }
+
     private ProviderPublicResponse toPublicResponse(Provider p) {
         return ProviderPublicResponse.builder()
                 .id(p.getId())
@@ -214,8 +260,12 @@ public class ProviderController {
                 .shopName(p.getShopName())
                 .shopAddressId(p.getShopAddressId())
                 .avatarUrl(p.getAvatarUrl())
+                .coverImageUrl(p.getCoverImageUrl())
                 .bio(p.getBio())
                 .verified(p.getVerified())
+                .completedOrders(p.getCompletedOrders())
+                .totalRating(p.getTotalRating())
+                .totalReviews(p.getTotalReviews())
                 .build();
     }
 
@@ -226,10 +276,14 @@ public class ProviderController {
                 .shopName(p.getShopName())
                 .shopAddressId(p.getShopAddressId())
                 .avatarUrl(p.getAvatarUrl())
+                .coverImageUrl(p.getCoverImageUrl())
                 .bio(p.getBio())
                 .bankAccountNumber(p.getBankAccountNumber())
                 .bankName(p.getBankName())
                 .verified(p.getVerified())
+                .completedOrders(p.getCompletedOrders())
+                .totalRating(p.getTotalRating())
+                .totalReviews(p.getTotalReviews())
                 .build();
     }
 }

@@ -1,6 +1,6 @@
-package com.example.starter_project_2025.system.menu.repository;
+package com.cosmate.repository;
 
-import com.example.starter_project_2025.system.menu.entity.MenuItem;
+import com.cosmate.entity.MenuItem;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

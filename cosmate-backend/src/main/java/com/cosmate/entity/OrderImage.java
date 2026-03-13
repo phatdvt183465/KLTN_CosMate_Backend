@@ -6,7 +6,7 @@ import org.hibernate.annotations.Nationalized;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
-@Table(name = "Orders_Image")
+@Table(name = "Order_Detail_Images")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -17,11 +17,11 @@ public class OrderImage {
     private Integer id;
 
     @ManyToOne
-    @JoinColumn(name = "order_id")
+    @JoinColumn(name = "order_detail_id")
     @JsonIgnore
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
-    private Order order;
+    private OrderDetail orderDetail;
 
     @Nationalized
     @Column(name = "image_url", length = 255)

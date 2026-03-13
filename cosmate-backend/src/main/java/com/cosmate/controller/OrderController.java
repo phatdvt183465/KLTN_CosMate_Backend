@@ -97,8 +97,8 @@ public class OrderController {
         List<Integer> detailIds = details.stream().map(d -> d.getId()).toList();
         resp.setAccessories(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderDetailAccessoryRepository.findByOrderDetailIdIn(detailIds));
         resp.setRentalOptions(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderRentalOptionRepository.findByOrderDetailIdIn(detailIds));
-        // images and trackings if available
-        resp.setImages(orderImageRepository.findByOrderId(o.getId()));
+        // images and trackings if available (images are now linked to order details)
+        resp.setImages(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderImageRepository.findByOrderDetailIdIn(detailIds));
         resp.setTrackings(orderTrackingRepository.findByOrderId(o.getId()));
         return resp;
     }
@@ -478,8 +478,11 @@ public class OrderController {
                 String url = firebaseStorageService.uploadFile(file, path);
 
                 String note = (notes != null && notes.size() > i) ? notes.get(i) : null;
+                // associate image with the first order detail for this order (fallback)
+                java.util.List<OrderDetail> detailsForOrder = orderDetailRepository.findByOrderId(order.getId());
+                OrderDetail detailForImage = detailsForOrder.isEmpty() ? null : detailsForOrder.get(0);
                 OrderImage oi = OrderImage.builder()
-                        .order(order)
+                        .orderDetail(detailForImage)
                         .imageUrl(url)
                         .stage("SHIPPING_OUT")
                         .note(note)
@@ -496,7 +499,8 @@ public class OrderController {
             java.util.Map<String, Object> result = new java.util.HashMap<>();
             // return the full tracking object and the uploaded image records for client display
             result.put("tracking", ot);
-            List<OrderImage> uploadedImages = orderImageRepository.findByOrderId(order.getId());
+            List<Integer> detailIdsForImages = orderDetailRepository.findByOrderId(order.getId()).stream().map(d -> d.getId()).toList();
+            List<OrderImage> uploadedImages = detailIdsForImages.isEmpty() ? java.util.Collections.emptyList() : orderImageRepository.findByOrderDetailIdIn(detailIdsForImages);
             result.put("images", uploadedImages);
             return ApiResponse.<Object>builder().result(result).message("Order updated to SHIPPING_OUT").build();
         } catch (Exception ex) {
@@ -587,8 +591,10 @@ public class OrderController {
                     String url = firebaseStorageService.uploadFile(file, path);
 
                     String note = (notes != null && notes.size() > i) ? notes.get(i) : null;
+                    java.util.List<OrderDetail> detailsForOrder = orderDetailRepository.findByOrderId(order.getId());
+                    OrderDetail detailForImage = detailsForOrder.isEmpty() ? null : detailsForOrder.get(0);
                     OrderImage oi = OrderImage.builder()
-                            .order(order)
+                            .orderDetail(detailForImage)
                             .imageUrl(url)
                             .stage("IN_USE")
                             .note(note)
@@ -599,7 +605,7 @@ public class OrderController {
                 }
             }
 
-            // create tracking entry marking delivered
+            // create tracking entry marking delivering
             List<OrderTracking> existing = orderTrackingRepository.findByOrderId(order.getId());
             String trackingCode = null;
             if (existing != null && !existing.isEmpty()) trackingCode = existing.get(existing.size()-1).getTrackingCode();
@@ -614,6 +620,20 @@ public class OrderController {
 
             order.setStatus("IN_USE");
             orderRepository.save(order);
+
+            // Mark any images that were uploaded during SHIPPING_OUT as confirmed
+            List<Integer> detIdsForConfirm = orderDetailRepository.findByOrderId(order.getId()).stream().map(d -> d.getId()).toList();
+            if (!detIdsForConfirm.isEmpty()) {
+                List<OrderImage> imgsToCheck = orderImageRepository.findByOrderDetailIdIn(detIdsForConfirm);
+                boolean changed = false;
+                for (OrderImage img : imgsToCheck) {
+                    if (img != null && img.getStage() != null && "SHIPPING_OUT".equalsIgnoreCase(img.getStage()) && (img.getConfirm() == null || !img.getConfirm())) {
+                        img.setConfirm(true);
+                        changed = true;
+                    }
+                }
+                if (changed) orderImageRepository.saveAll(imgsToCheck);
+            }
 
             java.util.Map<String,Object> res = new java.util.HashMap<>();
             res.put("tracking", ot);
@@ -712,8 +732,10 @@ public class OrderController {
                 String url = firebaseStorageService.uploadFile(file, path);
 
                 String note = (notes != null && notes.size() > i) ? notes.get(i) : null;
+                java.util.List<OrderDetail> detailsForOrder = orderDetailRepository.findByOrderId(order.getId());
+                OrderDetail detailForImage = detailsForOrder.isEmpty() ? null : detailsForOrder.get(0);
                 OrderImage oi = OrderImage.builder()
-                        .order(order)
+                        .orderDetail(detailForImage)
                         .imageUrl(url)
                         .stage("SHIPPING_BACK")
                         .note(note)
@@ -730,7 +752,8 @@ public class OrderController {
             java.util.Map<String,Object> res = new java.util.HashMap<>();
             res.put("tracking", ot);
             res.put("orderStatus", order.getStatus());
-            res.put("uploadedImages", uploadedImages);
+            List<Integer> detIds = orderDetailRepository.findByOrderId(order.getId()).stream().map(d -> d.getId()).toList();
+            res.put("uploadedImages", detIds.isEmpty() ? java.util.Collections.emptyList() : orderImageRepository.findByOrderDetailIdIn(detIds));
             return ApiResponse.<Object>builder().result(res).message("Order updated to SHIPPING_BACK").build();
         } catch (Exception ex) {
             return ApiResponse.<Object>builder().code(500).message("Failed to start return: " + ex.getMessage()).build();
@@ -777,6 +800,20 @@ public class OrderController {
 
             // --- Funds distribution: sum deposit from order details -> cosplayer; remaining -> provider ---
             java.math.BigDecimal total = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
+
+            // Mark images uploaded during SHIPPING_BACK as confirmed
+            List<Integer> detailIdsForConfirmBack = orderDetailRepository.findByOrderId(order.getId()).stream().map(d -> d.getId()).toList();
+            if (!detailIdsForConfirmBack.isEmpty()) {
+                List<OrderImage> backImgs = orderImageRepository.findByOrderDetailIdIn(detailIdsForConfirmBack);
+                boolean anyChanged = false;
+                for (OrderImage img : backImgs) {
+                    if (img != null && img.getStage() != null && "SHIPPING_BACK".equalsIgnoreCase(img.getStage()) && (img.getConfirm() == null || !img.getConfirm())) {
+                        img.setConfirm(true);
+                        anyChanged = true;
+                    }
+                }
+                if (anyChanged) orderImageRepository.saveAll(backImgs);
+            }
 
             // Sum deposit amounts from order details (deposit may be stored on details)
             List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());

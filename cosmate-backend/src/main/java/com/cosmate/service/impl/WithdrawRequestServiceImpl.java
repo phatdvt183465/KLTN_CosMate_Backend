@@ -12,6 +12,7 @@ import com.cosmate.repository.WithdrawRequestRepository;
 import com.cosmate.service.WalletService;
 import com.cosmate.service.WithdrawRequestService;
 import com.cosmate.util.RoleUtils;
+import com.cosmate.entity.Role;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -43,13 +44,17 @@ public class WithdrawRequestServiceImpl implements WithdrawRequestService {
         String bankName = req.getBankName();
 
         // if provider and bank details missing, try provider default
-        if (user.getRoles() != null && user.getRoles().stream().anyMatch(RoleUtils::isProviderRole)) {
-            if ((bankAccount == null || bankAccount.isBlank()) || (bankName == null || bankName.isBlank())) {
-                Optional<Provider> provOpt = providerRepository.findByUserId(user.getId());
-                if (provOpt.isPresent()) {
-                    Provider p = provOpt.get();
-                    if (bankAccount == null || bankAccount.isBlank()) bankAccount = p.getBankAccountNumber();
-                    if (bankName == null || bankName.isBlank()) bankName = p.getBankName();
+        if (user.getRole() != null) {
+            Role roleEnum = null;
+            try { roleEnum = Role.valueOf(user.getRole().getRoleName()); } catch (IllegalArgumentException ignored) {}
+            if (roleEnum != null && RoleUtils.isProviderRole(roleEnum)) {
+                if ((bankAccount == null || bankAccount.isBlank()) || (bankName == null || bankName.isBlank())) {
+                    Optional<Provider> provOpt = providerRepository.findByUserId(user.getId());
+                    if (provOpt.isPresent()) {
+                        Provider p = provOpt.get();
+                        if (bankAccount == null || bankAccount.isBlank()) bankAccount = p.getBankAccountNumber();
+                        if (bankName == null || bankName.isBlank()) bankName = p.getBankName();
+                    }
                 }
             }
         }

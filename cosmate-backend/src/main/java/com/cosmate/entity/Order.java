@@ -32,6 +32,9 @@ public class Order {
     @Column(name = "total_amount", precision = 14, scale = 2)
     private BigDecimal totalAmount;
 
+    @Column(name = "total_deposit_amount", precision = 12, scale = 2)
+    private BigDecimal totalDepositAmount;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -40,4 +43,3 @@ public class Order {
         if (createdAt == null) createdAt = LocalDateTime.now();
     }
 }
-

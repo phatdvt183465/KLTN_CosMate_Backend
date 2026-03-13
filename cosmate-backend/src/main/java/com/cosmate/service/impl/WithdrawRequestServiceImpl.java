@@ -96,7 +96,7 @@ public class WithdrawRequestServiceImpl implements WithdrawRequestService {
         if (wallet.getBalance().compareTo(wr.getAmount()) < 0) throw new Exception("Số dư trong ví không đủ");
 
         // Debit wallet and create transaction
-        Transaction t = walletService.debit(wallet, wr.getAmount(), "Rút tiền - duyệt", "WITHDRAW:" + wr.getId());
+        Transaction t = walletService.debit(wallet, wr.getAmount(), "Rút tiền - duyệt", "WITHDRAW:" + wr.getId(), null, null);
 
         wr.setStatus("APPROVED");
         withdrawRequestRepository.save(wr);

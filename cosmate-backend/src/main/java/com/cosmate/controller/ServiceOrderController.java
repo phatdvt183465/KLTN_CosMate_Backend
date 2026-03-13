@@ -106,6 +106,7 @@ public class ServiceOrderController {
                     .orderType("RENT_SERVICE")
                     .status("UNCONFIRM")
                     .totalAmount(total)
+                    .totalDepositAmount(deposit)
                     .createdAt(java.time.LocalDateTime.now())
                     .build();
             order = orderRepository.save(order);
@@ -306,7 +307,7 @@ public class ServiceOrderController {
                 if (wopt.isPresent()) {
                     com.cosmate.entity.Wallet wallet = wopt.get();
                     java.math.BigDecimal amount = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
-                    walletService.credit(wallet, amount, "Payout for completed order", "ORDER_PAYOUT:" + order.getId());
+                    walletService.credit(wallet, amount, "Payout for completed order", "ORDER_PAYOUT:" + order.getId(), null, order);
                 } else {
                     // wallet not found - optional: create wallet and credit
                     java.util.Optional<com.cosmate.entity.User> providerUserOpt = userRepository.findById(providerUserId);
@@ -316,7 +317,7 @@ public class ServiceOrderController {
                         if (wopt2.isPresent()) {
                             com.cosmate.entity.Wallet wallet = wopt2.get();
                             java.math.BigDecimal amount = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
-                            walletService.credit(wallet, amount, "Payout for completed order", "ORDER_PAYOUT:" + order.getId());
+                            walletService.credit(wallet, amount, "Payout for completed order", "ORDER_PAYOUT:" + order.getId(), null, order);
                         }
                     }
                 }
@@ -372,7 +373,7 @@ public class ServiceOrderController {
                 com.cosmate.entity.Wallet wallet = wopt.get();
                 java.math.BigDecimal amount = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
                 // credit wallet and record transaction via WalletService.credit
-                walletService.credit(wallet, amount, "Refund for cancelled order", "ORDER_REFUND:" + order.getId());
+                walletService.credit(wallet, amount, "Refund for cancelled order", "ORDER_REFUND:" + order.getId(), null, order);
             }
 
             order.setStatus("CANCELLED");

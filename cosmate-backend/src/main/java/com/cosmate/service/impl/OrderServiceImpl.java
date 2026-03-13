@@ -131,6 +131,7 @@ public class OrderServiceImpl implements OrderService {
                 .orderType("RENT_COSTUME")
                 .status("UNPAID")
                 .totalAmount(totalAmount)
+                .totalDepositAmount(totalDeposit)
                 .createdAt(LocalDateTime.now())
                 .build();
         order = orderRepository.save(order);
@@ -274,7 +275,7 @@ public class OrderServiceImpl implements OrderService {
             // debit user's wallet
             com.cosmate.entity.User u = com.cosmate.entity.User.builder().id(cosplayerId).build();
             Wallet wallet = walletService.createForUser(u);
-            walletService.debit(wallet, totalAmount, "Order payment", "ORDER" + order.getId());
+            walletService.debit(wallet, totalAmount, "Order payment", "ORDER" + order.getId(), "WALLET", order);
 
             // mark order paid
             order.setStatus("PAID");
@@ -343,7 +344,7 @@ public class OrderServiceImpl implements OrderService {
             com.cosmate.entity.User u = com.cosmate.entity.User.builder().id(cosplayerId).build();
             Wallet wallet = walletService.createForUser(u);
             try {
-                walletService.debit(wallet, totalAmount, "Order payment", "ORDER" + order.getId());
+                walletService.debit(wallet, totalAmount, "Order payment", "ORDER" + order.getId(), "WALLET", order);
             } catch (InsufficientBalanceException ex) {
                 throw ex;
             }

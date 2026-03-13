@@ -379,7 +379,7 @@ public class OrderController {
                 java.math.BigDecimal amount = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
                 com.cosmate.entity.User u = com.cosmate.entity.User.builder().id(order.getCosplayerId()).build();
                 com.cosmate.entity.Wallet wallet = walletService.createForUser(u);
-                com.cosmate.entity.Transaction tx = walletService.credit(wallet, amount, "Order refund for cancellation", "ORDER_REFUND:" + order.getId());
+                com.cosmate.entity.Transaction tx = walletService.credit(wallet, amount, "Order refund for cancellation", "ORDER_REFUND:" + order.getId(), null, order);
                 refunded = (tx != null);
             }
 
@@ -840,7 +840,7 @@ public class OrderController {
             if (depositTotal.compareTo(java.math.BigDecimal.ZERO) > 0) {
                 com.cosmate.entity.User cosUser = com.cosmate.entity.User.builder().id(order.getCosplayerId()).build();
                 com.cosmate.entity.Wallet cosWallet = walletService.createForUser(cosUser);
-                com.cosmate.entity.Transaction txDeposit = walletService.credit(cosWallet, depositTotal, "Deposit returned on order completion", "DEPOSIT_RETURN:" + order.getId());
+                com.cosmate.entity.Transaction txDeposit = walletService.credit(cosWallet, depositTotal, "Deposit returned on order completion", "DEPOSIT_RETURN:" + order.getId(), null, order);
                 if (txDeposit != null) txs.add(txDeposit);
             }
 
@@ -849,7 +849,7 @@ public class OrderController {
                 // NOTE: assumes order.getProviderId() can be used as a user id for wallet. If provider has separate userId, adjust accordingly.
                 com.cosmate.entity.User provUser = com.cosmate.entity.User.builder().id(order.getProviderId()).build();
                 com.cosmate.entity.Wallet provWallet = walletService.createForUser(provUser);
-                com.cosmate.entity.Transaction txProv = walletService.credit(provWallet, providerShare, "Provider payout on order completion", "PROVIDER_PAYOUT:" + order.getId());
+                com.cosmate.entity.Transaction txProv = walletService.credit(provWallet, providerShare, "Provider payout on order completion", "PROVIDER_PAYOUT:" + order.getId(), null, order);
                 if (txProv != null) txs.add(txProv);
             }
 
@@ -956,5 +956,27 @@ public class OrderController {
         res.put("statusesByType", statusesMap);
 
         return ApiResponse.<java.util.Map<String, Object>>builder().result(res).build();
+    }
+
+    @GetMapping("/{id}/transactions")
+    public ApiResponse<java.util.List<com.cosmate.dto.response.TransactionResponse>> getTransactionsForOrder(@PathVariable Integer id) {
+        try {
+            Order order = orderRepository.findById(id).orElse(null);
+            if (order == null) return ApiResponse.<java.util.List<com.cosmate.dto.response.TransactionResponse>>builder().code(404).message("Order not found").build();
+            List<com.cosmate.entity.Transaction> txs = transactionRepository.findByOrder_IdOrderByCreatedAtDesc(id);
+            java.util.List<com.cosmate.dto.response.TransactionResponse> resp = txs.stream().map(t -> {
+                return com.cosmate.dto.response.TransactionResponse.builder()
+                        .id(t.getId())
+                        .amount(t.getAmount())
+                        .type(t.getType())
+                        .status(t.getStatus())
+                        .paymentMethod(t.getPaymentMethod())
+                        .createdAt(t.getCreatedAt())
+                        .build();
+            }).toList();
+            return ApiResponse.<java.util.List<com.cosmate.dto.response.TransactionResponse>>builder().result(resp).build();
+        } catch (Exception ex) {
+            return ApiResponse.<java.util.List<com.cosmate.dto.response.TransactionResponse>>builder().code(500).message("Failed to fetch transactions: " + ex.getMessage()).build();
+        }
     }
 }

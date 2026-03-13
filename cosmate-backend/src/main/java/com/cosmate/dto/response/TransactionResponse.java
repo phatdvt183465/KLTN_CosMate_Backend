@@ -13,5 +13,6 @@ public class TransactionResponse {
     private BigDecimal amount;
     private String type;
     private String status;
+    private String paymentMethod;
     private LocalDateTime createdAt;
 }

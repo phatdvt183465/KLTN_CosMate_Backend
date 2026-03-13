@@ -14,5 +14,7 @@ public class TransactionResponse {
     private String type;
     private String status;
     private String paymentMethod;
+    private Integer walletId;
+    private Integer orderId;
     private LocalDateTime createdAt;
 }

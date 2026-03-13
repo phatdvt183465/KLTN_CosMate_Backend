@@ -88,6 +88,7 @@ public class OrderController {
         resp.setOrderType(o.getOrderType());
         resp.setStatus(o.getStatus());
         resp.setTotalAmount(o.getTotalAmount());
+        resp.setTotalDepositAmount(o.getTotalDepositAmount());
         resp.setCreatedAt(o.getCreatedAt());
 
         List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
@@ -100,6 +101,19 @@ public class OrderController {
         // images and trackings if available (images are now linked to order details)
         resp.setImages(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderImageRepository.findByOrderDetailIdIn(detailIds));
         resp.setTrackings(orderTrackingRepository.findByOrderId(o.getId()));
+        // populate transactions related to this order
+        java.util.List<com.cosmate.entity.Transaction> txs = transactionRepository.findByOrder_IdOrderByCreatedAtDesc(o.getId());
+        java.util.List<com.cosmate.dto.response.TransactionResponse> txResp = txs.stream().map(t -> com.cosmate.dto.response.TransactionResponse.builder()
+                .id(t.getId())
+                .amount(t.getAmount())
+                .type(t.getType())
+                .status(t.getStatus())
+                .paymentMethod(t.getPaymentMethod())
+                .walletId(t.getWallet() == null ? null : t.getWallet().getWalletId())
+                .orderId(t.getOrder() == null ? null : t.getOrder().getId())
+                .createdAt(t.getCreatedAt())
+                .build()).toList();
+        resp.setTransactions(txResp);
         return resp;
     }
 
@@ -190,6 +204,7 @@ public class OrderController {
             r.setOrderType(o.getOrderType());
             r.setStatus(o.getStatus());
             r.setTotalAmount(o.getTotalAmount());
+            r.setTotalDepositAmount(o.getTotalDepositAmount());
             r.setCreatedAt(o.getCreatedAt());
             List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
             r.setDetails(details);
@@ -218,6 +233,7 @@ public class OrderController {
             r.setOrderType(o.getOrderType());
             r.setStatus(o.getStatus());
             r.setTotalAmount(o.getTotalAmount());
+            r.setTotalDepositAmount(o.getTotalDepositAmount());
             r.setCreatedAt(o.getCreatedAt());
             List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
             r.setDetails(details);
@@ -280,6 +296,7 @@ public class OrderController {
             r.setOrderType(o.getOrderType());
             r.setStatus(o.getStatus());
             r.setTotalAmount(o.getTotalAmount());
+            r.setTotalDepositAmount(o.getTotalDepositAmount());
             r.setCreatedAt(o.getCreatedAt());
             List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
             r.setDetails(details);
@@ -316,6 +333,7 @@ public class OrderController {
             r.setOrderType(o.getOrderType());
             r.setStatus(o.getStatus());
             r.setTotalAmount(o.getTotalAmount());
+            r.setTotalDepositAmount(o.getTotalDepositAmount());
             r.setCreatedAt(o.getCreatedAt());
             List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
             r.setDetails(details);
@@ -971,6 +989,8 @@ public class OrderController {
                         .type(t.getType())
                         .status(t.getStatus())
                         .paymentMethod(t.getPaymentMethod())
+                        .walletId(t.getWallet() == null ? null : t.getWallet().getWalletId())
+                        .orderId(t.getOrder() == null ? null : t.getOrder().getId())
                         .createdAt(t.getCreatedAt())
                         .build();
             }).toList();
@@ -980,3 +1000,4 @@ public class OrderController {
         }
     }
 }
+

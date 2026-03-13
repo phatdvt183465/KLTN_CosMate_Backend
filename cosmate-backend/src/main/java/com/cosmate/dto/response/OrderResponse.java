@@ -13,6 +13,7 @@ public class OrderResponse {
     private String orderType;
     private String status;
     private BigDecimal totalAmount;
+    private BigDecimal totalDepositAmount;
     private LocalDateTime createdAt;
 
     // When payment requires external redirect, include paymentUrl

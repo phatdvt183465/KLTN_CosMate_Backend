@@ -269,6 +269,7 @@ public class OrderServiceImpl implements OrderService {
         resp.setOrderType(order.getOrderType());
         resp.setStatus(order.getStatus());
         resp.setTotalAmount(order.getTotalAmount());
+        resp.setTotalDepositAmount(order.getTotalDepositAmount());
         resp.setCreatedAt(order.getCreatedAt());
 
         if ("WALLET".equalsIgnoreCase(pm)) {
@@ -292,6 +293,8 @@ public class OrderServiceImpl implements OrderService {
                     .wallet(wallet)
                     .amount(totalAmount)
                     .type("ORDER#" + order.getId())
+                    .order(order)
+                    .paymentMethod(pm)
                     .status("PENDING")
                     .createdAt(LocalDateTime.now())
                     .build();
@@ -337,6 +340,7 @@ public class OrderServiceImpl implements OrderService {
         resp.setOrderType(order.getOrderType());
         resp.setStatus(order.getStatus());
         resp.setTotalAmount(totalAmount);
+        resp.setTotalDepositAmount(order.getTotalDepositAmount());
         resp.setCreatedAt(order.getCreatedAt());
 
         String pm = paymentMethod == null ? "WALLET" : paymentMethod;
@@ -361,6 +365,8 @@ public class OrderServiceImpl implements OrderService {
                 .wallet(wallet)
                 .amount(totalAmount)
                 .type("ORDER#" + order.getId())
+                .order(order)
+                .paymentMethod(pm)
                 .status("PENDING")
                 .createdAt(LocalDateTime.now())
                 .build();

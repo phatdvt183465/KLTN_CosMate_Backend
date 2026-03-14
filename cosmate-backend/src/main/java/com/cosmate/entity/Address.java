@@ -29,6 +29,9 @@ public class Address {
     @Column(length = 20)
     private String phone;
 
+    @Column(name = "address_name", length = 255)
+    private String addressName;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;

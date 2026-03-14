@@ -21,4 +21,7 @@ public class AddressRequest {
     @Size(max = 20)
     @Pattern(regexp = "^(?:\\+84|0)[0-9]{9,10}$", message = "INVALID_PHONE")
     private String phone;
+
+    @Size(max = 255)
+    private String addressName;
 }

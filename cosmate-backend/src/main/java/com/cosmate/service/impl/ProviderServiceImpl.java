@@ -35,6 +35,9 @@ public class ProviderServiceImpl implements ProviderService {
                 .bio(null)
                 .bankAccountNumber(null)
                 .bankName(null)
+                .completedOrders(0)
+                .totalRating(0)
+                .totalReviews(0)
                 .verified(false)
                 .build();
         Provider saved = providerRepository.save(p);
@@ -80,6 +83,16 @@ public class ProviderServiceImpl implements ProviderService {
         if (opt.isEmpty()) return null;
         Provider p = opt.get();
         p.setAvatarUrl(avatarUrl);
+        return providerRepository.save(p);
+    }
+
+    @Override
+    @Transactional
+    public Provider updateCoverImageForUser(Integer userId, String coverImageUrl) {
+        Optional<Provider> opt = providerRepository.findByUserId(userId);
+        if (opt.isEmpty()) return null;
+        Provider p = opt.get();
+        p.setCoverImageUrl(coverImageUrl);
         return providerRepository.save(p);
     }
 

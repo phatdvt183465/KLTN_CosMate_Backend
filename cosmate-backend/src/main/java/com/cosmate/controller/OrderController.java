@@ -48,6 +48,7 @@ public class OrderController {
     private final OrderImageRepository orderImageRepository;
     private final OrderTrackingRepository orderTrackingRepository;
     private final FirebaseStorageService firebaseStorageService;
+    private final com.cosmate.repository.CostumeRepository costumeRepository;
 
     // helper to extract current authenticated user id
     private Integer getCurrentUserId() {
@@ -87,6 +88,7 @@ public class OrderController {
         resp.setOrderType(o.getOrderType());
         resp.setStatus(o.getStatus());
         resp.setTotalAmount(o.getTotalAmount());
+        resp.setTotalDepositAmount(o.getTotalDepositAmount());
         resp.setCreatedAt(o.getCreatedAt());
 
         List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
@@ -96,9 +98,22 @@ public class OrderController {
         List<Integer> detailIds = details.stream().map(d -> d.getId()).toList();
         resp.setAccessories(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderDetailAccessoryRepository.findByOrderDetailIdIn(detailIds));
         resp.setRentalOptions(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderRentalOptionRepository.findByOrderDetailIdIn(detailIds));
-        // images and trackings if available
-        resp.setImages(orderImageRepository.findByOrderId(o.getId()));
+        // images and trackings if available (images are now linked to order details)
+        resp.setImages(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderImageRepository.findByOrderDetailIdIn(detailIds));
         resp.setTrackings(orderTrackingRepository.findByOrderId(o.getId()));
+        // populate transactions related to this order
+        java.util.List<com.cosmate.entity.Transaction> txs = transactionRepository.findByOrder_IdOrderByCreatedAtDesc(o.getId());
+        java.util.List<com.cosmate.dto.response.TransactionResponse> txResp = txs.stream().map(t -> com.cosmate.dto.response.TransactionResponse.builder()
+                .id(t.getId())
+                .amount(t.getAmount())
+                .type(t.getType())
+                .status(t.getStatus())
+                .paymentMethod(t.getPaymentMethod())
+                .walletId(t.getWallet() == null ? null : t.getWallet().getWalletId())
+                .orderId(t.getOrder() == null ? null : t.getOrder().getId())
+                .createdAt(t.getCreatedAt())
+                .build()).toList();
+        resp.setTransactions(txResp);
         return resp;
     }
 
@@ -189,6 +204,7 @@ public class OrderController {
             r.setOrderType(o.getOrderType());
             r.setStatus(o.getStatus());
             r.setTotalAmount(o.getTotalAmount());
+            r.setTotalDepositAmount(o.getTotalDepositAmount());
             r.setCreatedAt(o.getCreatedAt());
             List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
             r.setDetails(details);
@@ -217,6 +233,7 @@ public class OrderController {
             r.setOrderType(o.getOrderType());
             r.setStatus(o.getStatus());
             r.setTotalAmount(o.getTotalAmount());
+            r.setTotalDepositAmount(o.getTotalDepositAmount());
             r.setCreatedAt(o.getCreatedAt());
             List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
             r.setDetails(details);
@@ -279,6 +296,7 @@ public class OrderController {
             r.setOrderType(o.getOrderType());
             r.setStatus(o.getStatus());
             r.setTotalAmount(o.getTotalAmount());
+            r.setTotalDepositAmount(o.getTotalDepositAmount());
             r.setCreatedAt(o.getCreatedAt());
             List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
             r.setDetails(details);
@@ -315,6 +333,7 @@ public class OrderController {
             r.setOrderType(o.getOrderType());
             r.setStatus(o.getStatus());
             r.setTotalAmount(o.getTotalAmount());
+            r.setTotalDepositAmount(o.getTotalDepositAmount());
             r.setCreatedAt(o.getCreatedAt());
             List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
             r.setDetails(details);
@@ -378,13 +397,30 @@ public class OrderController {
                 java.math.BigDecimal amount = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
                 com.cosmate.entity.User u = com.cosmate.entity.User.builder().id(order.getCosplayerId()).build();
                 com.cosmate.entity.Wallet wallet = walletService.createForUser(u);
-                com.cosmate.entity.Transaction tx = walletService.credit(wallet, amount, "Order refund for cancellation", "ORDER_REFUND:" + order.getId());
+                com.cosmate.entity.Transaction tx = walletService.credit(wallet, amount, "Order refund for cancellation", "ORDER_REFUND:" + order.getId(), null, order);
                 refunded = (tx != null);
             }
 
             // update order status to CANCELLED
             order.setStatus("CANCELLED");
             orderRepository.save(order);
+
+            // set related costumes back to AVAILABLE when order is cancelled
+            try {
+                List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
+                if (details != null && !details.isEmpty()) {
+                    for (OrderDetail d : details) {
+                        if (d.getCostumeId() == null) continue;
+                        Costume c = costumeRepository.findById(d.getCostumeId()).orElse(null);
+                        if (c != null) {
+                            c.setStatus("AVAILABLE");
+                            costumeRepository.save(c);
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                // ignore failures to update costume statuses - do not block cancellation
+            }
 
             String actor = isCosplayer ? "cosplayer" : (isProviderOwner ? "provider" : "staff");
             String msg = "Order cancelled by " + actor + (refunded ? " and refunded" : "");
@@ -460,8 +496,11 @@ public class OrderController {
                 String url = firebaseStorageService.uploadFile(file, path);
 
                 String note = (notes != null && notes.size() > i) ? notes.get(i) : null;
+                // associate image with the first order detail for this order (fallback)
+                java.util.List<OrderDetail> detailsForOrder = orderDetailRepository.findByOrderId(order.getId());
+                OrderDetail detailForImage = detailsForOrder.isEmpty() ? null : detailsForOrder.get(0);
                 OrderImage oi = OrderImage.builder()
-                        .order(order)
+                        .orderDetail(detailForImage)
                         .imageUrl(url)
                         .stage("SHIPPING_OUT")
                         .note(note)
@@ -478,7 +517,8 @@ public class OrderController {
             java.util.Map<String, Object> result = new java.util.HashMap<>();
             // return the full tracking object and the uploaded image records for client display
             result.put("tracking", ot);
-            List<OrderImage> uploadedImages = orderImageRepository.findByOrderId(order.getId());
+            List<Integer> detailIdsForImages = orderDetailRepository.findByOrderId(order.getId()).stream().map(d -> d.getId()).toList();
+            List<OrderImage> uploadedImages = detailIdsForImages.isEmpty() ? java.util.Collections.emptyList() : orderImageRepository.findByOrderDetailIdIn(detailIdsForImages);
             result.put("images", uploadedImages);
             return ApiResponse.<Object>builder().result(result).message("Order updated to SHIPPING_OUT").build();
         } catch (Exception ex) {
@@ -569,8 +609,10 @@ public class OrderController {
                     String url = firebaseStorageService.uploadFile(file, path);
 
                     String note = (notes != null && notes.size() > i) ? notes.get(i) : null;
+                    java.util.List<OrderDetail> detailsForOrder = orderDetailRepository.findByOrderId(order.getId());
+                    OrderDetail detailForImage = detailsForOrder.isEmpty() ? null : detailsForOrder.get(0);
                     OrderImage oi = OrderImage.builder()
-                            .order(order)
+                            .orderDetail(detailForImage)
                             .imageUrl(url)
                             .stage("IN_USE")
                             .note(note)
@@ -581,7 +623,7 @@ public class OrderController {
                 }
             }
 
-            // create tracking entry marking delivered
+            // create tracking entry marking delivering
             List<OrderTracking> existing = orderTrackingRepository.findByOrderId(order.getId());
             String trackingCode = null;
             if (existing != null && !existing.isEmpty()) trackingCode = existing.get(existing.size()-1).getTrackingCode();
@@ -596,6 +638,20 @@ public class OrderController {
 
             order.setStatus("IN_USE");
             orderRepository.save(order);
+
+            // Mark any images that were uploaded during SHIPPING_OUT as confirmed
+            List<Integer> detIdsForConfirm = orderDetailRepository.findByOrderId(order.getId()).stream().map(d -> d.getId()).toList();
+            if (!detIdsForConfirm.isEmpty()) {
+                List<OrderImage> imgsToCheck = orderImageRepository.findByOrderDetailIdIn(detIdsForConfirm);
+                boolean changed = false;
+                for (OrderImage img : imgsToCheck) {
+                    if (img != null && img.getStage() != null && "SHIPPING_OUT".equalsIgnoreCase(img.getStage()) && (img.getConfirm() == null || !img.getConfirm())) {
+                        img.setConfirm(true);
+                        changed = true;
+                    }
+                }
+                if (changed) orderImageRepository.saveAll(imgsToCheck);
+            }
 
             java.util.Map<String,Object> res = new java.util.HashMap<>();
             res.put("tracking", ot);
@@ -694,8 +750,10 @@ public class OrderController {
                 String url = firebaseStorageService.uploadFile(file, path);
 
                 String note = (notes != null && notes.size() > i) ? notes.get(i) : null;
+                java.util.List<OrderDetail> detailsForOrder = orderDetailRepository.findByOrderId(order.getId());
+                OrderDetail detailForImage = detailsForOrder.isEmpty() ? null : detailsForOrder.get(0);
                 OrderImage oi = OrderImage.builder()
-                        .order(order)
+                        .orderDetail(detailForImage)
                         .imageUrl(url)
                         .stage("SHIPPING_BACK")
                         .note(note)
@@ -712,7 +770,8 @@ public class OrderController {
             java.util.Map<String,Object> res = new java.util.HashMap<>();
             res.put("tracking", ot);
             res.put("orderStatus", order.getStatus());
-            res.put("uploadedImages", uploadedImages);
+            List<Integer> detIds = orderDetailRepository.findByOrderId(order.getId()).stream().map(d -> d.getId()).toList();
+            res.put("uploadedImages", detIds.isEmpty() ? java.util.Collections.emptyList() : orderImageRepository.findByOrderDetailIdIn(detIds));
             return ApiResponse.<Object>builder().result(res).message("Order updated to SHIPPING_BACK").build();
         } catch (Exception ex) {
             return ApiResponse.<Object>builder().code(500).message("Failed to start return: " + ex.getMessage()).build();
@@ -760,6 +819,20 @@ public class OrderController {
             // --- Funds distribution: sum deposit from order details -> cosplayer; remaining -> provider ---
             java.math.BigDecimal total = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
 
+            // Mark images uploaded during SHIPPING_BACK as confirmed
+            List<Integer> detailIdsForConfirmBack = orderDetailRepository.findByOrderId(order.getId()).stream().map(d -> d.getId()).toList();
+            if (!detailIdsForConfirmBack.isEmpty()) {
+                List<OrderImage> backImgs = orderImageRepository.findByOrderDetailIdIn(detailIdsForConfirmBack);
+                boolean anyChanged = false;
+                for (OrderImage img : backImgs) {
+                    if (img != null && img.getStage() != null && "SHIPPING_BACK".equalsIgnoreCase(img.getStage()) && (img.getConfirm() == null || !img.getConfirm())) {
+                        img.setConfirm(true);
+                        anyChanged = true;
+                    }
+                }
+                if (anyChanged) orderImageRepository.saveAll(backImgs);
+            }
+
             // Sum deposit amounts from order details (deposit may be stored on details)
             List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
             java.math.BigDecimal depositTotal = java.math.BigDecimal.ZERO;
@@ -785,7 +858,7 @@ public class OrderController {
             if (depositTotal.compareTo(java.math.BigDecimal.ZERO) > 0) {
                 com.cosmate.entity.User cosUser = com.cosmate.entity.User.builder().id(order.getCosplayerId()).build();
                 com.cosmate.entity.Wallet cosWallet = walletService.createForUser(cosUser);
-                com.cosmate.entity.Transaction txDeposit = walletService.credit(cosWallet, depositTotal, "Deposit returned on order completion", "DEPOSIT_RETURN:" + order.getId());
+                com.cosmate.entity.Transaction txDeposit = walletService.credit(cosWallet, depositTotal, "Deposit returned on order completion", "DEPOSIT_RETURN:" + order.getId(), null, order);
                 if (txDeposit != null) txs.add(txDeposit);
             }
 
@@ -794,13 +867,29 @@ public class OrderController {
                 // NOTE: assumes order.getProviderId() can be used as a user id for wallet. If provider has separate userId, adjust accordingly.
                 com.cosmate.entity.User provUser = com.cosmate.entity.User.builder().id(order.getProviderId()).build();
                 com.cosmate.entity.Wallet provWallet = walletService.createForUser(provUser);
-                com.cosmate.entity.Transaction txProv = walletService.credit(provWallet, providerShare, "Provider payout on order completion", "PROVIDER_PAYOUT:" + order.getId());
+                com.cosmate.entity.Transaction txProv = walletService.credit(provWallet, providerShare, "Provider payout on order completion", "PROVIDER_PAYOUT:" + order.getId(), null, order);
                 if (txProv != null) txs.add(txProv);
             }
 
             // finalize order status
             order.setStatus("COMPLETED");
             orderRepository.save(order);
+
+            // set related costumes back to AVAILABLE when order completes
+            try {
+                if (details != null && !details.isEmpty()) {
+                    for (OrderDetail d : details) {
+                        if (d.getCostumeId() == null) continue;
+                        Costume c = costumeRepository.findById(d.getCostumeId()).orElse(null);
+                        if (c != null) {
+                            c.setStatus("AVAILABLE");
+                            costumeRepository.save(c);
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                // ignore failures to update costume statuses - do not block completion
+            }
 
             java.util.Map<String,Object> res = new java.util.HashMap<>();
             res.put("tracking", ot);
@@ -886,4 +975,29 @@ public class OrderController {
 
         return ApiResponse.<java.util.Map<String, Object>>builder().result(res).build();
     }
+
+    @GetMapping("/{id}/transactions")
+    public ApiResponse<java.util.List<com.cosmate.dto.response.TransactionResponse>> getTransactionsForOrder(@PathVariable Integer id) {
+        try {
+            Order order = orderRepository.findById(id).orElse(null);
+            if (order == null) return ApiResponse.<java.util.List<com.cosmate.dto.response.TransactionResponse>>builder().code(404).message("Order not found").build();
+            List<com.cosmate.entity.Transaction> txs = transactionRepository.findByOrder_IdOrderByCreatedAtDesc(id);
+            java.util.List<com.cosmate.dto.response.TransactionResponse> resp = txs.stream().map(t -> {
+                return com.cosmate.dto.response.TransactionResponse.builder()
+                        .id(t.getId())
+                        .amount(t.getAmount())
+                        .type(t.getType())
+                        .status(t.getStatus())
+                        .paymentMethod(t.getPaymentMethod())
+                        .walletId(t.getWallet() == null ? null : t.getWallet().getWalletId())
+                        .orderId(t.getOrder() == null ? null : t.getOrder().getId())
+                        .createdAt(t.getCreatedAt())
+                        .build();
+            }).toList();
+            return ApiResponse.<java.util.List<com.cosmate.dto.response.TransactionResponse>>builder().result(resp).build();
+        } catch (Exception ex) {
+            return ApiResponse.<java.util.List<com.cosmate.dto.response.TransactionResponse>>builder().code(500).message("Failed to fetch transactions: " + ex.getMessage()).build();
+        }
+    }
 }
+

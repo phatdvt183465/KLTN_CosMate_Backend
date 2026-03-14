@@ -50,20 +50,41 @@ public class WalletServiceImpl implements WalletService {
     @Override
     @Transactional
     public Transaction credit(Wallet wallet, BigDecimal amount, String desc, String reference) {
+        return credit(wallet, amount, desc, reference, null, null);
+    }
+
+    @Override
+    @Transactional
+    public Transaction debit(Wallet wallet, BigDecimal amount, String desc, String reference) throws Exception {
+        return debit(wallet, amount, desc, reference, null, null);
+    }
+
+    @Override
+    public List<Transaction> getTransactionsForWallet(Wallet wallet) {
+        return transactionRepository.findByWalletOrderByCreatedAtDesc(wallet);
+    }
+
+    @Override
+    @Transactional
+    public Transaction credit(Wallet wallet, BigDecimal amount, String desc, String reference, String paymentMethod, com.cosmate.entity.Order order) {
         wallet.setBalance(wallet.getBalance().add(amount));
         walletRepository.save(wallet);
 
-        // If reference contains a prefix (e.g. "DISPUTE_PAYOUT:123"), use the prefix as the transaction type
+        // derive txType from reference or fallback
         String txType = "CREDIT";
         try {
             if (reference != null && reference.contains(":")) txType = reference.split(":", 2)[0];
-        } catch (Exception ignored) {
-        }
+        } catch (Exception ignored) {}
+
+        // compute Vietnamese label and store into txType (replace English with Vietnamese)
+        String vietnamese = computeTypeVi(txType, reference);
 
         Transaction t = Transaction.builder()
                 .wallet(wallet)
                 .amount(amount)
-                .type(txType)
+                .type(vietnamese)
+                .paymentMethod(paymentMethod)
+                .order(order)
                 .status("COMPLETED")
                 .createdAt(LocalDateTime.now())
                 .build();
@@ -72,7 +93,7 @@ public class WalletServiceImpl implements WalletService {
 
     @Override
     @Transactional
-    public Transaction debit(Wallet wallet, BigDecimal amount, String desc, String reference) throws Exception {
+    public Transaction debit(Wallet wallet, BigDecimal amount, String desc, String reference, String paymentMethod, com.cosmate.entity.Order order) throws Exception {
         if (wallet.getBalance().compareTo(amount) < 0) throw new Exception("Số dư trong ví không đủ");
         wallet.setBalance(wallet.getBalance().subtract(amount));
         walletRepository.save(wallet);
@@ -80,21 +101,36 @@ public class WalletServiceImpl implements WalletService {
         String txType = "DEBIT";
         try {
             if (reference != null && reference.contains(":")) txType = reference.split(":", 2)[0];
-        } catch (Exception ignored) {
-        }
+        } catch (Exception ignored) {}
+
+        String vietnamese = computeTypeVi(txType, reference);
 
         Transaction t = Transaction.builder()
                 .wallet(wallet)
                 .amount(amount)
-                .type(txType)
+                .type(vietnamese)
+                .paymentMethod(paymentMethod)
+                .order(order)
                 .status("COMPLETED")
                 .createdAt(LocalDateTime.now())
                 .build();
         return transactionRepository.save(t);
     }
 
-    @Override
-    public List<Transaction> getTransactionsForWallet(Wallet wallet) {
-        return transactionRepository.findByWalletOrderByCreatedAtDesc(wallet);
+    private String computeTypeVi(String txType, String reference) {
+        if (txType == null) txType = "";
+        txType = txType.toUpperCase();
+        if (txType.startsWith("ORDER")) {
+            if (reference != null && reference.toUpperCase().contains("REFUND")) return "Hoàn tiền đơn hàng";
+            return "Thanh toán đơn hàng";
+        }
+        if (txType.contains("PROVIDER_PAYOUT") || txType.contains("ORDER_PAYOUT")) return "Thanh toán nhà cung cấp";
+        if (txType.contains("DEPOSIT_RETURN") || txType.contains("DEPOSIT")) return "Hoàn cọc";
+        if (txType.contains("REFUND")) return "Hoàn tiền";
+        if (txType.contains("DISPUTE_PAYOUT") || txType.contains("DISPUTE")) return "Thanh toán tranh chấp";
+        if (txType.contains("WITHDRAW")) return "Rút tiền";
+        if (txType.equals("CREDIT")) return "Nạp tiền";
+        if (txType.equals("DEBIT")) return "Trừ tiền";
+        return txType; // fallback to original
     }
 }

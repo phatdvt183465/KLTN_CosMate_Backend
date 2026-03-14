@@ -217,20 +217,19 @@ public class DisputeServiceImpl implements DisputeService {
                         providerWalletEntity = provWallet;
                     }
                     // credit provider (walletService will update balance and create Transaction)
-                    walletService.credit(providerWalletEntity, providerPayout, "Dispute payout to provider", "DISPUTE_PAYOUT:" + d.getId());
+                    walletService.credit(providerWalletEntity, providerPayout, "Dispute payout to provider", "DISPUTE_PAYOUT:" + d.getId(), null, order);
                 }
 
                 // Refund remaining deposit to cosplayer main balance (wallet)
                 if (refundRemaining.compareTo(BigDecimal.ZERO) > 0) {
                     com.cosmate.entity.User cosUserForCreate = com.cosmate.entity.User.builder().id(order.getCosplayerId()).build();
                     com.cosmate.entity.Wallet cosWalletEntity = walletService.getByUserId(order.getCosplayerId()).orElseGet(() -> walletService.createForUser(cosUserForCreate));
-                    walletService.credit(cosWalletEntity, refundRemaining, "Deposit refund", "DISPUTE_REFUND:" + d.getId());
+                    walletService.credit(cosWalletEntity, refundRemaining, "Deposit refund", "DISPUTE_REFUND:" + d.getId(), null, order);
                 }
-
             } else {
                 // Default flow: debit cosplayer main balance, credit provider main balance
-                walletService.debit(cosWallet, appliedPenalty, "Dispute penalty", "DISPUTE_PENALTY:" + d.getId());
-                walletService.credit(provWallet, appliedPenalty, "Dispute compensation received", "DISPUTE_COMP:" + d.getId());
+                walletService.debit(cosWallet, appliedPenalty, "Dispute penalty", "DISPUTE_PENALTY:" + d.getId(), null, order);
+                walletService.credit(provWallet, appliedPenalty, "Dispute compensation received", "DISPUTE_COMP:" + d.getId(), null, order);
             }
         }
 

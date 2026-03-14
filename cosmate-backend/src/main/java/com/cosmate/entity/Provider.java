@@ -29,6 +29,9 @@ public class Provider {
     @Column(name = "avatar_url", length = 255)
     private String avatarUrl;
 
+    @Column(name = "cover_image_url", length = 500)
+    private String coverImageUrl;
+
     @Column(name = "bio", columnDefinition = "NVARCHAR(MAX)")
     private String bio;
 
@@ -37,6 +40,15 @@ public class Provider {
 
     @Column(name = "bank_name", length = 100)
     private String bankName;
+
+    @Column(name = "completed_orders", nullable = false)
+    private Integer completedOrders = 0;
+
+    @Column(name = "total_rating", nullable = false)
+    private Integer totalRating = 0;
+
+    @Column(name = "total_reviews", nullable = false)
+    private Integer totalReviews = 0;
 
     @Column(name = "verified", nullable = false)
     private Boolean verified = false;
@@ -48,5 +60,8 @@ public class Provider {
     public void prePersist() {
         if (createdAt == null) createdAt = LocalDateTime.now();
         if (verified == null) verified = false;
+        if (completedOrders == null) completedOrders = 0;
+        if (totalRating == null) totalRating = 0;
+        if (totalReviews == null) totalReviews = 0;
     }
 }

@@ -15,7 +15,7 @@ public enum ErrorCode {
     USER_NOT_FOUND(1011, "Không tìm thấy người dùng!"),
     INVALID_EMAIL(1012, "Email không hợp lệ!"),
     PROVIDER_NOT_FOUND(1013, "Không tìm thấy provider cho user_id!"),
-    ;
+    WISHLIST_NOT_FOUND(1014, "Không tìm thấy mục wishlist!");
 
     ErrorCode(int code, String message) {
         this.code = code;

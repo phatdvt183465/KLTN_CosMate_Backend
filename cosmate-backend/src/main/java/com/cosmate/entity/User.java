@@ -4,8 +4,6 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
-import java.util.HashSet;
-import java.util.Set;
 
 @Entity
 @Table(name = "Users")
@@ -46,11 +44,10 @@ public class User {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "Users_Role", joinColumns = @JoinColumn(name = "user_id"))
-    @Column(name = "role", nullable = false)
-    @Enumerated(EnumType.STRING)
-    private Set<Role> roles = new HashSet<>();
+    // Replace previous ElementCollection of enum roles with a ManyToOne relation to the roles table
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "role_id")
+    private RoleEntity role;
 
     @PrePersist
     public void prePersist() {

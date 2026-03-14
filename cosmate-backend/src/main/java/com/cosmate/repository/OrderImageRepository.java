@@ -8,6 +8,6 @@ import java.util.List;
 
 @Repository
 public interface OrderImageRepository extends JpaRepository<OrderImage, Integer> {
-    List<OrderImage> findByOrderId(Integer orderId);
+    List<OrderImage> findByOrderDetailId(Integer orderDetailId);
+    List<OrderImage> findByOrderDetailIdIn(List<Integer> orderDetailIds);
 }
-

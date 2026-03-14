@@ -30,6 +30,13 @@ public class Transaction {
     @Column(name = "status", length = 50)
     private String status;
 
+    @Column(name = "payment_method", length = 50)
+    private String paymentMethod;
+
+    @ManyToOne
+    @JoinColumn(name = "order_id")
+    private Order order;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

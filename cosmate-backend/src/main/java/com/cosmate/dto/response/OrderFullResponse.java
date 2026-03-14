@@ -21,6 +21,7 @@ public class OrderFullResponse {
     private String orderType;
     private String status;
     private BigDecimal totalAmount;
+    private BigDecimal totalDepositAmount;
     private LocalDateTime createdAt;
 
     private List<OrderDetail> details;
@@ -31,4 +32,5 @@ public class OrderFullResponse {
     // New: include images and trackings related to this order
     private List<OrderImage> images;
     private List<OrderTracking> trackings;
+    private java.util.List<com.cosmate.dto.response.TransactionResponse> transactions;
 }

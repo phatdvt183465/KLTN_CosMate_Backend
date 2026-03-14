@@ -4,7 +4,6 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.time.LocalDateTime;
-import java.util.Set;
 
 @Data
 @Builder
@@ -15,6 +14,6 @@ public class UserListItem {
     private String fullName;
     private String phone;
     private String status;
-    private Set<String> roles;
+    private String role;
     private LocalDateTime createdAt;
 }

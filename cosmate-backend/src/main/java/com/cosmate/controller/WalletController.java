@@ -133,6 +133,9 @@ public class WalletController {
                 .amount(t.getAmount())
                 .type(t.getType())
                 .status(t.getStatus())
+                .paymentMethod(t.getPaymentMethod())
+                .walletId(t.getWallet() == null ? null : t.getWallet().getWalletId())
+                .orderId(t.getOrder() == null ? null : t.getOrder().getId())
                 .createdAt(t.getCreatedAt())
                 .build()).collect(Collectors.toList());
 

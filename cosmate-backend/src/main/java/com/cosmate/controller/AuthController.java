@@ -17,7 +17,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -70,7 +69,7 @@ public class AuthController {
         r.setFullName(request.getFullName());
         // username left null
         User user = userService.register(r, true, request.getAvatarUrl());
-        List<String> roles = user.getRoles().stream().map(Enum::name).collect(Collectors.toList());
+        List<String> roles = user.getRole() == null ? List.of() : List.of(user.getRole().getRoleName());
         Long userIdLong = user.getId() == null ? null : user.getId().longValue();
 
         Long providerIdLong = null;

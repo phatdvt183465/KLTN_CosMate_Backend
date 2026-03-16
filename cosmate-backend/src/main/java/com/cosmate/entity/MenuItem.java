@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Table(name = "menu_items")
+@Table(name = "menu_item")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -48,19 +48,20 @@ public class MenuItem {
     @Column(length = 50)
     private String icon;
 
-    @Column(nullable = false)
+    @Column(name = "display_order", updatable = false)
     private Integer displayOrder;
 
-    @Column(nullable = false)
+    @Column(name = "is_active", updatable = false)
     private Boolean isActive = true;
 
-    @Column(length = 100)
+    @Column(name = "required_permission", length = 100)
     private String requiredPermission;
 
     @CreationTimestamp
-    @Column(updatable = false)
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 }

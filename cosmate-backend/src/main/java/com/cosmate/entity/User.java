@@ -61,4 +61,8 @@ public class User {
     @ExportField(name = "Ngày tham gia", dateFormat = "dd/MM/yyyy HH:mm:ss")
     @Column(name = "created_at")
     private LocalDateTime createdAt;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "role_id")
+    private RoleEntity role;
 }

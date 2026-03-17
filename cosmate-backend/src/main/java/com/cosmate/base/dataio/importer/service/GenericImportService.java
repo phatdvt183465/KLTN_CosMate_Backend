@@ -1,6 +1,5 @@
 package com.cosmate.base.dataio.importer.service;
 
-import com.cosmate.system.common.hash.HashService;
 import com.cosmate.base.dataio.importer.annotation.ImportHash;
 import com.cosmate.base.dataio.importer.mapper.GenericImportMapper;
 import com.cosmate.base.dataio.importer.parser.FileParser;
@@ -9,6 +8,7 @@ import com.cosmate.base.dataio.importer.result.ImportResult;
 import com.cosmate.base.dataio.importer.result.RowError;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -22,7 +22,7 @@ public class GenericImportService implements ImportService {
 
     private final ParserFactory parserFactory;
     private final GenericImportMapper mapper;
-    private final HashService hashService;
+    private final PasswordEncoder passwordEncoder; // Đổi HashService thành PasswordEncoder
 
     @Override
     public <T, ID> ImportResult importFile(
@@ -81,8 +81,9 @@ public class GenericImportService implements ImportService {
 
             Object val = field.get(entity);
 
+            // Băm mật khẩu bằng PasswordEncoder chuẩn của Spring
             if (val instanceof String raw && !isHashed(raw)) {
-                field.set(entity, hashService.hash(raw));
+                field.set(entity, passwordEncoder.encode(raw));
             }
         }
     }

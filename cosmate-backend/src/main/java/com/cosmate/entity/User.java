@@ -1,5 +1,10 @@
 package com.cosmate.entity;
 
+import com.cosmate.base.dataio.template.annotation.ImportEntity;
+import com.cosmate.base.dataio.importer.annotation.ImportField;
+import com.cosmate.base.dataio.importer.annotation.ImportHash;
+import com.cosmate.base.dataio.exporter.annotation.ExportEntity;
+import com.cosmate.base.dataio.exporter.annotation.ExportField;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -11,47 +16,49 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ImportEntity("user")
+@ExportEntity(fileName = "danh_sach_nguoi_dung", sheetName = "User Data")
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @ExportField(name = "ID")
     private Integer id;
 
+    @ImportField(name = "Username", required = true)
+    @ExportField(name = "Tên đăng nhập")
     @Column(length = 100, name = "username")
     private String username;
 
-    // map to password_hash column in DB
+    // Tự động băm password khi import từ file Excel
+    @ImportField(name = "Mật khẩu", required = true)
+    @ImportHash
     @Column(length = 255, name = "password_hash")
     private String passwordHash;
 
+    @ImportField(name = "Email", required = true)
+    @ExportField(name = "Email")
     @Column(length = 255, unique = true, name = "email")
     private String email;
 
-    // map to full_name column in DB
+    @ImportField(name = "Họ và tên")
+    @ExportField(name = "Họ và tên")
     @Column(length = 255, name = "full_name")
     private String fullName;
 
-    // map to avatar_url column in DB
     @Column(length = 255, name = "avatar_url")
-    private String avatarUrl;
+    private String avatarUrl; // Admin không cần import avatar qua Excel
 
+    @ImportField(name = "Số điện thoại")
+    @ExportField(name = "SĐT")
     @Column(length = 20, name = "phone")
     private String phone;
 
+    @ImportField(name = "Trạng thái")
+    @ExportField(name = "Trạng thái")
     @Column(length = 20, name = "status")
     private String status;
 
-    // map to created_at column in DB
+    @ExportField(name = "Ngày tham gia", dateFormat = "dd/MM/yyyy HH:mm:ss")
     @Column(name = "created_at")
     private LocalDateTime createdAt;
-
-    // Replace previous ElementCollection of enum roles with a ManyToOne relation to the roles table
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "role_id")
-    private RoleEntity role;
-
-    @PrePersist
-    public void prePersist() {
-        if (createdAt == null) createdAt = LocalDateTime.now();
-        if (status == null) status = "ACTIVE";
-    }
 }

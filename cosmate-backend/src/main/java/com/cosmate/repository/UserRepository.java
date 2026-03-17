@@ -1,13 +1,13 @@
 package com.cosmate.repository;
 
 import com.cosmate.entity.User;
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.cosmate.base.crud.BaseCrudRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
 @Repository
-public interface UserRepository extends JpaRepository<User, Integer> {
+public interface UserRepository extends BaseCrudRepository<User, Integer> {
     Optional<User> findByEmail(String email);
     Optional<User> findByUsername(String username);
 }

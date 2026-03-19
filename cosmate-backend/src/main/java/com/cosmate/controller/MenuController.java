@@ -56,7 +56,7 @@ public class MenuController {
         return ResponseEntity.noContent().build();
     }
 
-    @PatchMapping("/{id}/toggle-status")
+    @PostMapping("/{id}/toggle-status")
     public ResponseEntity<MenuResponse> toggleMenuStatus(@PathVariable UUID id) {
         return ResponseEntity.ok(menuService.toggleMenuStatus(id));
     }

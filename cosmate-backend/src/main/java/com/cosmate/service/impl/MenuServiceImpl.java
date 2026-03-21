@@ -114,10 +114,9 @@ public class MenuServiceImpl implements MenuService {
     @Override
     @PreAuthorize("hasAuthority('MENU_UPDATE')")
     public MenuResponse toggleMenuStatus(UUID id) {
-        Menu menu = menuRepository.findById(id)
+        menuRepository.forceToggleStatus(id);
+        Menu updatedMenu = menuRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Menu", "id", id));
-        menu.setIsActive(!menu.getIsActive());
-        Menu updatedMenu = menuRepository.save(menu);
         return convertToResponse(updatedMenu);
     }
 

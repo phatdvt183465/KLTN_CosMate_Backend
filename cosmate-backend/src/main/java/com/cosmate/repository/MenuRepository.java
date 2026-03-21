@@ -4,6 +4,8 @@ import com.cosmate.entity.Menu;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -19,4 +21,7 @@ public interface MenuRepository extends JpaRepository<Menu, UUID> {
     List<Menu> findByIsActive(Boolean isActive);
     List<Menu> findAllByOrderByDisplayOrderAsc();
     boolean existsByName(String name);
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE Menu m SET m.isActive = CASE WHEN m.isActive = true THEN false ELSE true END WHERE m.id = :id")
+    void forceToggleStatus(@Param("id") UUID id);
 }

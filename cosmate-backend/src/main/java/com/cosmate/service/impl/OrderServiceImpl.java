@@ -40,6 +40,7 @@ public class OrderServiceImpl implements OrderService {
     private final TransactionRepository transactionRepository;
     private final VnPayService vnPayService;
     private final MomoService momoService;
+    private final com.cosmate.service.NotificationService notificationService;
     private final AddressRepository addressRepository;
     private final OrderAddressRepository orderAddressRepository;
     private final ProviderService providerService;
@@ -281,6 +282,18 @@ public class OrderServiceImpl implements OrderService {
             // mark order paid
             order.setStatus("PAID");
             orderRepository.save(order);
+            // Gửi notification cho người dùng
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(cosplayerId).build())
+                        .type("ORDER_STATUS")
+                        .header("Đơn hàng đã được thanh toán")
+                        .content("Đơn hàng #" + order.getId() + " đã được thanh toán thành công.")
+                        .sendAt(LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(n);
+            } catch (Exception ignored) {}
             resp.setStatus(order.getStatus());
             return resp;
         }
@@ -354,6 +367,18 @@ public class OrderServiceImpl implements OrderService {
             }
             order.setStatus("PAID");
             orderRepository.save(order);
+            // tạo notification cho người dùng
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(cosplayerId).build())
+                        .type("ORDER_STATUS")
+                        .header("Đơn hàng đã được thanh toán")
+                        .content("Đơn hàng #" + order.getId() + " đã được thanh toán thành công.")
+                        .sendAt(LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(n);
+            } catch (Exception ignored) {}
             resp.setStatus(order.getStatus());
             return resp;
         }

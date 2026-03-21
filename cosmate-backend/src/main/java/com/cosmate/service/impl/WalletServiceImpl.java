@@ -21,6 +21,7 @@ public class WalletServiceImpl implements WalletService {
 
     private final WalletRepository walletRepository;
     private final TransactionRepository transactionRepository;
+    private final com.cosmate.service.NotificationService notificationService;
 
     @Override
     @Transactional
@@ -88,7 +89,21 @@ public class WalletServiceImpl implements WalletService {
                 .status("COMPLETED")
                 .createdAt(LocalDateTime.now())
                 .build();
-        return transactionRepository.save(t);
+        Transaction saved = transactionRepository.save(t);
+
+        // Tạo notification cho người dùng khi nạp tiền
+        try {
+            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                    .user(wallet.getUser())
+                    .type("WALLET_CREDIT")
+                    .header("Nạp tiền thành công")
+                    .content("Số tiền " + amount + " đã được nạp vào ví của bạn.")
+                    .sendAt(LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+            notificationService.create(n);
+        } catch (Exception ignored) {}
+        return saved;
     }
 
     @Override
@@ -114,7 +129,21 @@ public class WalletServiceImpl implements WalletService {
                 .status("COMPLETED")
                 .createdAt(LocalDateTime.now())
                 .build();
-        return transactionRepository.save(t);
+        Transaction saved = transactionRepository.save(t);
+        // Tạo notification cho người dùng khi rút tiền hoặc trừ tiền
+        try {
+            String hdr = vietnamese != null && vietnamese.contains("Rút") ? "Rút tiền thành công" : "Giao dịch ví";
+            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                    .user(wallet.getUser())
+                    .type("WALLET_DEBIT")
+                    .header(hdr)
+                    .content("Số tiền " + amount + " đã được trừ khỏi ví của bạn.")
+                    .sendAt(LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+            notificationService.create(n);
+        } catch (Exception ignored) {}
+        return saved;
     }
 
     private String computeTypeVi(String txType, String reference) {

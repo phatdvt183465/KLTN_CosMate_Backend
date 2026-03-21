@@ -49,6 +49,7 @@ public class OrderController {
     private final OrderTrackingRepository orderTrackingRepository;
     private final FirebaseStorageService firebaseStorageService;
     private final com.cosmate.repository.CostumeRepository costumeRepository;
+    private final com.cosmate.service.NotificationService notificationService;
 
     // helper to extract current authenticated user id
     private Integer getCurrentUserId() {
@@ -404,6 +405,17 @@ public class OrderController {
             // update order status to CANCELLED
             order.setStatus("CANCELLED");
             orderRepository.save(order);
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                        .type("ORDER_STATUS")
+                        .header("Đơn hàng bị hủy")
+                        .content("Đơn hàng #" + order.getId() + " đã bị hủy.")
+                        .sendAt(java.time.LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(n);
+            } catch (Exception ignored) {}
 
             // set related costumes back to AVAILABLE when order is cancelled
             try {
@@ -513,6 +525,17 @@ public class OrderController {
             // update order status
             order.setStatus("SHIPPING_OUT");
             orderRepository.save(order);
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                        .type("ORDER_STATUS")
+                        .header("Đơn hàng đã được gửi")
+                        .content("Đơn hàng #" + order.getId() + " đang được gửi (SHIPPING_OUT).")
+                        .sendAt(java.time.LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(n);
+            } catch (Exception ignored) {}
 
             java.util.Map<String, Object> result = new java.util.HashMap<>();
             // return the full tracking object and the uploaded image records for client display
@@ -568,6 +591,17 @@ public class OrderController {
 
             order.setStatus("DELIVERING_OUT");
             orderRepository.save(order);
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                        .type("ORDER_STATUS")
+                        .header("Đơn hàng đang giao")
+                        .content("Đơn hàng #" + order.getId() + " đang được giao (DELIVERING_OUT).")
+                        .sendAt(java.time.LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(n);
+            } catch (Exception ignored) {}
 
             java.util.Map<String,Object> res = new java.util.HashMap<>();
             res.put("tracking", ot);
@@ -638,6 +672,17 @@ public class OrderController {
 
             order.setStatus("IN_USE");
             orderRepository.save(order);
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                        .type("ORDER_STATUS")
+                        .header("Xác nhận nhận hàng")
+                        .content("Đơn hàng #" + order.getId() + " đã được xác nhận nhận và đang trong quá trình sử dụng (IN_USE).")
+                        .sendAt(java.time.LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(n);
+            } catch (Exception ignored) {}
 
             // Mark any images that were uploaded during SHIPPING_OUT as confirmed
             List<Integer> detIdsForConfirm = orderDetailRepository.findByOrderId(order.getId()).stream().map(d -> d.getId()).toList();
@@ -693,6 +738,17 @@ public class OrderController {
 
             order.setStatus("PREPARING");
             orderRepository.save(order);
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                        .type("ORDER_STATUS")
+                        .header("Đang chuẩn bị")
+                        .content("Đơn hàng #" + order.getId() + " đang được chuẩn bị (PREPARING).")
+                        .sendAt(java.time.LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(n);
+            } catch (Exception ignored) {}
 
             return ApiResponse.<String>builder().result("OK").message("Order status updated to PREPARING").build();
         } catch (Exception ex) {
@@ -766,6 +822,17 @@ public class OrderController {
             // update order status
             order.setStatus("SHIPPING_BACK");
             orderRepository.save(order);
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                        .type("ORDER_STATUS")
+                        .header("Đang trả hàng")
+                        .content("Đơn hàng #" + order.getId() + " đang trong quá trình trả hàng (SHIPPING_BACK).")
+                        .sendAt(java.time.LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(n);
+            } catch (Exception ignored) {}
 
             java.util.Map<String,Object> res = new java.util.HashMap<>();
             res.put("tracking", ot);
@@ -874,6 +941,17 @@ public class OrderController {
             // finalize order status
             order.setStatus("COMPLETED");
             orderRepository.save(order);
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                        .type("ORDER_STATUS")
+                        .header("Đơn hàng hoàn tất")
+                        .content("Đơn hàng #" + order.getId() + " đã hoàn tất (COMPLETED).")
+                        .sendAt(java.time.LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(n);
+            } catch (Exception ignored) {}
 
             // set related costumes back to AVAILABLE when order completes
             try {

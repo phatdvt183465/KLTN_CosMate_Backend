@@ -7,6 +7,8 @@ import com.cosmate.repository.WalletRepository;
 import com.cosmate.service.MomoService;
 import com.cosmate.service.WalletService;
 import jakarta.transaction.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -32,6 +34,9 @@ public class MomoServiceImpl implements MomoService {
     private final WalletService walletService;
     private final TransactionRepository transactionRepository;
     private final WalletRepository walletRepository;
+    private final com.cosmate.service.NotificationService notificationService;
+
+    private static final Logger logger = LoggerFactory.getLogger(MomoServiceImpl.class);
 
     @Value("${momo.endpoint:https://test-payment.momo.vn/v2/gateway/api}")
     private String momoEndpoint;
@@ -59,10 +64,12 @@ public class MomoServiceImpl implements MomoService {
                 .wallet(wallet)
                 .amount(amount)
                 .type("CREDIT")
+                .paymentMethod("MOMO")
                 .status("PENDING")
                 .createdAt(LocalDateTime.now())
                 .build();
         pending = transactionRepository.save(pending);
+        logger.info("Created pending Momo transaction id={} userId={} amount={} paymentMethod={}", pending.getId(), userId, amount, pending.getPaymentMethod());
         return createPaymentUrlForTransaction(userId, amount, returnUrl, pending.getId());
     }
 
@@ -75,6 +82,12 @@ public class MomoServiceImpl implements MomoService {
         String prefix = "WALLET";
         if (txOpt.isPresent()) {
             Transaction tx = txOpt.get();
+            // ensure payment method is recorded for this txn
+            if (tx.getPaymentMethod() == null || tx.getPaymentMethod().isEmpty()) {
+                tx.setPaymentMethod("MOMO");
+                transactionRepository.save(tx);
+                logger.info("Set paymentMethod=MOMO for transaction id={}", tx.getId());
+            }
             if (tx.getType() != null && tx.getType().toUpperCase().contains("SUBSCRIPTION")) prefix = "SUB";
         }
         String orderId = prefix + transactionId;
@@ -248,6 +261,16 @@ public class MomoServiceImpl implements MomoService {
         }
 
         Transaction t = op.get();
+        // ensure payment method recorded
+        if (t.getPaymentMethod() == null || t.getPaymentMethod().isEmpty()) {
+            t.setPaymentMethod("MOMO");
+            try {
+                transactionRepository.save(t);
+                logger.info("Recorded paymentMethod=MOMO for transaction id={}", t.getId());
+            } catch (Exception ex) {
+                logger.error("Failed to save paymentMethod for transaction id={}", t.getId(), ex);
+            }
+        }
         long amountFromMomo = 0L;
         try {
             amountFromMomo = Long.parseLong(amountStr);
@@ -275,6 +298,21 @@ public class MomoServiceImpl implements MomoService {
             Wallet wallet = t.getWallet();
             wallet.setBalance(wallet.getBalance().add(amount));
             walletRepository.save(wallet);
+            // Tạo notification cho người dùng khi nạp tiền qua Momo thành công
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(wallet.getUser())
+                        .type("WALLET_CREDIT")
+                        .header("Nạp tiền thành công")
+                        .content("Số tiền " + amount + " đã được nạp vào ví của bạn.")
+                        .sendAt(LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                com.cosmate.entity.Notification saved = notificationService.create(n);
+                logger.info("Created notification id={} for userId={} txnId={}", saved.getId(), wallet.getUser() == null ? null : wallet.getUser().getId(), t.getId());
+            } catch (Exception ex) {
+                logger.error("Error creating notification for wallet credit txnId={}", t.getId(), ex);
+            }
         }
 
         t.setStatus("COMPLETED");

@@ -34,6 +34,7 @@ public class ServiceOrderController {
     private final MomoService momoService;
     private final TransactionRepository transactionRepository;
     private final com.cosmate.repository.UserRepository userRepository;
+    private final com.cosmate.service.NotificationService notificationService;
 
     // helper to extract current authenticated user id
     private Integer getCurrentUserId() {
@@ -157,6 +158,17 @@ public class ServiceOrderController {
             // transition only: UNCONFIRM -> UNPAID
             order.setStatus("UNPAID");
             orderRepository.save(order);
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                        .type("ORDER_STATUS")
+                        .header("Đơn hàng đã được xác nhận")
+                        .content("Đơn hàng #" + order.getId() + " đã được xác nhận và chuyển sang UNPAID.")
+                        .sendAt(java.time.LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(n);
+            } catch (Exception ignored) {}
 
             OrderResponse resp = new OrderResponse();
             resp.setId(order.getId());
@@ -214,6 +226,17 @@ public class ServiceOrderController {
 
             order.setStatus("WAITING_SERVICE_DATE");
             orderRepository.save(order);
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                        .type("ORDER_STATUS")
+                        .header("Đơn hàng đã được lên lịch")
+                        .content("Đơn hàng #" + order.getId() + " đã được đặt lịch (WAITING_SERVICE_DATE).")
+                        .sendAt(java.time.LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(n);
+            } catch (Exception ignored) {}
 
             OrderResponse resp = new OrderResponse();
             resp.setId(order.getId());
@@ -260,6 +283,17 @@ public class ServiceOrderController {
 
             order.setStatus("IN_SERVICE");
             orderRepository.save(order);
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                        .type("ORDER_STATUS")
+                        .header("Đơn hàng đang được thực hiện")
+                        .content("Đơn hàng #" + order.getId() + " đã bắt đầu (IN_SERVICE).")
+                        .sendAt(java.time.LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(n);
+            } catch (Exception ignored) {}
 
             OrderResponse resp = new OrderResponse();
             resp.setId(order.getId());
@@ -298,6 +332,17 @@ public class ServiceOrderController {
             // set to COMPLETED
             order.setStatus("COMPLETED");
             orderRepository.save(order);
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                        .type("ORDER_STATUS")
+                        .header("Dịch vụ hoàn tất")
+                        .content("Đơn hàng #" + order.getId() + " dịch vụ đã hoàn tất (COMPLETED).")
+                        .sendAt(java.time.LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(n);
+            } catch (Exception ignored) {}
 
             // Transfer money to provider's wallet when service completes
             try {
@@ -378,6 +423,17 @@ public class ServiceOrderController {
 
             order.setStatus("CANCELLED");
             orderRepository.save(order);
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                        .type("ORDER_STATUS")
+                        .header("Đơn hàng bị hủy")
+                        .content("Đơn hàng #" + order.getId() + " đã bị hủy.")
+                        .sendAt(java.time.LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(n);
+            } catch (Exception ignored) {}
 
             OrderResponse resp = new OrderResponse();
             resp.setId(order.getId());

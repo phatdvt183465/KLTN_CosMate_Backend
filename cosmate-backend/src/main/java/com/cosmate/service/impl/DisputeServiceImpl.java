@@ -21,6 +21,7 @@ public class DisputeServiceImpl implements DisputeService {
     private final WalletService walletService;
     private final OrderDetailRepository orderDetailRepository;
     private final com.cosmate.repository.ProviderRepository providerRepository;
+    private final com.cosmate.service.NotificationService notificationService;
 
     public DisputeServiceImpl(DisputeRepository disputeRepository,
                               DisputeResultRepository disputeResultRepository,
@@ -28,7 +29,8 @@ public class DisputeServiceImpl implements DisputeService {
                               OrderTrackingRepository orderTrackingRepository,
                               WalletService walletService,
                               OrderDetailRepository orderDetailRepository,
-                              com.cosmate.repository.ProviderRepository providerRepository) {
+                              com.cosmate.repository.ProviderRepository providerRepository,
+                              com.cosmate.service.NotificationService notificationService) {
         this.disputeRepository = disputeRepository;
         this.disputeResultRepository = disputeResultRepository;
         this.orderRepository = orderRepository;
@@ -36,6 +38,7 @@ public class DisputeServiceImpl implements DisputeService {
         this.walletService = walletService;
         this.orderDetailRepository = orderDetailRepository;
         this.providerRepository = providerRepository;
+        this.notificationService = notificationService;
     }
 
     @Override
@@ -79,6 +82,17 @@ public class DisputeServiceImpl implements DisputeService {
         // set order status to DISPUTE
         order.setStatus("DISPUTE");
         orderRepository.save(order);
+        try {
+            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                    .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                    .type("ORDER_STATUS")
+                    .header("Đơn hàng đang tranh chấp")
+                    .content("Đơn hàng #" + order.getId() + " đã được đưa vào trạng thái tranh chấp.")
+                    .sendAt(java.time.LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+            notificationService.create(n);
+        } catch (Exception ignored) {}
 
         // add tracking entry
         OrderTracking ot = OrderTracking.builder()
@@ -251,6 +265,17 @@ public class DisputeServiceImpl implements DisputeService {
         // update order: after resolution, move to COMPLETED and record tracking
         order.setStatus("COMPLETED");
         orderRepository.save(order);
+        try {
+            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                    .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                    .type("ORDER_STATUS")
+                    .header("Đơn hàng hoàn tất")
+                    .content("Đơn hàng #" + order.getId() + " đã được giải quyết và hoàn tất.")
+                    .sendAt(java.time.LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+            notificationService.create(n);
+        } catch (Exception ignored) {}
 
         OrderTracking ot = OrderTracking.builder()
                 .order(order)

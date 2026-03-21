@@ -10,6 +10,8 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -26,6 +28,9 @@ public class VnPayServiceImpl implements VnPayService {
     private final WalletService walletService;
     private final TransactionRepository transactionRepository;
     private final WalletRepository walletRepository;
+    private final com.cosmate.service.NotificationService notificationService;
+
+    private static final Logger logger = LoggerFactory.getLogger(VnPayServiceImpl.class);
 
     @Value("${vnp.tmnCode}")
     private String vnpTmnCode;
@@ -52,10 +57,12 @@ public class VnPayServiceImpl implements VnPayService {
                 .wallet(wallet)
                 .amount(amount)
                 .type("CREDIT")
+                .paymentMethod("VNPAY")
                 .status("PENDING")
                 .createdAt(LocalDateTime.now())
                 .build();
         pending = transactionRepository.save(pending);
+        logger.info("Created pending VnPay transaction id={} userId={} amount={} paymentMethod={}", pending.getId(), userId, amount, pending.getPaymentMethod());
 
         return createPaymentUrlForTransaction(userId, amount, returnUrl, pending.getId());
     }
@@ -70,6 +77,12 @@ public class VnPayServiceImpl implements VnPayService {
         Optional<Transaction> txOpt = transactionRepository.findById(transactionId);
         if (txOpt.isPresent()) {
             Transaction tx = txOpt.get();
+            // ensure payment method recorded
+            if (tx.getPaymentMethod() == null || tx.getPaymentMethod().isEmpty()) {
+                tx.setPaymentMethod("VNPAY");
+                transactionRepository.save(tx);
+                logger.info("Set paymentMethod=VNPAY for transaction id={}", tx.getId());
+            }
             if (tx.getType() != null && tx.getType().toUpperCase().contains("SUBSCRIPTION")) prefix = "SUB";
         }
         String txnRef = prefix + transactionId;
@@ -160,6 +173,12 @@ public class VnPayServiceImpl implements VnPayService {
 
         Transaction t = op.get();
 
+        // ensure payment method recorded
+        if (t.getPaymentMethod() == null || t.getPaymentMethod().isEmpty()) {
+            t.setPaymentMethod("VNPAY");
+            try { transactionRepository.save(t); logger.info("Recorded paymentMethod=VNPAY for transaction id={}", t.getId()); } catch (Exception ex) { logger.error("Failed saving paymentMethod for txn {}", t.getId(), ex); }
+        }
+
         // check amount
         String amountStr = params.get("vnp_Amount");
         long amountFromVnp = Long.parseLong(amountStr);
@@ -198,6 +217,19 @@ public class VnPayServiceImpl implements VnPayService {
             Wallet wallet = t.getWallet();
             wallet.setBalance(wallet.getBalance().add(amount));
             walletRepository.save(wallet);
+            // Tạo notification cho người dùng khi nạp tiền qua VNPay thành công
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(wallet.getUser())
+                        .type("WALLET_CREDIT")
+                        .header("Nạp tiền thành công")
+                        .content("Số tiền " + amount + " đã được nạp vào ví của bạn.")
+                        .sendAt(LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                com.cosmate.entity.Notification saved = notificationService.create(n);
+                logger.info("Created notification id={} for userId={} txnId={}", saved.getId(), wallet.getUser() == null ? null : wallet.getUser().getId(), t.getId());
+            } catch (Exception ex) { logger.error("Error creating notification for wallet credit txnId={}", t.getId(), ex); }
         }
 
         t.setStatus("COMPLETED");

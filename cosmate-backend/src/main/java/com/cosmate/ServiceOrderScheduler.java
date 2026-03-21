@@ -18,6 +18,7 @@ public class ServiceOrderScheduler {
 
     private final OrderServiceBookingRepository orderServiceBookingRepository;
     private final OrderRepository orderRepository;
+    private final com.cosmate.service.NotificationService notificationService;
 
     // run every 10 minutes to pick up bookings that should start today
     @Scheduled(fixedDelayString = "PT10M")
@@ -34,6 +35,18 @@ public class ServiceOrderScheduler {
                 if (!"WAITING_SERVICE_DATE".equals(order.getStatus())) continue;
                 order.setStatus("IN_SERVICE");
                 orderRepository.save(order);
+                // notify user that order moved to IN_SERVICE
+                try {
+                    com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                            .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                            .type("ORDER_STATUS")
+                            .header("Đơn hàng đang được thực hiện")
+                            .content("Đơn hàng #" + orderId + " đã bắt đầu (IN_SERVICE).")
+                            .sendAt(java.time.LocalDateTime.now())
+                            .isRead(false)
+                            .build();
+                    notificationService.create(n);
+                } catch (Exception ignored) {}
                 log.info("Auto-updated order {} to IN_SERVICE for booking date {}", orderId, today);
             }
         } catch (Exception ex) {

@@ -142,7 +142,7 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
             if (file == null || file.isEmpty()) continue;
 
             // AI soi ảnh 18+
-            aiService.validateImageContent(file);
+            aiService.validateMultipleImageContents(files);
 
             try {
                 // Xử lý tên file cho an toàn

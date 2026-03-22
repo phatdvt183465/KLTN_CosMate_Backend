@@ -1,6 +1,5 @@
 package com.cosmate.service.impl;
 
-import com.google.cloud.storage.Bucket;
 import com.cosmate.dto.response.ImageResponse;
 import com.cosmate.entity.Costume;
 import com.cosmate.entity.CostumeImage;
@@ -13,7 +12,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 @Service
@@ -37,38 +41,71 @@ public class CostumeImageServiceImpl implements CostumeImageService {
 
     @Override
     @Transactional
-    public ImageResponse uploadImage(Integer costumeId, MultipartFile file, String type) {
+    public List<ImageResponse> uploadImages(Integer costumeId, List<MultipartFile> files, String type) {
         Costume costume = costumeRepository.findById(costumeId)
-                .orElseThrow(() -> new RuntimeException("Error: Costume ID " + costumeId + " not found."));
+                .orElseThrow(() -> new RuntimeException("Lỗi: Không tìm thấy trang phục ID " + costumeId));
 
-        if (file == null || file.isEmpty()) {
-            throw new RuntimeException("Error: File is empty.");
+        if (files == null || files.isEmpty()) {
+            return Collections.emptyList();
         }
 
-        // 1. Check AI (18+)
-        aiService.validateImageContent(file);
+        // 1. Kiểm duyệt nội dung 18+ (Gom lô)
+        aiService.validateMultipleImageContents(files);
 
+        // 2. Lấy vector nhúng (embedding) của bộ đồ
+        String textForVector = costume.getName() + " " + costume.getDescription();
+        String costumeVector = aiService.generateVectorForText(textForVector);
+
+        // 3. Xử lý đa luồng tải ảnh lên Firebase
+        ExecutorService executor = Executors.newFixedThreadPool(Math.min(files.size(), 10));
+        List<CompletableFuture<CostumeImage>> futures = new ArrayList<>();
+
+        for (MultipartFile file : files) {
+            if (file == null || file.isEmpty()) continue;
+
+            CompletableFuture<CostumeImage> future = CompletableFuture.supplyAsync(() -> {
+                try {
+                    String original = file.getOriginalFilename();
+                    String safeName = original == null ? String.valueOf(System.currentTimeMillis()) : original.replaceAll("[^a-zA-Z0-9._-]", "_");
+                    String path = String.format("costumes/%d/%d_%s", costume.getId(), System.currentTimeMillis(), safeName);
+
+                    String imageUrl = firebaseStorageService.uploadFile(file, path);
+
+                    CostumeImage img = new CostumeImage();
+                    img.setImageUrl(imageUrl);
+                    img.setType((type != null && !type.isEmpty()) ? type : "DETAIL");
+                    img.setCostume(costume);
+                    img.setImageVector(costumeVector);
+
+                    return img;
+                } catch (Exception e) {
+                    throw new RuntimeException("Upload file ảnh thất bại: " + e.getMessage());
+                }
+            }, executor);
+
+            futures.add(future);
+        }
+
+        // 4. Lưu toàn bộ kết quả xuống Database
+        List<CostumeImage> savedImages = new ArrayList<>();
         try {
-            // Dọn dẹp tên file
-            String original = file.getOriginalFilename();
-            String safeName = original == null ? String.valueOf(System.currentTimeMillis()) : original.replaceAll("[^a-zA-Z0-9._-]", "_");
-
-            // Build path: costumes/{costumeId}/{timestamp}_{safeName}
-            String path = String.format("costumes/%d/%d_%s", costume.getId(), System.currentTimeMillis(), safeName);
-
-            // Upload lấy link public
-            String imageUrl = firebaseStorageService.uploadFile(file, path);
-
-            CostumeImage img = new CostumeImage();
-            img.setImageUrl(imageUrl);
-            img.setType((type != null && !type.isEmpty()) ? type : "DETAIL");
-            img.setCostume(costume);
-
-            return mapToResponse(imageRepository.save(img));
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            for (CompletableFuture<CostumeImage> future : futures) {
+                savedImages.add(future.get());
+            }
+            // Batch save vào DB để tối ưu truy vấn
+            imageRepository.saveAll(savedImages);
 
         } catch (Exception e) {
-            throw new RuntimeException("Upload ảnh lẻ xịt rồi: " + e.getMessage());
+            throw new RuntimeException("Lỗi trong quá trình lưu trữ ảnh bổ sung: " + e.getCause().getMessage(), e);
+        } finally {
+            executor.shutdown();
         }
+
+        // 5. Build danh sách DTO trả về cho Client
+        return savedImages.stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
     }
 
     @Override

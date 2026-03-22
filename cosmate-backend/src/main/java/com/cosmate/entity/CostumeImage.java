@@ -20,6 +20,6 @@ public class CostumeImage {
 
     private String type;
 
-    @Column(name = "image_vector")
+    @Column(name = "image_vector", columnDefinition = "NVARCHAR(MAX)")
     private String imageVector;
 }

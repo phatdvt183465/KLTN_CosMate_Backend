@@ -1,7 +1,7 @@
 package com.cosmate.controller;
 
 import com.cosmate.dto.response.ApiResponse;
-import com.cosmate.dto.response.ImageResponse; // Import DTO
+import com.cosmate.dto.response.ImageResponse;
 import com.cosmate.service.CostumeImageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -31,15 +31,17 @@ public class CostumeImageController {
                 .build();
     }
 
+    // [UPDATED] Hỗ trợ upload nhiều ảnh cùng lúc cho tính năng bổ sung ảnh
     @PostMapping(value = "/costume/{costumeId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<ImageResponse> uploadImage(
+    public ApiResponse<List<ImageResponse>> uploadImages(
             @PathVariable Integer costumeId,
-            @RequestParam("file") MultipartFile file,
+            @RequestParam("files") List<MultipartFile> files, // Nhận mảng files
             @RequestParam(value = "type", required = false) String type) {
-        return ApiResponse.<ImageResponse>builder()
+
+        return ApiResponse.<List<ImageResponse>>builder()
                 .code(1000)
-                .message("Uploaded ảnh thành công!")
-                .result(imageService.uploadImage(costumeId, file, type))
+                .message("Upload hàng loạt ảnh thành công!")
+                .result(imageService.uploadImages(costumeId, files, type)) // Gọi hàm uploadImages mới
                 .build();
     }
 
@@ -47,7 +49,7 @@ public class CostumeImageController {
     public ApiResponse<Void> delete(@PathVariable Integer id) {
         imageService.deleteImage(id);
         return ApiResponse.<Void>builder()
-                .message("Xóa ảnh!")
+                .message("Xóa ảnh thành công!")
                 .build();
     }
 }

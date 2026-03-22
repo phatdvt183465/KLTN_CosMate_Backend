@@ -10,18 +10,26 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 public interface AIService {
-    // Tìm kiếm bằng Vector
+
+    // --- TÌM KIẾM & GỢI Ý ---
     List<SearchResponse> searchSimilarCostumes(SearchByImageRequest request);
-
-    // Tạo Vector cho ảnh
-    void generateAndSaveVector(Integer costumeImageId);
-
-    // Gợi ý Cosplay theo sở thích
     List<SearchResponse> recommendCosplay(RecommendationRequest request);
 
-    // Check vi phạm hình ảnh
-    void validateImageContent(MultipartFile file);
+    // --- XỬ LÝ VECTOR (TỐI ƯU API) ---
+    void generateAndSaveVector(Integer costumeImageId);
 
-    // Chấm điểm Pose dáng
+    /**
+     * Tạo vector đại diện từ văn bản (Tên + Mô tả trang phục).
+     * Dùng chung 1 vector cho tất cả ảnh của cùng 1 bộ trang phục để tiết kiệm request AI.
+     */
+    String generateVectorForText(String text);
+
+    // --- KIỂM DUYỆT NỘI DUNG (BATCH PROCESSING) ---
+    /**
+     * Kiểm duyệt hàng loạt ảnh cùng lúc. Ném Exception nếu có bất kỳ ảnh nào vi phạm (18+, bạo lực,...).
+     */
+    void validateMultipleImageContents(List<MultipartFile> files);
+
+    // --- CHẤM ĐIỂM ---
     PoseScoringResponse scorePose(PoseScoringRequest request);
 }

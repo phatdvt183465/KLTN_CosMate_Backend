@@ -13,6 +13,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -173,37 +176,69 @@ public class CostumeServiceImpl implements CostumeService {
         }
     }
 
+    /**
+     * Xử lý danh sách file ảnh của trang phục.
+     * Áp dụng:
+     * 1. Gom nhóm kiểm duyệt AI (1 Request/List).
+     * 2. Tái sử dụng Vector (1 Request/Bộ đồ).
+     * 3. Xử lý bất đồng bộ đa luồng (Multi-threading) khi upload Firebase.
+     */
     private void handleImages(Costume costume, List<MultipartFile> files) {
         if (files == null || files.isEmpty()) return;
 
-        int count = 0;
+        // [TỐI ƯU 1] Kiểm duyệt 18+ toàn bộ ảnh trong 1 lần gọi AI
+        aiService.validateMultipleImageContents(files);
+
+        // [TỐI ƯU 2] Tạo vector nhúng 1 lần duy nhất bằng Text và dùng chung cho mọi ảnh
+        String textForVector = costume.getName() + " " + costume.getDescription();
+        String costumeVector = aiService.generateVectorForText(textForVector);
+
+        // [TỐI ƯU 3] Upload ảnh lên Firebase đồng thời bằng ThreadPool
+        ExecutorService executor = Executors.newFixedThreadPool(Math.min(files.size(), 10));
+        List<CompletableFuture<CostumeImage>> futures = new ArrayList<>();
+        int index = 0;
+
         for (MultipartFile file : files) {
             if (file == null || file.isEmpty()) continue;
 
-            // AI Check 18+
-            aiService.validateImageContent(file);
+            final boolean isMainImage = (index == 0); // Ảnh đầu tiên mặc định là MAIN
+            index++;
 
-            try {
-                // Xử lý tên file cho an toàn
-                String original = file.getOriginalFilename();
-                String safeName = original == null ? String.valueOf(System.currentTimeMillis()) : original.replaceAll("[^a-zA-Z0-9._-]", "_");
+            CompletableFuture<CostumeImage> future = CompletableFuture.supplyAsync(() -> {
+                try {
+                    String original = file.getOriginalFilename();
+                    String safeName = original == null ? String.valueOf(System.currentTimeMillis()) : original.replaceAll("[^a-zA-Z0-9._-]", "_");
+                    String folderName = costume.getId() != null ? String.valueOf(costume.getId()) : "new_" + System.currentTimeMillis();
+                    String path = String.format("costumes/%s/%d_%s", folderName, System.currentTimeMillis(), safeName);
 
-                // Build path: costumes/{costumeId}/{timestamp}_{safeName}
-                String folderName = costume.getId() != null ? String.valueOf(costume.getId()) : "new_" + System.currentTimeMillis();
-                String path = String.format("costumes/%s/%d_%s", folderName, System.currentTimeMillis(), safeName);
+                    // Upload bất đồng bộ
+                    String imageUrl = firebaseStorageService.uploadFile(file, path);
 
-                // Upload Firebase
-                String imageUrl = firebaseStorageService.uploadFile(file, path);
+                    CostumeImage img = new CostumeImage();
+                    img.setImageUrl(imageUrl);
+                    img.setType(isMainImage ? "MAIN" : "DETAIL");
+                    img.setCostume(costume);
+                    img.setImageVector(costumeVector); // Dán vector dùng chung
 
-                CostumeImage img = new CostumeImage();
-                img.setImageUrl(imageUrl); // Lưu link thật public
-                img.setType(count == 0 ? "MAIN" : "DETAIL");
-                img.setCostume(costume);
-                costume.getImages().add(img);
-                count++;
-            } catch (Exception e) {
-                throw new RuntimeException("Upload ảnh xịt rồi: " + e.getMessage());
+                    return img;
+                } catch (Exception e) {
+                    throw new RuntimeException("Lỗi upload ảnh lên Cloud: " + e.getMessage(), e);
+                }
+            }, executor);
+
+            futures.add(future);
+        }
+
+        // Đợi tất cả luồng hoàn thành và lưu vào danh sách của entity
+        try {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            for (CompletableFuture<CostumeImage> future : futures) {
+                costume.getImages().add(future.get());
             }
+        } catch (Exception e) {
+            throw new RuntimeException("Tiến trình upload ảnh thất bại: " + e.getCause().getMessage(), e);
+        } finally {
+            executor.shutdown(); // Giải phóng tài nguyên ThreadPool
         }
     }
 

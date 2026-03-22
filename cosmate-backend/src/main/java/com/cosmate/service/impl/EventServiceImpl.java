@@ -14,13 +14,12 @@ import com.cosmate.repository.VoteRepository;
 import com.cosmate.service.AIService;
 import com.cosmate.service.EventService;
 import com.cosmate.service.FirebaseStorageService;
-import com.google.cloud.storage.Bucket;
+import java.util.Collections;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -87,7 +86,8 @@ public class EventServiceImpl implements EventService {
         }
 
         // 2. Gọi AI kiểm tra ảnh 18+ / bạo lực
-        aiService.validateImageContent(file);
+        List<MultipartFile> fileList = Collections.singletonList(file);
+        aiService.validateMultipleImageContents(fileList);
 
         // 3. UPLOAD FIREBASE
         String original = file.getOriginalFilename();

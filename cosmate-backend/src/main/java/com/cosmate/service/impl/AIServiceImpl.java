@@ -140,49 +140,65 @@ public class AIServiceImpl implements AIService {
     /**
      * Kiểm duyệt nội dung hình ảnh để đảm bảo tuân thủ tiêu chuẩn cộng đồng (Kiểm tra 18+/Bạo lực).
      */
+
     @Override
-    public void validateImageContent(MultipartFile file) {
+    public void validateMultipleImageContents(List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) return;
+
         try {
+            // [FIXED] Nối đúng URL và API Key
             String url = GENERATION_MODEL_URL + "?key=" + apiKey;
-            String base64Image = Base64.getEncoder().encodeToString(file.getBytes());
 
-            String promptText = "Bạn là hệ thống kiểm duyệt nội dung (Content Moderator). " +
-                    "Phân tích hình ảnh này. Nếu chứa nội dung người lớn (nudity, sexual), bạo lực máu me, phản cảm, trả lời 'UNSAFE'. " +
-                    "Nếu an toàn cho mọi lứa tuổi (bao gồm trang phục cosplay gợi cảm nhưng không phản cảm), trả lời 'SAFE'. " +
-                    "Chỉ trả về đúng 1 từ: SAFE hoặc UNSAFE.";
+            ObjectNode body = objectMapper.createObjectNode();
+            ArrayNode partsNode = objectMapper.createArrayNode();
 
-            Map<String, Object> textPart = Map.of("text", promptText);
-            Map<String, Object> imagePart = Map.of("inline_data", Map.of(
-                    "mime_type", file.getContentType() != null ? file.getContentType() : "image/jpeg",
-                    "data", base64Image
-            ));
+            // 1. Tạo Prompt dùng chung cho toàn bộ danh sách ảnh
+            ObjectNode textPart = objectMapper.createObjectNode();
+            textPart.put("text", "Bạn là một AI kiểm duyệt nội dung. Hãy kiểm tra toàn bộ các bức ảnh được đính kèm này. Nếu CÓ BẤT KỲ bức ảnh nào chứa nội dung 18+, bạo lực, máu me, hoặc vi phạm tiêu chuẩn cộng đồng, hãy trả về CHÍNH XÁC một chữ: 'UNSAFE'. Nếu TẤT CẢ đều an toàn, trả về 'SAFE'.");
+            partsNode.add(textPart);
 
-            Map<String, Object> content = Map.of("parts", List.of(textPart, imagePart));
-            Map<String, Object> body = Map.of("contents", List.of(content));
+            // 2. Mã hóa toàn bộ ảnh sang Base64 và gộp chung vào 1 Request
+            for (MultipartFile file : files) {
+                if (file == null || file.isEmpty()) continue;
+
+                String base64Image = java.util.Base64.getEncoder().encodeToString(file.getBytes());
+                String mimeType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
+
+                ObjectNode inlineData = objectMapper.createObjectNode();
+                inlineData.put("mime_type", mimeType);
+                inlineData.put("data", base64Image);
+
+                ObjectNode imagePart = objectMapper.createObjectNode();
+                imagePart.set("inline_data", inlineData);
+                partsNode.add(imagePart);
+            }
+
+            // 3. Xây dựng payload JSON
+            ObjectNode contentNode = objectMapper.createObjectNode();
+            contentNode.set("parts", partsNode);
+            ArrayNode contentsArray = objectMapper.createArrayNode();
+            contentsArray.add(contentNode);
+            body.set("contents", contentsArray);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+            HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
 
+            // 4. Gọi API Gemini 1 lần duy nhất cho N ảnh
             JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
 
             if (response != null && response.has("candidates")) {
-                String result = response.path("candidates").get(0)
+                String resultText = response.path("candidates").get(0)
                         .path("content").path("parts").get(0)
                         .path("text").asText().trim();
 
-                if ("UNSAFE".equalsIgnoreCase(result)) {
-                    throw new IllegalArgumentException("Ảnh vi phạm tiêu chuẩn cộng đồng (18+ hoặc bạo lực).");
+                if (resultText.toUpperCase().contains("UNSAFE")) {
+                    throw new RuntimeException("Hệ thống phát hiện hình ảnh vi phạm tiêu chuẩn cộng đồng!");
                 }
-            } else {
-                throw new RuntimeException("Định dạng phản hồi từ dịch vụ AI không hợp lệ.");
             }
-
-        } catch (IllegalArgumentException e) {
-            throw e; // Ném lại trực tiếp các lỗi vi phạm nghiệp vụ
         } catch (Exception e) {
-            log.error("Kiểm duyệt ảnh AI thất bại: {}", e.getMessage(), e);
-            throw new RuntimeException("Lỗi hệ thống khi kiểm duyệt ảnh: " + e.getMessage());
+            log.error("Lỗi khi kiểm duyệt AI hàng loạt: {}", e.getMessage());
+            throw new RuntimeException("Lỗi kiểm duyệt ảnh: " + e.getMessage());
         }
     }
 
@@ -299,5 +315,17 @@ public class AIServiceImpl implements AIService {
         }
 
         return (normA == 0 || normB == 0) ? 0.0 : dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+    }
+
+    @Override
+    public String generateVectorForText(String text) {
+        try {
+            // Sử dụng lại hàm callGeminiGetVector đã viết sẵn
+            List<Double> vector = callGeminiGetVector(text);
+            return objectMapper.writeValueAsString(vector);
+        } catch (Exception e) {
+            log.error("Lỗi khi tạo vector nhúng (embedding) từ text: {}", e.getMessage());
+            return null;
+        }
     }
 }

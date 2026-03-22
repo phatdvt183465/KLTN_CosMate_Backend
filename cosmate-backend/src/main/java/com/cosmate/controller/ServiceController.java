@@ -54,4 +54,18 @@ public class ServiceController {
                 .message("Đã xóa dịch vụ!")
                 .build();
     }
+
+    @GetMapping
+    public ApiResponse<List<ServiceResponse>> getAll() {
+        return ApiResponse.<List<ServiceResponse>>builder()
+                .result(serviceManagementService.getAllServices())
+                .build();
+    }
+
+    @GetMapping("/provider/{providerId}/all")
+    public ApiResponse<List<ServiceResponse>> getAllByProvider(@PathVariable Integer providerId) {
+        return ApiResponse.<List<ServiceResponse>>builder()
+                .result(serviceManagementService.getAllByProviderId(providerId))
+                .build();
+    }
 }

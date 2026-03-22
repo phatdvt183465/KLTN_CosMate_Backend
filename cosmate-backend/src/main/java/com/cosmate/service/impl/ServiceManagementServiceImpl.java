@@ -138,11 +138,11 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
     private void handleAlbums(Service service, List<MultipartFile> files) {
         if (files == null || files.isEmpty()) return;
 
+        // AI soi ảnh 18+
+        aiService.validateMultipleImageContents(files);
+        
         for (MultipartFile file : files) {
             if (file == null || file.isEmpty()) continue;
-
-            // AI soi ảnh 18+
-            aiService.validateMultipleImageContents(files);
 
             try {
                 // Xử lý tên file cho an toàn
@@ -199,5 +199,22 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
                         .map(ServiceAlbum::getImageUrl)
                         .collect(Collectors.toList()))
                 .build();
+    }
+
+    @Override
+    public List<ServiceResponse> getAllServices() {
+        // Thường lấy các service ACTIVE để hiển thị trên trang chủ/danh sách chung
+        return serviceRepository.findByStatus("ACTIVE").stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<ServiceResponse> getAllByProviderId(Integer providerId) {
+        // Lấy tất cả dịch vụ của 1 provider (thường dùng cho trang quản lý của Provider)
+        // Không lọc status "ACTIVE" để họ thấy cả những cái đã xóa mềm hoặc đang ẩn
+        return serviceRepository.findByProviderId(providerId).stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
     }
 }

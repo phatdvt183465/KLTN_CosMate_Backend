@@ -5,6 +5,8 @@ import com.cosmate.dto.response.ServiceResponse;
 import java.util.List;
 
 public interface ServiceManagementService {
+    List<ServiceResponse> getAllServices();
+    List<ServiceResponse> getAllByProviderId(Integer providerId);
     ServiceResponse createService(ServiceRequest request);
     ServiceResponse updateService(Integer id, ServiceRequest request);
     List<ServiceResponse> getByProviderId(Integer providerId);

@@ -34,3 +34,7 @@ build/
 
 # Firebase config (contains secrets) - do not commit
 cosmate-firebase.json
+
+# Local environment file with secrets
+.env
+

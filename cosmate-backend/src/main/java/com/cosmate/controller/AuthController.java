@@ -12,6 +12,9 @@ import com.cosmate.security.JwtUtils;
 import com.cosmate.service.UserService;
 import com.cosmate.service.ActivationService;
 import com.cosmate.service.ProviderService;
+import com.cosmate.service.PasswordResetService;
+import com.cosmate.dto.request.ResetPasswordRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -19,6 +22,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -29,6 +33,7 @@ public class AuthController {
     private final JwtUtils jwtUtils;
     private final ProviderService providerService;
     private final ActivationService activationService;
+    private final PasswordResetService passwordResetService;
 
     // Only accept JSON register requests (no avatar upload through this API)
     @PostMapping(value = "/register", consumes = { MediaType.APPLICATION_JSON_VALUE })
@@ -127,11 +132,55 @@ public class AuthController {
     public ResponseEntity<Void> activate(@RequestParam("token") String token) {
         try {
             activationService.activate(token);
-            String redirect = frontendUrl + "/login?activated=1";
+            String redirect = frontendUrl + "/login";
             return ResponseEntity.status(302).header("Location", redirect).build();
         } catch (Exception ex) {
-            String redirect = frontendUrl + "/login?activated=0";
+            String redirect = frontendUrl + "/login";
             return ResponseEntity.status(302).header("Location", redirect).build();
+        }
+    }
+
+    // Request a password reset link to be sent to email (identifier = email or username)
+    @PostMapping("/password-reset-request")
+    public ResponseEntity<ApiResponse<Void>> requestPasswordReset(@Valid @RequestBody com.cosmate.dto.request.PasswordResetRequest request) {
+        String identifier = request.getIdentifier();
+        ApiResponse<Void> api = new ApiResponse<>();
+        try {
+            passwordResetService.createTokenForIdentifier(identifier);
+            api.setCode(0);
+            api.setMessage("OK");
+            api.setResult(null);
+            return ResponseEntity.ok(api);
+        } catch (Exception ex) {
+            api.setCode(1);
+            api.setMessage(ex.getMessage());
+            api.setResult(null);
+            return ResponseEntity.badRequest().body(api);
+        }
+    }
+
+    // Link the user clicks in email -> backend validates and then redirects to frontend reset page with token
+    @GetMapping("/password-reset")
+    public ResponseEntity<Void> passwordResetRedirect(@RequestParam("token") String token) {
+        String redirect = frontendUrl + "/reset-password?token=" + token;
+        return ResponseEntity.status(302).header("Location", redirect).build();
+    }
+
+    // Frontend will post new password + token to backend to complete reset
+    @PostMapping("/password-reset")
+    public ResponseEntity<ApiResponse<Void>> performPasswordReset(@Valid @RequestBody ResetPasswordRequest request) {
+        ApiResponse<Void> api = new ApiResponse<>();
+        try {
+            passwordResetService.resetPassword(request.getToken(), request.getNewPassword());
+            api.setCode(0);
+            api.setMessage("OK");
+            api.setResult(null);
+            return ResponseEntity.ok(api);
+        } catch (Exception ex) {
+            api.setCode(1);
+            api.setMessage(ex.getMessage());
+            api.setResult(null);
+            return ResponseEntity.badRequest().body(api);
         }
     }
 }

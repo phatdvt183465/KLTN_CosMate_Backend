@@ -1,10 +1,10 @@
 package com.cosmate.service.impl;
 
-import com.cosmate.entity.ActivationToken;
+import com.cosmate.entity.Token;
 import com.cosmate.entity.User;
 import com.cosmate.exception.AppException;
 import com.cosmate.exception.ErrorCode;
-import com.cosmate.repository.ActivationTokenRepository;
+import com.cosmate.repository.TokenRepository;
 import com.cosmate.repository.UserRepository;
 import com.cosmate.service.ActivationService;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +26,7 @@ public class ActivationServiceImpl implements ActivationService {
 
     private static final Logger logger = LoggerFactory.getLogger(ActivationServiceImpl.class);
 
-    private final ActivationTokenRepository tokenRepository;
+    private final TokenRepository tokenRepository;
     private final UserRepository userRepository;
     private final JavaMailSender mailSender;
 
@@ -41,17 +41,18 @@ public class ActivationServiceImpl implements ActivationService {
 
     @Override
     @Transactional
-    public ActivationToken createTokenForUser(User user) {
+    public Token createTokenForUser(User user) {
         String token = UUID.randomUUID().toString();
         LocalDateTime now = LocalDateTime.now();
-        ActivationToken at = ActivationToken.builder()
+        Token at = Token.builder()
                 .token(token)
+                .type("ACTIVATION")
                 .user(user)
                 .createdAt(now)
                 .expiresAt(now.plusHours(tokenExpiryHours))
                 .used(false)
                 .build();
-        ActivationToken saved = tokenRepository.save(at);
+        Token saved = tokenRepository.save(at);
 
         // send email
         try {
@@ -77,9 +78,10 @@ public class ActivationServiceImpl implements ActivationService {
     @Override
     @Transactional
     public void activate(String token) {
-        Optional<ActivationToken> opt = tokenRepository.findByToken(token);
+        Optional<Token> opt = tokenRepository.findByToken(token);
         if (opt.isEmpty()) throw new AppException(ErrorCode.INVALID_KEY);
-        ActivationToken at = opt.get();
+        Token at = opt.get();
+        if (!"ACTIVATION".equalsIgnoreCase(at.getType())) throw new AppException(ErrorCode.INVALID_KEY);
         if (Boolean.TRUE.equals(at.getUsed())) throw new AppException(ErrorCode.INVALID_KEY);
         if (at.getExpiresAt() != null && at.getExpiresAt().isBefore(LocalDateTime.now())) throw new AppException(ErrorCode.INVALID_KEY);
 

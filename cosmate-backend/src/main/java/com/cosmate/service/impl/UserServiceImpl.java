@@ -33,6 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
 import java.net.HttpURLConnection;
@@ -106,6 +107,9 @@ public class UserServiceImpl implements UserService {
                 .email(request.getEmail())
                 .phone(request.getPhone())
                 .role(roleEntity);
+
+        // set createdAt timestamp for new users
+        builder.createdAt(LocalDateTime.now());
 
         if (request.getFullName() != null) builder.fullName(request.getFullName());
         if (avatarUrl != null) builder.avatarUrl(avatarUrl);

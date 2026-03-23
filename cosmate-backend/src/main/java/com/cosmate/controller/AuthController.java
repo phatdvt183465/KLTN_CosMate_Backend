@@ -10,8 +10,10 @@ import com.cosmate.dto.response.UserResponse;
 import com.cosmate.entity.User;
 import com.cosmate.security.JwtUtils;
 import com.cosmate.service.UserService;
+import com.cosmate.service.ActivationService;
 import com.cosmate.service.ProviderService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -26,6 +28,7 @@ public class AuthController {
     private final UserService userService;
     private final JwtUtils jwtUtils;
     private final ProviderService providerService;
+    private final ActivationService activationService;
 
     // Only accept JSON register requests (no avatar upload through this API)
     @PostMapping(value = "/register", consumes = { MediaType.APPLICATION_JSON_VALUE })
@@ -114,5 +117,21 @@ public class AuthController {
         api.setMessage("OK");
         api.setResult(auth);
         return ResponseEntity.ok(api);
+    }
+
+    @Value("${frontend.url:http://localhost:5173}")
+    private String frontendUrl;
+
+    // Activation endpoint used by frontend link
+    @GetMapping("/activate")
+    public ResponseEntity<Void> activate(@RequestParam("token") String token) {
+        try {
+            activationService.activate(token);
+            String redirect = frontendUrl + "/login?activated=1";
+            return ResponseEntity.status(302).header("Location", redirect).build();
+        } catch (Exception ex) {
+            String redirect = frontendUrl + "/login?activated=0";
+            return ResponseEntity.status(302).header("Location", redirect).build();
+        }
     }
 }

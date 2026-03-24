@@ -37,7 +37,9 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
         service.setStatus("ACTIVE");
 
         handleAreas(service, request.getAreas());
-        handleAlbums(service, request.getAlbumFiles());
+        if (hasValidNewImages(request.getAlbumFiles())) {
+            handleAlbums(service, request.getAlbumFiles());
+        }
 
         return mapToResponse(serviceRepository.save(service));
     }
@@ -139,8 +141,8 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
     private void handleAlbums(Service service, List<MultipartFile> files) {
         if (files == null || files.isEmpty()) return;
 
-        // AI soi ảnh 18+
-        aiService.validateMultipleImageContents(files);
+//        // AI soi ảnh 18+
+//        aiService.validateMultipleImageContents(files);
         
         for (MultipartFile file : files) {
             if (file == null || file.isEmpty()) continue;

@@ -11,7 +11,6 @@ public class CreateServiceOrderRequest {
     private String bookingDate;
     private String timeSlot;
     private Integer numberOfHuman;
-    private BigDecimal depositSlotAmount;
     private BigDecimal rentSlotAmount;
     // the cosplayer (customer) for whom the provider creates the booking
     private Integer cosplayerId;

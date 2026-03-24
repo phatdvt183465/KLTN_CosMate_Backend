@@ -95,9 +95,9 @@ public class ServiceOrderController {
                 return ApiResponse.<OrderResponse>builder().code(400).message("Invalid bookingDate format, expected yyyy-MM-dd").build();
             }
 
-            // compute total amount: rentSlotAmount + depositSlotAmount (if provided)
+            // compute total amount: rentSlotAmount + depositAmount from Service (if provided)
             java.math.BigDecimal rent = req.getRentSlotAmount() == null ? java.math.BigDecimal.ZERO : req.getRentSlotAmount();
-            java.math.BigDecimal deposit = req.getDepositSlotAmount() == null ? java.math.BigDecimal.ZERO : req.getDepositSlotAmount();
+            java.math.BigDecimal deposit = s.getDepositAmount() == null ? java.math.BigDecimal.ZERO : s.getDepositAmount();
             java.math.BigDecimal total = rent.add(deposit);
 
             // create Order with type RENT_SERVICE and status UNCONFIRM

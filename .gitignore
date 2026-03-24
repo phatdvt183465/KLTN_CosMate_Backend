@@ -50,3 +50,4 @@ cosmate-firebase.json
 # Local environment file with secrets
 .env
 
+src/main/resources/application-dev.properties

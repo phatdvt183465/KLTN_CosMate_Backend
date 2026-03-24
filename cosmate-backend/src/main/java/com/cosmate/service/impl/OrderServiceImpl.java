@@ -138,6 +138,25 @@ public class OrderServiceImpl implements OrderService {
         order = orderRepository.save(order);
         final Integer savedOrderId = order.getId();
 
+        // notify provider that a new order has been created (UNPAID)
+        try {
+            // try to fetch provider user id
+            com.cosmate.entity.Provider provEntity = null;
+            try { provEntity = providerService.getById(providerId); } catch (Exception ignored) { provEntity = null; }
+            Integer providerUserId = (provEntity != null) ? provEntity.getUserId() : null;
+            if (providerUserId != null) {
+                com.cosmate.entity.Notification pn = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(providerUserId).build())
+                        .type("ORDER_STATUS")
+                        .header("Đơn hàng mới")
+                        .content("Đơn hàng #" + order.getId() + " đã được tạo và đang chờ xử lý (UNPAID).")
+                        .sendAt(LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(pn);
+            }
+        } catch (Exception ignored) {}
+
         // Create OrderDetail for the single costume
         OrderDetail od = OrderDetail.builder()
                 .orderId(order.getId())
@@ -293,6 +312,23 @@ public class OrderServiceImpl implements OrderService {
                         .isRead(false)
                         .build();
                 notificationService.create(n);
+                // notify provider as well
+                try {
+                    com.cosmate.entity.Provider provEntity = null;
+                    try { provEntity = providerService.getById(providerId); } catch (Exception ignored2) { provEntity = null; }
+                    Integer provUserId = provEntity == null ? null : provEntity.getUserId();
+                    if (provUserId != null) {
+                        com.cosmate.entity.Notification pn = com.cosmate.entity.Notification.builder()
+                                .user(com.cosmate.entity.User.builder().id(provUserId).build())
+                                .type("ORDER_STATUS")
+                                .header("Đơn hàng đã được thanh toán")
+                                .content("Đơn hàng #" + order.getId() + " đã được khách hàng thanh toán.")
+                                .sendAt(LocalDateTime.now())
+                                .isRead(false)
+                                .build();
+                        notificationService.create(pn);
+                    }
+                } catch (Exception ignored2) {}
             } catch (Exception ignored) {}
             resp.setStatus(order.getStatus());
             return resp;
@@ -378,6 +414,23 @@ public class OrderServiceImpl implements OrderService {
                         .isRead(false)
                         .build();
                 notificationService.create(n);
+                // notify provider as well
+                try {
+                    com.cosmate.entity.Provider provEntity = null;
+                    try { provEntity = providerService.getById(order.getProviderId()); } catch (Exception ignored2) { provEntity = null; }
+                    Integer provUserId = provEntity == null ? null : provEntity.getUserId();
+                    if (provUserId != null) {
+                        com.cosmate.entity.Notification pn = com.cosmate.entity.Notification.builder()
+                                .user(com.cosmate.entity.User.builder().id(provUserId).build())
+                                .type("ORDER_STATUS")
+                                .header("Đơn hàng đã được thanh toán")
+                                .content("Đơn hàng #" + order.getId() + " đã được khách hàng thanh toán.")
+                                .sendAt(LocalDateTime.now())
+                                .isRead(false)
+                                .build();
+                        notificationService.create(pn);
+                    }
+                } catch (Exception ignored2) {}
             } catch (Exception ignored) {}
             resp.setStatus(order.getStatus());
             return resp;

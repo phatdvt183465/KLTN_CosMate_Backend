@@ -100,6 +100,7 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
         if (request.getMaxPrice() != null) service.setMaxPrice(request.getMaxPrice());
         if (request.getEquipmentDepreciationCost() != null)
             service.setEquipmentDepreciationCost(request.getEquipmentDepreciationCost());
+        if (request.getDepositAmount() != null) service.setDepositAmount(request.getDepositAmount());
 
         if (hasText(request.getAreas())) {
             service.getAreas().clear();
@@ -178,6 +179,7 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
         s.setMaxPrice(r.getMaxPrice());
         s.setEquipmentDepreciationCost(r.getEquipmentDepreciationCost());
         s.setProviderId(r.getProviderId());
+        s.setDepositAmount(r.getDepositAmount());
     }
 
     private ServiceResponse mapToResponse(Service s) {
@@ -192,6 +194,7 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
                 .equipmentDepreciationCost(s.getEquipmentDepreciationCost())
                 .status(s.getStatus())
                 .providerId(s.getProviderId())
+                .depositAmount(s.getDepositAmount())
                 .areas(s.getAreas().stream()
                         .map(a -> a.getDistrict() + ", " + a.getCity())
                         .collect(Collectors.toList()))
@@ -214,6 +217,14 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
         // Lấy tất cả dịch vụ của 1 provider (thường dùng cho trang quản lý của Provider)
         // Không lọc status "ACTIVE" để họ thấy cả những cái đã xóa mềm hoặc đang ẩn
         return serviceRepository.findByProviderId(providerId).stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<ServiceResponse> getByServiceType(String serviceType) {
+        // Lấy danh sách service đang ACTIVE theo loại (VD: Makeup, Photographer...)
+        return serviceRepository.findByServiceTypeAndStatus(serviceType, "ACTIVE").stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }

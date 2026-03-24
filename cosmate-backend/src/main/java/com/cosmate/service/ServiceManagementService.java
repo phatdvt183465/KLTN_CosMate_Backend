@@ -12,4 +12,5 @@ public interface ServiceManagementService {
     List<ServiceResponse> getByProviderId(Integer providerId);
     ServiceResponse getById(Integer id);
     void deleteService(Integer id);
+    List<ServiceResponse> getByServiceType(String serviceType);
 }

@@ -44,6 +44,9 @@ public class Service {
     @Column(name = "max_price")
     private BigDecimal maxPrice;
 
+    @Column(name = "deposit_amount")
+    private BigDecimal depositAmount;
+
     @OneToMany(mappedBy = "service", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ServiceArea> areas = new ArrayList<>();
 

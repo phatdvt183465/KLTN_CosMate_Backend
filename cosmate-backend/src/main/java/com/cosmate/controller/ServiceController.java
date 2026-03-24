@@ -68,4 +68,11 @@ public class ServiceController {
                 .result(serviceManagementService.getAllByProviderId(providerId))
                 .build();
     }
+
+    @GetMapping("/type/{serviceType}")
+    public ApiResponse<List<ServiceResponse>> getByServiceType(@PathVariable String serviceType) {
+        return ApiResponse.<List<ServiceResponse>>builder()
+                .result(serviceManagementService.getByServiceType(serviceType))
+                .build();
+    }
 }

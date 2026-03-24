@@ -15,6 +15,7 @@ public class ServiceResponse {
     private BigDecimal pricePerSlot;
     private BigDecimal equipmentDepreciationCost;
     private String status;
+    private BigDecimal depositAmount;
     private Integer providerId;
     private List<String> areas;
     private List<String> imageUrls;

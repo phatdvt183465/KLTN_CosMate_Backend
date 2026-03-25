@@ -12,6 +12,7 @@ public class ServiceRequest {
     private Integer slotDurationHours; // Số giờ mỗi slot
     private BigDecimal pricePerSlot; // Giá mỗi slot
     private BigDecimal equipmentDepreciationCost; // Chi phí khấu hao thiết bị
+    private BigDecimal depositAmount;
     private Integer providerId;
     private String areas; // JSON chuỗi: [{"city":"...","district":"..."}]
     private List<MultipartFile> albumFiles;

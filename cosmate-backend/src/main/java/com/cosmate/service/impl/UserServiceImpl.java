@@ -33,6 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
 import java.net.HttpURLConnection;
@@ -53,6 +54,7 @@ public class UserServiceImpl implements UserService {
     private final FirebaseStorageService firebaseStorageService;
     private final WalletService walletService;
     private final ProviderService providerService;
+    private final com.cosmate.service.ActivationService activationService;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -106,6 +108,9 @@ public class UserServiceImpl implements UserService {
                 .phone(request.getPhone())
                 .role(roleEntity);
 
+        // set createdAt timestamp for new users
+        builder.createdAt(LocalDateTime.now());
+
         if (request.getFullName() != null) builder.fullName(request.getFullName());
         if (avatarUrl != null) builder.avatarUrl(avatarUrl);
 
@@ -117,6 +122,25 @@ public class UserServiceImpl implements UserService {
         }
 
         User saved = userRepository.save(user);
+
+        // If COSPLAYER or provider role -> mark as INACTIVE and send activation email
+        try {
+            if (saved.getRole() != null) {
+                Role savedEnum = null;
+                try { savedEnum = Role.valueOf(saved.getRole().getRoleName()); } catch (IllegalArgumentException ignored) {}
+                if (savedEnum != null && (savedEnum == Role.COSPLAYER || RoleUtils.isProviderRole(savedEnum))) {
+                    saved.setStatus("INACTIVE");
+                    saved = userRepository.save(saved);
+                    try {
+                        activationService.createTokenForUser(saved);
+                    } catch (Exception e) {
+                        logger.error("Failed to create/send activation token for user {}: {}", saved.getId(), e.getMessage(), e);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error while setting INACTIVE and sending activation for user {}: {}", saved.getId(), e.getMessage(), e);
+        }
 
         // create wallet for COSPLAYER or provider roles
         try {
@@ -154,6 +178,7 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new AppException(ErrorCode.INVALID_CREDENTIALS));
 
         if (user.getStatus() != null && "BANNED".equalsIgnoreCase(user.getStatus())) throw new AppException(ErrorCode.ACCOUNT_BANNED);
+        if (user.getStatus() != null && "INACTIVE".equalsIgnoreCase(user.getStatus())) throw new AppException(ErrorCode.ACCOUNT_NOT_ACTIVATED);
         if (user.getPasswordHash() == null) throw new AppException(ErrorCode.INVALID_CREDENTIALS);
         if (!passwordEncoder.matches(password, user.getPasswordHash())) throw new AppException(ErrorCode.INVALID_CREDENTIALS);
 
@@ -316,6 +341,7 @@ public class UserServiceImpl implements UserService {
 
         User user = userRepository.findByEmail(email).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
         if (user.getStatus() != null && "BANNED".equalsIgnoreCase(user.getStatus())) throw new AppException(ErrorCode.ACCOUNT_BANNED);
+        if (user.getStatus() != null && "INACTIVE".equalsIgnoreCase(user.getStatus())) throw new AppException(ErrorCode.ACCOUNT_NOT_ACTIVATED);
 
         List<String> roles = user.getRole() == null ? Collections.emptyList() : List.of(user.getRole().getRoleName());
         Long userIdLong = user.getId() == null ? null : user.getId().longValue();

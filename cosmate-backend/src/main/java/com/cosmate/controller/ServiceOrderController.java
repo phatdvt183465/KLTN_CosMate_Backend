@@ -95,9 +95,9 @@ public class ServiceOrderController {
                 return ApiResponse.<OrderResponse>builder().code(400).message("Invalid bookingDate format, expected yyyy-MM-dd").build();
             }
 
-            // compute total amount: rentSlotAmount + depositSlotAmount (if provided)
+            // compute total amount: rentSlotAmount + depositAmount from Service (if provided)
             java.math.BigDecimal rent = req.getRentSlotAmount() == null ? java.math.BigDecimal.ZERO : req.getRentSlotAmount();
-            java.math.BigDecimal deposit = req.getDepositSlotAmount() == null ? java.math.BigDecimal.ZERO : req.getDepositSlotAmount();
+            java.math.BigDecimal deposit = s.getDepositAmount() == null ? java.math.BigDecimal.ZERO : s.getDepositAmount();
             java.math.BigDecimal total = rent.add(deposit);
 
             // create Order with type RENT_SERVICE and status UNCONFIRM
@@ -123,6 +123,19 @@ public class ServiceOrderController {
                     .rentSlotAmount(rent)
                     .build();
             orderServiceBookingRepository.save(osb);
+
+            // notify cosplayer that provider created a booking for them
+            try {
+                com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(cosplayerId).build())
+                        .type("ORDER_STATUS")
+                        .header("Nhà cung cấp đã tạo lịch dịch vụ")
+                        .content("Nhà cung cấp đã tạo lịch cho dịch vụ #" + s.getId() + " cho đơn hàng #" + order.getId() + ". Vui lòng xác nhận.")
+                        .sendAt(java.time.LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(n);
+            } catch (Exception ignored) {}
 
             OrderResponse resp = new OrderResponse();
             resp.setId(order.getId());
@@ -168,6 +181,24 @@ public class ServiceOrderController {
                         .isRead(false)
                         .build();
                 notificationService.create(n);
+            } catch (Exception ignored) {}
+
+            // notify provider that cosplayer has confirmed the booking
+            try {
+                com.cosmate.entity.Provider p = null;
+                try { p = providerService.getById(order.getProviderId()); } catch (Exception ignored2) { p = null; }
+                Integer providerUserId = p == null ? null : p.getUserId();
+                if (providerUserId != null) {
+                    com.cosmate.entity.Notification pn = com.cosmate.entity.Notification.builder()
+                            .user(com.cosmate.entity.User.builder().id(providerUserId).build())
+                            .type("ORDER_STATUS")
+                            .header("Đơn hàng đã được xác nhận bởi khách")
+                            .content("Khách hàng đã xác nhận đơn hàng #" + order.getId() + ". Vui lòng chuẩn bị dịch vụ.")
+                            .sendAt(java.time.LocalDateTime.now())
+                            .isRead(false)
+                            .build();
+                    notificationService.create(pn);
+                }
             } catch (Exception ignored) {}
 
             OrderResponse resp = new OrderResponse();
@@ -433,6 +464,26 @@ public class ServiceOrderController {
                         .isRead(false)
                         .build();
                 notificationService.create(n);
+            } catch (Exception ignored) {}
+
+            // notify provider about cancellation as well
+            try {
+                Integer providerUserId = null;
+                try {
+                    com.cosmate.entity.Provider provEntity = providerService.getById(order.getProviderId());
+                    if (provEntity != null) providerUserId = provEntity.getUserId();
+                } catch (Exception ignored2) { providerUserId = null; }
+                if (providerUserId != null) {
+                    com.cosmate.entity.Notification pn = com.cosmate.entity.Notification.builder()
+                            .user(com.cosmate.entity.User.builder().id(providerUserId).build())
+                            .type("ORDER_STATUS")
+                            .header("Đơn hàng bị hủy")
+                            .content("Đơn hàng #" + order.getId() + " đã bị hủy.")
+                            .sendAt(java.time.LocalDateTime.now())
+                            .isRead(false)
+                            .build();
+                    notificationService.create(pn);
+                }
             } catch (Exception ignored) {}
 
             OrderResponse resp = new OrderResponse();

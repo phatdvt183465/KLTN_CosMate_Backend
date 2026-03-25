@@ -417,6 +417,26 @@ public class OrderController {
                 notificationService.create(n);
             } catch (Exception ignored) {}
 
+            // notify provider about cancellation
+            try {
+                Integer providerUserId = null;
+                try {
+                    com.cosmate.entity.Provider prov = providerService.getById(order.getProviderId());
+                    if (prov != null) providerUserId = prov.getUserId();
+                } catch (Exception ignored2) { providerUserId = null; }
+                if (providerUserId != null) {
+                    com.cosmate.entity.Notification pn = com.cosmate.entity.Notification.builder()
+                            .user(com.cosmate.entity.User.builder().id(providerUserId).build())
+                            .type("ORDER_STATUS")
+                            .header("Đơn hàng bị hủy")
+                            .content("Đơn hàng #" + order.getId() + " đã bị hủy.")
+                            .sendAt(java.time.LocalDateTime.now())
+                            .isRead(false)
+                            .build();
+                    notificationService.create(pn);
+                }
+            } catch (Exception ignored) {}
+
             // set related costumes back to AVAILABLE when order is cancelled
             try {
                 List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
@@ -682,6 +702,26 @@ public class OrderController {
                         .isRead(false)
                         .build();
                 notificationService.create(n);
+            } catch (Exception ignored) {}
+
+            // notify provider that cosplayer has confirmed delivery
+            try {
+                Integer providerUserId = null;
+                try {
+                    com.cosmate.entity.Provider prov = providerService.getById(order.getProviderId());
+                    if (prov != null) providerUserId = prov.getUserId();
+                } catch (Exception ignored2) { providerUserId = null; }
+                if (providerUserId != null) {
+                    com.cosmate.entity.Notification pn = com.cosmate.entity.Notification.builder()
+                            .user(com.cosmate.entity.User.builder().id(providerUserId).build())
+                            .type("ORDER_STATUS")
+                            .header("Khách đã xác nhận nhận hàng")
+                            .content("Khách hàng đã xác nhận nhận hàng cho đơn #" + order.getId() + ".")
+                            .sendAt(java.time.LocalDateTime.now())
+                            .isRead(false)
+                            .build();
+                    notificationService.create(pn);
+                }
             } catch (Exception ignored) {}
 
             // Mark any images that were uploaded during SHIPPING_OUT as confirmed

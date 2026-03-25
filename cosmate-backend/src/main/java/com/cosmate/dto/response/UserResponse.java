@@ -12,6 +12,7 @@ public class UserResponse implements CrudDto<Integer> {
     private String email;
     private String fullName;
     private String avatarUrl;
+    private String role;
     private String phone;
     private String status;
 }

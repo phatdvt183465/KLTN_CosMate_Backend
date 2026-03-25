@@ -4,6 +4,8 @@ import com.cosmate.base.crud.dto.FilterOperator;
 import com.cosmate.base.spec.FilterField;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class UserFilter {
     @FilterField(operator = FilterOperator.LIKE, ignoreCase = true)
@@ -14,4 +16,7 @@ public class UserFilter {
 
     @FilterField(operator = FilterOperator.EQUAL)
     private String status;
+
+    @FilterField(operator = FilterOperator.IN, entityField = "role.roleName")
+    private List<String> role;
 }

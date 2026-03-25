@@ -1,6 +1,7 @@
 package com.cosmate.service;
 
 import com.cosmate.dto.request.UpdateProviderRequest;
+import com.cosmate.dto.response.ProviderResponse;
 import com.cosmate.entity.Provider;
 
 import java.util.List;
@@ -14,4 +15,5 @@ public interface ProviderService {
     Provider updateAvatarForUser(Integer userId, String avatarUrl);
     Provider updateCoverImageForUser(Integer userId, String coverImageUrl);
     List<Provider> listAllProviders();
+    List<ProviderResponse> getProvidersByRole(String roleName);
 }

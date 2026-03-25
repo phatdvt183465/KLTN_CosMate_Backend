@@ -286,4 +286,12 @@ public class ProviderController {
                 .totalReviews(p.getTotalReviews())
                 .build();
     }
+
+    @GetMapping("/role/{roleName}")
+    public ApiResponse<List<ProviderResponse>> getProvidersByRole(@PathVariable String roleName) {
+        return ApiResponse.<List<ProviderResponse>>builder()
+                .result(providerService.getProvidersByRole(roleName))
+                .message("Lấy danh sách Provider theo vai trò thành công")
+                .build();
+    }
 }

@@ -1,6 +1,7 @@
 package com.cosmate.service.impl;
 
 import com.cosmate.dto.request.UpdateProviderRequest;
+import com.cosmate.dto.response.ProviderResponse;
 import com.cosmate.entity.Provider;
 import com.cosmate.exception.AppException;
 import com.cosmate.exception.ErrorCode;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -99,5 +101,32 @@ public class ProviderServiceImpl implements ProviderService {
     @Override
     public List<Provider> listAllProviders() {
         return providerRepository.findAll();
+    }
+
+    @Override
+    public List<ProviderResponse> getProvidersByRole(String roleName) {
+        return providerRepository.findProvidersByRoleName(roleName).stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    private ProviderResponse mapToResponse(Provider p) {
+        return ProviderResponse.builder()
+                .id(p.getId())
+                .userId(p.getUserId())
+                .shopName(p.getShopName())
+                .shopAddressId(p.getShopAddressId())
+                .avatarUrl(p.getAvatarUrl())
+                .coverImageUrl(p.getCoverImageUrl())
+                .bio(p.getBio())
+
+                .bankAccountNumber(p.getBankAccountNumber())
+                .bankName(p.getBankName())
+
+                .verified(p.getVerified())
+                .completedOrders(p.getCompletedOrders())
+                .totalRating(p.getTotalRating())
+                .totalReviews(p.getTotalReviews())
+                .build();
     }
 }

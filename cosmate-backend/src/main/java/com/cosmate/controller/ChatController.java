@@ -3,6 +3,7 @@ package com.cosmate.controller;
 import com.cosmate.dto.request.ChatMessageRequest;
 import com.cosmate.dto.response.ApiResponse;
 import com.cosmate.dto.response.ChatMessageResponse;
+import com.cosmate.dto.response.ChatPartnerProfileResponse;
 import com.cosmate.entity.ChatRoom;
 import com.cosmate.service.ChatService;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,18 @@ public class ChatController {
         return ApiResponse.<List<ChatMessageResponse>>builder()
                 .result(chatService.getMessageHistory(roomId))
                 .message("Lấy lịch sử tin nhắn thành công")
+                .build();
+    }
+
+    // API Lấy thông tin người đang chat cùng (Partner Profile) để auto-fill form tạo đơn
+    @GetMapping("/room/{roomId}/partner")
+    public ApiResponse<ChatPartnerProfileResponse> getPartnerProfile(
+            @PathVariable Integer roomId,
+            @RequestParam Integer currentUserId) {
+
+        return ApiResponse.<ChatPartnerProfileResponse>builder()
+                .result(chatService.getPartnerProfile(roomId, currentUserId))
+                .message("Lấy thông tin đối tác thành công")
                 .build();
     }
 

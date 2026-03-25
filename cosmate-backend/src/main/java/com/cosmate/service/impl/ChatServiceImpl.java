@@ -2,10 +2,12 @@ package com.cosmate.service.impl;
 
 import com.cosmate.dto.request.ChatMessageRequest;
 import com.cosmate.dto.response.ChatMessageResponse;
+import com.cosmate.dto.response.ChatPartnerProfileResponse;
 import com.cosmate.entity.ChatMessage;
 import com.cosmate.entity.ChatRoom;
 import com.cosmate.repository.ChatMessageRepository;
 import com.cosmate.repository.ChatRoomRepository;
+import com.cosmate.repository.UserRepository;
 import com.cosmate.service.ChatService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -22,6 +24,7 @@ public class ChatServiceImpl implements ChatService {
     private final ChatRoomRepository chatRoomRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final UserRepository userRepository;
 
     @Override
     public ChatRoom getOrCreateRoom(Integer user1Id, Integer user2Id) {
@@ -75,5 +78,31 @@ public class ChatServiceImpl implements ChatService {
                 .createdAt(message.getCreatedAt())
                 .isRead(message.getIsRead())
                 .build();
+    }
+    @Override
+    public ChatPartnerProfileResponse getPartnerProfile(Integer roomId, Integer currentUserId) {
+        // 1. Lấy phòng chat ra
+        ChatRoom room = chatRoomRepository.findById(roomId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy phòng chat!"));
+
+        // 2. Tìm ID của người đối diện
+        Integer partnerId;
+        if (room.getUser1Id().equals(currentUserId)) {
+            partnerId = room.getUser2Id();
+        } else if (room.getUser2Id().equals(currentUserId)) {
+            partnerId = room.getUser1Id();
+        } else {
+            throw new RuntimeException("Bạn không thuộc phòng chat này!");
+        }
+
+        // 3. Lấy thông tin Tên và Avatar từ bảng Users
+        // Giả sử class User của ông có các hàm getFullName() và getAvatarUrl()
+        return userRepository.findById(partnerId)
+                .map(user -> ChatPartnerProfileResponse.builder()
+                        .partnerId(user.getId())
+                        .fullName(user.getFullName())
+                        .avatarUrl(user.getAvatarUrl())
+                        .build())
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin đối tác!"));
     }
 }

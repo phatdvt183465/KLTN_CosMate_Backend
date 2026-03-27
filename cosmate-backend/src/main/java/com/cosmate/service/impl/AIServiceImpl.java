@@ -336,31 +336,117 @@ public class AIServiceImpl implements AIService {
         return (normA == 0 || normB == 0) ? 0.0 : dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 
-//    @Override
-//    public String generateVectorForText(String text) {
-//        try {
-//            // Sử dụng lại hàm callGeminiGetVector đã viết sẵn
-//            List<Double> vector = callGeminiGetVector(text);
-//            return objectMapper.writeValueAsString(vector);
-//        } catch (Exception e) {
-//            log.error("Lỗi khi tạo vector nhúng (embedding) từ text: {}", e.getMessage());
-//            return null;
-//        }
-//    }
-
     @Override
     public String generateVectorForText(String text) {
-        // Tạm thời bỏ try-catch để xem rốt cuộc nó đang bị lỗi gì
-        List<Double> vector = callGeminiGetVector(text);
-
-        if (vector == null || vector.isEmpty()) {
-            throw new RuntimeException("API Gemini trả về vector rỗng!");
-        }
-
         try {
+            // Sử dụng lại hàm callGeminiGetVector đã viết sẵn
+            List<Double> vector = callGeminiGetVector(text);
             return objectMapper.writeValueAsString(vector);
         } catch (Exception e) {
-            throw new RuntimeException("Lỗi ép kiểu JSON: " + e.getMessage());
+            log.error("Lỗi khi tạo vector nhúng (embedding) từ text: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    @Override
+    public void generateVectorsForMissingImages() {
+        // 1. Lấy toàn bộ ảnh trong DB
+        List<CostumeImage> allImages = costumeImageRepository.findAll();
+        List<CostumeImage> imagesToUpdate = new ArrayList<>();
+
+        int successCount = 0;
+
+        // 2. Lọc ra những ảnh đang bị null hoặc rỗng ở cột image_vector
+        for (CostumeImage img : allImages) {
+            if (img.getImageVector() == null || img.getImageVector().trim().isEmpty()) {
+                if (img.getCostume() != null) {
+                    try {
+                        // Lấy Tên + Mô tả để tạo Vector
+                        String textForVector = img.getCostume().getName() + " " + img.getCostume().getDescription();
+                        String vectorStr = generateVectorForText(textForVector);
+
+                        if (vectorStr != null && !vectorStr.isEmpty()) {
+                            img.setImageVector(vectorStr);
+                            imagesToUpdate.add(img);
+                            successCount++;
+                            log.info("Đã tạo thành công vector cho ảnh ID: {}", img.getId());
+                        }
+                    } catch (Exception e) {
+                        log.error("Lỗi khi tạo vector cho ảnh ID {}: {}", img.getId(), e.getMessage());
+                        // Bỏ qua lỗi để vòng lặp chạy tiếp các ảnh khác
+                    }
+                }
+            }
+        }
+
+        // 3. Lưu hàng loạt xuống DB
+        if (!imagesToUpdate.isEmpty()) {
+            costumeImageRepository.saveAll(imagesToUpdate);
+            log.info("Đã quét và cập nhật thành công tổng cộng {} vectors!", successCount);
+        } else {
+            log.info("Không có ảnh nào cần cập nhật vector.");
+        }
+    }
+
+    @Override
+    public String generateCostumeDescription(List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) return null;
+
+        try {
+            // 1. Tạo URL sạch giống luồng kiểm duyệt
+            String url = GENERATION_MODEL_URL + "?key=" + apiKey;
+
+            ObjectNode body = objectMapper.createObjectNode();
+            ArrayNode partsNode = objectMapper.createArrayNode();
+
+            // 2. [PROMPT THẦN THÁNH] Ép AI tả chi tiết theo góc nhìn thị giác
+            ObjectNode textPart = objectMapper.createObjectNode();
+            textPart.put("text", "Bạn là một chuyên gia về trang phục cosplay. Hãy nhìn vào những hình ảnh đính kèm và tạo ra một đoạn mô tả chi tiết, hấp dẫn và chính xác cho bộ đồ này để đăng bán trên sàn thương mại điện tử CosMate. Tập trung vào kiểu dáng, màu sắc, hoa văn, vật liệu nhìn thấy được và nhân vật/anime tham chiếu nếu có. Hãy làm cho mô tả trở nên thu hút người thuê/mua. Chỉ trả về văn bản mô tả, không kèm theo lời dẫn.");
+            partsNode.add(textPart);
+
+            // 3. Mã hóa toàn bộ ảnh sang Base64 giống luồng kiểm duyệt
+            for (MultipartFile file : files) {
+                if (file == null || file.isEmpty()) continue;
+
+                String base64Image = java.util.Base64.getEncoder().encodeToString(file.getBytes());
+                String mimeType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
+
+                ObjectNode inlineData = objectMapper.createObjectNode();
+                inlineData.put("mime_type", mimeType);
+                inlineData.put("data", base64Image);
+
+                ObjectNode imagePart = objectMapper.createObjectNode();
+                imagePart.set("inline_data", inlineData);
+                partsNode.add(imagePart);
+            }
+
+            // 4. Build payload JSON và gửi request
+            ObjectNode contentNode = objectMapper.createObjectNode();
+            contentNode.set("parts", partsNode);
+            ArrayNode contentsArray = objectMapper.createArrayNode();
+            contentsArray.add(contentNode);
+            body.set("contents", contentsArray);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
+
+            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
+
+            // 5. Bóc tách văn bản mô tả trả về
+            if (response != null && response.has("candidates")) {
+                String resultText = response.path("candidates").get(0)
+
+                        .path("content").path("parts").get(0)
+                        .path("text").asText().trim();
+
+                // Loại bỏ mấy cái dấu markdown (như ** hay #) nếu AI có lỡ tay thêm vào
+                return resultText.replaceAll("[*#_]", "");
+            }
+            return "Không thể generate được description, vui lòng tả thủ công.";
+        } catch (Exception e) {
+            log.error("Lỗi khi AI generate description hàng loạt: {}", e.getMessage());
+            return "Lỗi khi generate description: " + e.getMessage();
         }
     }
 }

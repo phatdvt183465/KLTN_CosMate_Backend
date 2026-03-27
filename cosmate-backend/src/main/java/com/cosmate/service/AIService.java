@@ -32,4 +32,10 @@ public interface AIService {
 
     // --- CHẤM ĐIỂM ---
     PoseScoringResponse scorePose(PoseScoringRequest request);
+
+    // API dọn dẹp: Cập nhật vector cho toàn bộ ảnh cũ bị thiếu
+    void generateVectorsForMissingImages();
+
+    // Tiện ích: AI tự động viết mô tả chi tiết cho trang phục dựa trên ảnh
+    String generateCostumeDescription(List<MultipartFile> files);
 }

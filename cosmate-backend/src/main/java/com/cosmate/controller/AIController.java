@@ -10,6 +10,7 @@ import com.cosmate.service.AIService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -50,6 +51,25 @@ public class AIController {
         return ApiResponse.<PoseScoringResponse>builder()
                 .result(aiService.scorePose(request))
                 .message("Chấm điểm thành công!")
+                .build();
+    }
+
+    // API tool: Quét và tạo vector cho các ảnh cũ bị thiếu
+    @PostMapping("/generate-missing-vectors")
+    public ApiResponse<Void> generateMissingVectors() {
+        aiService.generateVectorsForMissingImages();
+        return ApiResponse.<Void>builder()
+                .message("Đang chạy ngầm quá trình quét và cập nhật Vector. Vui lòng check Console log!")
+                .build();
+    }
+
+    // Tiện ích: AI tự động viết mô tả chi tiết cho trang phục dựa trên ảnh
+    @PostMapping("/generate-description")
+    public ApiResponse<String> generateDescription(@RequestParam("files") List<MultipartFile> files) {
+        String description = aiService.generateCostumeDescription(files);
+        return ApiResponse.<String>builder()
+                .message("Tạo mô tả thành công!")
+                .result(description)
                 .build();
     }
 }

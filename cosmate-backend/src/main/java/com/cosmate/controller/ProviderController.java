@@ -27,7 +27,6 @@ import java.util.stream.Collectors;
 public class ProviderController {
 
     private final ProviderService providerService;
-    private final com.cosmate.service.FirebaseStorageService firebaseStorageService;
     private static final Logger log = LoggerFactory.getLogger(ProviderController.class);
 
     private Integer getCurrentUserId() {
@@ -68,8 +67,7 @@ public class ProviderController {
     public ResponseEntity<ApiResponse<List<ProviderPublicResponse>>> listProviders() {
         ApiResponse<List<ProviderPublicResponse>> api = new ApiResponse<>();
         try {
-            List<Provider> providers = providerService.listAllProviders();
-            List<ProviderPublicResponse> resp = providers.stream().map(this::toPublicResponse).collect(Collectors.toList());
+            List<ProviderPublicResponse> resp = providerService.listAllProvidersPublic();
             api.setCode(0);
             api.setMessage("OK");
             api.setResult(resp);
@@ -87,13 +85,10 @@ public class ProviderController {
     public ResponseEntity<ApiResponse<ProviderResponse>> getByProviderId(@PathVariable("providerId") Integer providerId) {
         ApiResponse<ProviderResponse> api = new ApiResponse<>();
         try {
+            // fetch provider to decide bank info visibility
             Provider p = providerService.getById(providerId);
-            ProviderResponse resp = toResponse(p);
-            if (!isPrivilegedViewer(p)) {
-                // hide bank info for non-privileged viewers
-                resp.setBankAccountNumber(null);
-                resp.setBankName(null);
-            }
+            boolean includeBank = isPrivilegedViewer(p);
+            ProviderResponse resp = providerService.getResponseByProviderId(providerId, includeBank);
             api.setCode(0);
             api.setMessage("OK");
             api.setResult(resp);
@@ -118,11 +113,8 @@ public class ProviderController {
         ApiResponse<ProviderResponse> api = new ApiResponse<>();
         try {
             Provider p = providerService.getByUserId(userId);
-            ProviderResponse resp = toResponse(p);
-            if (!isPrivilegedViewer(p)) {
-                resp.setBankAccountNumber(null);
-                resp.setBankName(null);
-            }
+            boolean includeBank = isPrivilegedViewer(p);
+            ProviderResponse resp = providerService.getResponseByUserId(userId, includeBank);
             api.setCode(0);
             api.setMessage("OK");
             api.setResult(resp);
@@ -156,10 +148,12 @@ public class ProviderController {
             return ResponseEntity.status(403).body(api);
         }
         try {
-            Provider p = providerService.updateOwnProvider(currentUserId, request);
+            providerService.updateOwnProvider(currentUserId, request);
+            // owner can view full bank info
+            ProviderResponse resp = providerService.getResponseByUserId(currentUserId, true);
             api.setCode(0);
             api.setMessage("OK");
-            api.setResult(toResponse(p));
+            api.setResult(resp);
             return ResponseEntity.ok(api);
         } catch (AppException ae) {
             ErrorCode ec = ae.getErrorCode();
@@ -191,10 +185,12 @@ public class ProviderController {
         }
 
         try {
-            Provider p = providerService.setVerified(id, verified);
+            providerService.setVerified(id, verified);
+            // admin/staff may view full info
+            ProviderResponse resp = providerService.getResponseByProviderId(id, true);
             api.setCode(0);
             api.setMessage("OK");
-            api.setResult(toResponse(p));
+            api.setResult(resp);
             return ResponseEntity.ok(api);
         } catch (AppException ae) {
             ErrorCode ec = ae.getErrorCode();
@@ -227,17 +223,10 @@ public class ProviderController {
         }
 
         try {
-            // upload file to firebase
-            String filename = String.format("providers/%d/cover_%d", id, System.currentTimeMillis());
-            // preserve extension if possible
-            String original = coverImage.getOriginalFilename();
-            if (original != null && original.contains(".")) filename += original.substring(original.lastIndexOf('.'));
-            String url = firebaseStorageService.uploadFile(coverImage, filename);
-
-            Provider p = providerService.updateCoverImageForUser(id, url);
+            ProviderResponse resp = providerService.updateCoverImageForUserUpload(id, coverImage);
             api.setCode(0);
             api.setMessage("OK");
-            api.setResult(toResponse(p));
+            api.setResult(resp);
             return ResponseEntity.ok(api);
         } catch (com.cosmate.exception.AppException ae) {
             ErrorCode ec = ae.getErrorCode();

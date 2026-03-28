@@ -35,6 +35,8 @@ public class OrderServiceImpl implements OrderService {
 
     private final CostumeRepository costumeRepository;
     private final OrderRepository orderRepository;
+     private final com.cosmate.repository.ServiceRepository serviceRepository;
+    private final com.cosmate.repository.OrderServiceBookingRepository orderServiceBookingRepository;
     private final OrderDetailRepository orderDetailRepository;
     private final WalletService walletService;
     private final TransactionRepository transactionRepository;
@@ -51,6 +53,13 @@ public class OrderServiceImpl implements OrderService {
     private final com.cosmate.repository.CostumeRentalOptionRepository costumeRentalOptionRepository;
     private final com.cosmate.repository.OrderDetailAccessoryRepository orderDetailAccessoryRepository;
     private final com.cosmate.repository.OrderRentalOptionRepository orderRentalOptionRepository;
+    private final com.cosmate.repository.OrderImageRepository orderImageRepository;
+    private final com.cosmate.repository.OrderTrackingRepository orderTrackingRepository;
+    private final com.cosmate.service.FirebaseStorageService firebaseStorageService;
+
+    // user repository used for wallet creation fallback
+    private final com.cosmate.repository.UserRepository userRepository;
+
 
     @Override
     @Transactional
@@ -370,6 +379,358 @@ public class OrderServiceImpl implements OrderService {
         throw new IllegalArgumentException("Unsupported payment method: " + pm);
     }
 
+    // --- Service-order operations moved from ServiceOrderController ---
+    @Override
+    @Transactional
+    public OrderResponse providerCreateBooking(Integer providerUserId, com.cosmate.dto.request.CreateServiceOrderRequest req) throws Exception {
+        // validate provider
+        com.cosmate.entity.Provider prov = providerService.getByUserId(providerUserId);
+        if (prov == null) throw new IllegalArgumentException("User is not a provider");
+
+        if (req.getServiceId() == null) throw new IllegalArgumentException("serviceId is required");
+        Optional<com.cosmate.entity.Service> sopt = serviceRepository.findById(req.getServiceId());
+        if (sopt.isEmpty()) throw new IllegalArgumentException("Service not found");
+        com.cosmate.entity.Service s = sopt.get();
+        if (!prov.getId().equals(s.getProviderId())) throw new IllegalArgumentException("Provider does not own the service");
+
+        Integer cosplayerId = req.getCosplayerId();
+        if (cosplayerId == null) throw new IllegalArgumentException("cosplayerId is required");
+
+        java.time.LocalDate bookingDate = null;
+        try { bookingDate = java.time.LocalDate.parse(req.getBookingDate()); } catch (DateTimeParseException ex) { throw new IllegalArgumentException("Invalid bookingDate format, expected yyyy-MM-dd"); }
+
+        java.math.BigDecimal rent = req.getRentSlotAmount() == null ? java.math.BigDecimal.ZERO : req.getRentSlotAmount();
+        java.math.BigDecimal deposit = s.getDepositAmount() == null ? java.math.BigDecimal.ZERO : s.getDepositAmount();
+        java.math.BigDecimal total = rent.add(deposit);
+
+        Order order = Order.builder()
+                .cosplayerId(cosplayerId)
+                .providerId(prov.getId())
+                .orderType("RENT_SERVICE")
+                .status("UNCONFIRM")
+                .totalAmount(total)
+                .totalDepositAmount(deposit)
+                .createdAt(java.time.LocalDateTime.now())
+                .build();
+        order = orderRepository.save(order);
+
+        OrderServiceBooking osb = OrderServiceBooking.builder()
+                .orderId(order.getId())
+                .serviceId(s.getId())
+                .bookingDate(bookingDate)
+                .timeSlot(req.getTimeSlot())
+                .numberOfHuman(req.getNumberOfHuman())
+                .depositSlotAmount(deposit)
+                .rentSlotAmount(rent)
+                .build();
+        orderServiceBookingRepository.save(osb);
+
+        // notify cosplayer
+        try {
+            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                    .user(com.cosmate.entity.User.builder().id(cosplayerId).build())
+                    .type("ORDER_STATUS")
+                    .header("Nhà cung cấp đã tạo lịch dịch vụ")
+                    .content("Nhà cung cấp đã tạo lịch cho dịch vụ #" + s.getId() + " cho đơn hàng #" + order.getId() + ". Vui lòng xác nhận.")
+                    .sendAt(java.time.LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+            notificationService.create(n);
+        } catch (Exception ignored) {}
+
+        OrderResponse resp = new OrderResponse();
+        resp.setId(order.getId());
+        resp.setCosplayerId(order.getCosplayerId());
+        resp.setProviderId(order.getProviderId());
+        resp.setOrderType(order.getOrderType());
+        resp.setStatus(order.getStatus());
+        resp.setTotalAmount(order.getTotalAmount());
+        resp.setCreatedAt(order.getCreatedAt());
+        return resp;
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse confirmServiceOrderByCosplayer(Integer cosplayerUserId, Integer orderId) throws Exception {
+        Optional<Order> opt = orderRepository.findById(orderId);
+        if (opt.isEmpty()) throw new IllegalArgumentException("Order not found");
+        Order order = opt.get();
+        if (!order.getCosplayerId().equals(cosplayerUserId)) throw new IllegalArgumentException("Order does not belong to user");
+        if (!"UNCONFIRM".equals(order.getStatus())) throw new IllegalArgumentException("Order is not in UNCONFIRM status");
+        order.setStatus("UNPAID");
+        orderRepository.save(order);
+        try {
+            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                    .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                    .type("ORDER_STATUS")
+                    .header("Đơn hàng đã được xác nhận")
+                    .content("Đơn hàng #" + order.getId() + " đã được xác nhận và chuyển sang UNPAID.")
+                    .sendAt(java.time.LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+            notificationService.create(n);
+        } catch (Exception ignored) {}
+
+        try {
+            com.cosmate.entity.Provider p = null;
+            try { p = providerService.getById(order.getProviderId()); } catch (Exception ignored2) { p = null; }
+            Integer providerUserId = p == null ? null : p.getUserId();
+            if (providerUserId != null) {
+                com.cosmate.entity.Notification pn = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(providerUserId).build())
+                        .type("ORDER_STATUS")
+                        .header("Đơn hàng đã được xác nhận bởi khách")
+                        .content("Khách hàng đã xác nhận đơn hàng #" + order.getId() + ". Vui lòng chuẩn bị dịch vụ.")
+                        .sendAt(java.time.LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(pn);
+            }
+        } catch (Exception ignored) {}
+
+        OrderResponse resp = new OrderResponse();
+        resp.setId(order.getId());
+        resp.setCosplayerId(order.getCosplayerId());
+        resp.setProviderId(order.getProviderId());
+        resp.setOrderType(order.getOrderType());
+        resp.setStatus(order.getStatus());
+        resp.setTotalAmount(order.getTotalAmount());
+        resp.setCreatedAt(order.getCreatedAt());
+        return resp;
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse providerSetWaiting(Integer providerUserId, Integer orderId) throws Exception {
+        com.cosmate.entity.Provider prov = providerService.getByUserId(providerUserId);
+        if (prov == null) throw new IllegalArgumentException("User is not a provider");
+        Optional<Order> opt = orderRepository.findById(orderId);
+        if (opt.isEmpty()) throw new IllegalArgumentException("Order not found");
+        Order order = opt.get();
+        if (!order.getProviderId().equals(prov.getId())) throw new IllegalArgumentException("Provider does not own this order");
+        if (!"PAID".equals(order.getStatus())) throw new IllegalArgumentException("Order must be in PAID status to set WAITING_SERVICE_DATE");
+        order.setStatus("WAITING_SERVICE_DATE");
+        orderRepository.save(order);
+        try {
+            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                    .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                    .type("ORDER_STATUS")
+                    .header("Đơn hàng đã được lên lịch")
+                    .content("Đơn hàng #" + order.getId() + " đã được đặt lịch (WAITING_SERVICE_DATE).")
+                    .sendAt(java.time.LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+            notificationService.create(n);
+        } catch (Exception ignored) {}
+        OrderResponse resp = new OrderResponse();
+        resp.setId(order.getId());
+        resp.setCosplayerId(order.getCosplayerId());
+        resp.setProviderId(order.getProviderId());
+        resp.setOrderType(order.getOrderType());
+        resp.setStatus(order.getStatus());
+        resp.setTotalAmount(order.getTotalAmount());
+        resp.setCreatedAt(order.getCreatedAt());
+        return resp;
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse startServiceNow(Integer providerUserId, Integer orderId) throws Exception {
+        com.cosmate.entity.Provider prov = providerService.getByUserId(providerUserId);
+        if (prov == null) throw new IllegalArgumentException("User is not a provider");
+        Optional<Order> opt = orderRepository.findById(orderId);
+        if (opt.isEmpty()) throw new IllegalArgumentException("Order not found");
+        Order order = opt.get();
+        if (!order.getProviderId().equals(prov.getId())) throw new IllegalArgumentException("Provider does not own this order");
+        if (!"WAITING_SERVICE_DATE".equals(order.getStatus())) throw new IllegalArgumentException("Order must be in WAITING_SERVICE_DATE status to start service");
+        java.util.List<OrderServiceBooking> bookings = orderServiceBookingRepository.findByOrderId(order.getId());
+        if (bookings.isEmpty()) throw new IllegalArgumentException("No service booking found for order");
+        OrderServiceBooking osb = bookings.get(0);
+        java.time.LocalDate today = java.time.LocalDate.now();
+        if (osb.getBookingDate() != null && osb.getBookingDate().isAfter(today)) throw new IllegalArgumentException("Booking date is in the future; cannot start service yet");
+        order.setStatus("IN_SERVICE");
+        orderRepository.save(order);
+        try {
+            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                    .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                    .type("ORDER_STATUS")
+                    .header("Đơn hàng đang được thực hiện")
+                    .content("Đơn hàng #" + order.getId() + " đã bắt đầu (IN_SERVICE).")
+                    .sendAt(java.time.LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+            notificationService.create(n);
+        } catch (Exception ignored) {}
+        OrderResponse resp = new OrderResponse();
+        resp.setId(order.getId());
+        resp.setCosplayerId(order.getCosplayerId());
+        resp.setProviderId(order.getProviderId());
+        resp.setOrderType(order.getOrderType());
+        resp.setStatus(order.getStatus());
+        resp.setTotalAmount(order.getTotalAmount());
+        resp.setCreatedAt(order.getCreatedAt());
+        return resp;
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse providerCompleteService(Integer providerUserId, Integer orderId) throws Exception {
+        com.cosmate.entity.Provider prov = providerService.getByUserId(providerUserId);
+        if (prov == null) throw new IllegalArgumentException("User is not a provider");
+        Optional<Order> opt = orderRepository.findById(orderId);
+        if (opt.isEmpty()) throw new IllegalArgumentException("Order not found");
+        Order order = opt.get();
+        if (!order.getProviderId().equals(prov.getId())) throw new IllegalArgumentException("Provider does not own this order");
+        if (!"IN_SERVICE".equals(order.getStatus())) throw new IllegalArgumentException("Order must be IN_SERVICE to be completed");
+        order.setStatus("COMPLETED");
+        orderRepository.save(order);
+        try {
+            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                    .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                    .type("ORDER_STATUS")
+                    .header("Dịch vụ hoàn tất")
+                    .content("Đơn hàng #" + order.getId() + " dịch vụ đã hoàn tất (COMPLETED).")
+                    .sendAt(java.time.LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+            notificationService.create(n);
+        } catch (Exception ignored) {}
+
+        // Transfer money to provider's wallet when service completes
+        try {
+            Integer providerUserIdVal = prov.getUserId();
+            java.util.Optional<com.cosmate.entity.Wallet> wopt = walletService.getByUserId(providerUserIdVal);
+            if (wopt.isPresent()) {
+                com.cosmate.entity.Wallet wallet = wopt.get();
+                java.math.BigDecimal amount = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
+                walletService.credit(wallet, amount, "Payout for completed order", "ORDER_PAYOUT:" + order.getId(), null, order);
+            } else {
+                java.util.Optional<com.cosmate.entity.User> providerUserOpt = userRepository.findById(providerUserIdVal);
+                if (providerUserOpt.isPresent()) {
+                    walletService.createForUser(providerUserOpt.get());
+                    java.util.Optional<com.cosmate.entity.Wallet> wopt2 = walletService.getByUserId(providerUserIdVal);
+                    if (wopt2.isPresent()) {
+                        com.cosmate.entity.Wallet wallet = wopt2.get();
+                        java.math.BigDecimal amount = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
+                        walletService.credit(wallet, amount, "Payout for completed order", "ORDER_PAYOUT:" + order.getId(), null, order);
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            // swallow
+        }
+
+        OrderResponse resp = new OrderResponse();
+        resp.setId(order.getId());
+        resp.setCosplayerId(order.getCosplayerId());
+        resp.setProviderId(order.getProviderId());
+        resp.setOrderType(order.getOrderType());
+        resp.setStatus(order.getStatus());
+        resp.setTotalAmount(order.getTotalAmount());
+        resp.setCreatedAt(order.getCreatedAt());
+        return resp;
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse cancelOrder(Integer userId, Integer orderId) throws Exception {
+        Optional<Order> opt = orderRepository.findById(orderId);
+        if (opt.isEmpty()) throw new IllegalArgumentException("Order not found");
+        Order order = opt.get();
+
+        boolean isCosplayer = order.getCosplayerId() != null && order.getCosplayerId().equals(userId);
+        com.cosmate.entity.Provider prov = providerService.getByUserId(userId);
+        boolean isProviderOwner = prov != null && order.getProviderId() != null && order.getProviderId().equals(prov.getId());
+        if (!isCosplayer && !isProviderOwner) throw new IllegalArgumentException("No permission to cancel this order");
+
+        String status = order.getStatus();
+        if (status == null) status = "";
+        if (!(status.equals("UNCONFIRM") || status.equals("UNPAID") || status.equals("PAID") || status.equals("WAITING_SERVICE_DATE"))) {
+            throw new IllegalArgumentException("Order cannot be cancelled in its current status: " + status);
+        }
+
+        if ("PAID".equals(status)) {
+            if (order.getCosplayerId() == null) throw new IllegalArgumentException("Cosplayer info missing on order; cannot refund");
+            java.util.Optional<com.cosmate.entity.Wallet> wopt = walletService.getByUserId(order.getCosplayerId());
+            if (wopt.isEmpty()) throw new IllegalArgumentException("Wallet for cosplayer not found; refund failed");
+            com.cosmate.entity.Wallet wallet = wopt.get();
+            java.math.BigDecimal amount = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
+            walletService.credit(wallet, amount, "Refund for cancelled order", "ORDER_REFUND:" + order.getId(), null, order);
+        }
+
+        order.setStatus("CANCELLED");
+        orderRepository.save(order);
+        try {
+            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                    .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                    .type("ORDER_STATUS")
+                    .header("Đơn hàng bị hủy")
+                    .content("Đơn hàng #" + order.getId() + " đã bị hủy.")
+                    .sendAt(java.time.LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+            notificationService.create(n);
+        } catch (Exception ignored) {}
+
+        try {
+            Integer providerUserId = null;
+            try {
+                com.cosmate.entity.Provider provEntity = providerService.getById(order.getProviderId());
+                if (provEntity != null) providerUserId = provEntity.getUserId();
+            } catch (Exception ignored2) { providerUserId = null; }
+            if (providerUserId != null) {
+                com.cosmate.entity.Notification pn = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(providerUserId).build())
+                        .type("ORDER_STATUS")
+                        .header("Đơn hàng bị hủy")
+                        .content("Đơn hàng #" + order.getId() + " đã bị hủy.")
+                        .sendAt(java.time.LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(pn);
+            }
+        } catch (Exception ignored) {}
+
+        OrderResponse resp = new OrderResponse();
+        resp.setId(order.getId());
+        resp.setCosplayerId(order.getCosplayerId());
+        resp.setProviderId(order.getProviderId());
+        resp.setOrderType(order.getOrderType());
+        resp.setStatus(order.getStatus());
+        resp.setTotalAmount(order.getTotalAmount());
+        resp.setCreatedAt(order.getCreatedAt());
+        return resp;
+    }
+
+    @Override
+    public java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse> listProviderServiceOrders(Integer providerUserId, String statuses) throws Exception {
+        com.cosmate.entity.Provider prov = providerService.getByUserId(providerUserId);
+        if (prov == null) throw new IllegalArgumentException("User is not a provider");
+        java.util.List<String> statusList = null;
+        if (statuses != null && !statuses.trim().isEmpty()) {
+            statusList = java.util.Arrays.stream(statuses.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
+        }
+        java.util.List<Order> orders;
+        if (statusList == null) orders = orderRepository.findByProviderIdOrderByCreatedAtDesc(prov.getId());
+        else orders = orderRepository.findByProviderIdAndStatusInOrderByCreatedAtDesc(prov.getId(), statusList);
+
+        java.util.List<Order> serviceOrders = orders.stream().filter(o -> "RENT_SERVICE".equals(o.getOrderType())).toList();
+        java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse> respList = new java.util.ArrayList<>();
+        for (Order o : serviceOrders) {
+            com.cosmate.dto.response.ServiceOrderItemResponse item = new com.cosmate.dto.response.ServiceOrderItemResponse();
+            item.setId(o.getId());
+            item.setCosplayerId(o.getCosplayerId());
+            item.setProviderId(o.getProviderId());
+            item.setOrderType(o.getOrderType());
+            item.setStatus(o.getStatus());
+            item.setTotalAmount(o.getTotalAmount());
+            item.setCreatedAt(o.getCreatedAt());
+            item.setBookings(orderServiceBookingRepository.findByOrderId(o.getId()));
+            respList.add(item);
+        }
+        return respList;
+    }
+
     @Override
     @Transactional
     public OrderResponse payOrder(Integer cosplayerId, Integer orderId, String paymentMethod, String returnUrl) throws Exception {
@@ -546,5 +907,459 @@ public class OrderServiceImpl implements OrderService {
             result.add(new OrderDropdownResponse(o.getId(), label));
         }
         return result;
+    }
+
+    // --- Full order operations ---
+    @Override
+    public com.cosmate.dto.response.OrderFullResponse getFullOrderById(Integer id) throws Exception {
+        Order o = orderRepository.findById(id).orElse(null);
+        if (o == null) return null;
+        com.cosmate.dto.response.OrderFullResponse resp = new com.cosmate.dto.response.OrderFullResponse();
+        resp.setId(o.getId());
+        resp.setCosplayerId(o.getCosplayerId());
+        resp.setProviderId(o.getProviderId());
+        resp.setOrderType(o.getOrderType());
+        resp.setStatus(o.getStatus());
+        resp.setTotalAmount(o.getTotalAmount());
+        resp.setTotalDepositAmount(o.getTotalDepositAmount());
+        resp.setCreatedAt(o.getCreatedAt());
+
+        List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
+        resp.setDetails(details);
+        resp.setSurcharges(orderCostumeSurchargeRepository.findByOrderId(o.getId()));
+        resp.setAddresses(orderAddressRepository.findByOrderId(o.getId()));
+        List<Integer> detailIds = details.stream().map(d -> d.getId()).toList();
+        resp.setAccessories(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderDetailAccessoryRepository.findByOrderDetailIdIn(detailIds));
+        resp.setRentalOptions(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderRentalOptionRepository.findByOrderDetailIdIn(detailIds));
+        resp.setImages(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderImageRepository.findByOrderDetailIdIn(detailIds));
+        resp.setTrackings(orderTrackingRepository.findByOrderId(o.getId()));
+        java.util.List<com.cosmate.entity.Transaction> txs = transactionRepository.findByOrder_IdOrderByCreatedAtDesc(o.getId());
+        java.util.List<com.cosmate.dto.response.TransactionResponse> txResp = txs.stream().map(t -> com.cosmate.dto.response.TransactionResponse.builder()
+                .id(t.getId())
+                .amount(t.getAmount())
+                .type(t.getType())
+                .status(t.getStatus())
+                .paymentMethod(t.getPaymentMethod())
+                .walletId(t.getWallet() == null ? null : t.getWallet().getWalletId())
+                .orderId(t.getOrder() == null ? null : t.getOrder().getId())
+                .createdAt(t.getCreatedAt())
+                .build()).toList();
+        resp.setTransactions(txResp);
+        return resp;
+    }
+
+    @Override
+    public java.util.List<com.cosmate.dto.response.OrderFullResponse> listAllOrders() throws Exception {
+        List<Order> orders = orderRepository.findAllByOrderByCreatedAtDesc();
+        List<com.cosmate.dto.response.OrderFullResponse> resp = orders.stream().map(this::mapToFullResponseSafe).filter(x -> x != null).toList();
+        return resp;
+    }
+
+    private com.cosmate.dto.response.OrderFullResponse mapToFullResponseSafe(Order o) {
+        try { return getFullOrderById(o.getId()); } catch (Exception e) { return null; }
+    }
+
+    @Override
+    public java.util.List<com.cosmate.dto.response.OrderFullResponse> listOrdersByProvider(Integer providerId) throws Exception {
+        List<Order> orders = orderRepository.findByProviderIdOrderByCreatedAtDesc(providerId);
+        return orders.stream().map(this::mapToFullResponseSafe).filter(x -> x != null).toList();
+    }
+
+    @Override
+    public java.util.List<com.cosmate.dto.response.OrderFullResponse> filterOrdersByProviderAndStatuses(Integer providerId, java.util.List<String> statuses, Integer currentUserId, boolean isAdminStaff) throws Exception {
+        List<Order> orders = orderRepository.findByProviderIdAndStatusInOrderByCreatedAtDesc(providerId, statuses);
+        return orders.stream().map(this::mapToFullResponseSafe).filter(x -> x != null).toList();
+    }
+
+    @Override
+    public java.util.List<com.cosmate.dto.response.OrderFullResponse> listOrdersByUserId(Integer userId) throws Exception {
+        List<Order> orders = orderRepository.findByCosplayerIdOrderByCreatedAtDesc(userId);
+        return orders.stream().map(this::mapToFullResponseSafe).filter(x -> x != null).toList();
+    }
+
+    @Override
+    @Transactional
+    public java.util.Map<String,Object> shipOrder(Integer currentUserId, Integer id, String trackingCode, org.springframework.web.multipart.MultipartFile[] images, java.util.List<String> notes, boolean isAdminStaff) throws Exception {
+        Order order = orderRepository.findById(id).orElse(null);
+        if (order == null) throw new IllegalArgumentException("Order not found");
+        if (!isAdminStaff) {
+            com.cosmate.entity.Provider p = providerService.getByUserId(currentUserId);
+            if (p == null || p.getId() == null || !p.getId().equals(order.getProviderId())) throw new IllegalArgumentException("No permission");
+        }
+        if (!"PREPARING".equals(order.getStatus())) throw new IllegalArgumentException("Order must be in PREPARING status to ship");
+        if (trackingCode == null || trackingCode.isBlank()) throw new IllegalArgumentException("trackingCode is required");
+        if (images == null || images.length == 0) throw new IllegalArgumentException("At least one image file is required");
+
+        OrderTracking ot = OrderTracking.builder()
+                .order(order)
+                .trackingCode(trackingCode)
+                .trackingStatus("CREATED")
+                .stage("SHIPPING_OUT")
+                .build();
+        ot = orderTrackingRepository.save(ot);
+
+        java.util.List<Integer> savedImageIds = new java.util.ArrayList<>();
+        for (int i = 0; i < images.length; i++) {
+            org.springframework.web.multipart.MultipartFile file = images[i];
+            if (file == null || file.isEmpty()) continue;
+            String original = file.getOriginalFilename();
+            String safeName = original == null ? String.valueOf(System.currentTimeMillis()) : original.replaceAll("[^a-zA-Z0-9._-]", "_");
+            String path = String.format("orders/%d/shipping/%d_%s", order.getId(), System.currentTimeMillis(), safeName);
+            String url = firebaseStorageService.uploadFile(file, path);
+            String note = (notes != null && notes.size() > i) ? notes.get(i) : null;
+            java.util.List<OrderDetail> detailsForOrder = orderDetailRepository.findByOrderId(order.getId());
+            OrderDetail detailForImage = detailsForOrder.isEmpty() ? null : detailsForOrder.get(0);
+            OrderImage oi = OrderImage.builder()
+                    .orderDetail(detailForImage)
+                    .imageUrl(url)
+                    .stage("SHIPPING_OUT")
+                    .note(note)
+                    .confirm(false)
+                    .build();
+            oi = orderImageRepository.save(oi);
+            savedImageIds.add(oi.getId());
+        }
+
+        order.setStatus("SHIPPING_OUT");
+        orderRepository.save(order);
+        try {
+            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                    .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                    .type("ORDER_STATUS")
+                    .header("Đơn hàng đã được gửi")
+                    .content("Đơn hàng #" + order.getId() + " đang được gửi (SHIPPING_OUT).")
+                    .sendAt(java.time.LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+            notificationService.create(n);
+        } catch (Exception ignored) {}
+
+        java.util.Map<String,Object> result = new java.util.HashMap<>();
+        result.put("tracking", ot);
+        List<Integer> detailIdsForImages = orderDetailRepository.findByOrderId(order.getId()).stream().map(d -> d.getId()).toList();
+        List<OrderImage> uploadedImages = detailIdsForImages.isEmpty() ? java.util.Collections.emptyList() : orderImageRepository.findByOrderDetailIdIn(detailIdsForImages);
+        result.put("images", uploadedImages);
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public java.util.Map<String,Object> markDeliveringOut(Integer currentUserId, Integer id, boolean isAdminStaff) throws Exception {
+        Order order = orderRepository.findById(id).orElse(null);
+        if (order == null) throw new IllegalArgumentException("Order not found");
+        if (!isAdminStaff) {
+            com.cosmate.entity.Provider p = providerService.getByUserId(currentUserId);
+            if (p == null || p.getId() == null || !p.getId().equals(order.getProviderId())) throw new IllegalArgumentException("No permission");
+        }
+        if (!"SHIPPING_OUT".equals(order.getStatus())) throw new IllegalArgumentException("Order must be in SHIPPING_OUT status to mark delivering out");
+        List<OrderTracking> existing = orderTrackingRepository.findByOrderId(order.getId());
+        String trackingCode = null;
+        if (existing != null && !existing.isEmpty()) trackingCode = existing.get(existing.size()-1).getTrackingCode();
+        OrderTracking ot = OrderTracking.builder()
+                .order(order)
+                .trackingCode(trackingCode)
+                .trackingStatus("DELIVERING")
+                .stage("DELIVERING_OUT")
+                .build();
+        ot = orderTrackingRepository.save(ot);
+        order.setStatus("DELIVERING_OUT");
+        orderRepository.save(order);
+        try {
+            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                    .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                    .type("ORDER_STATUS")
+                    .header("Đơn hàng đang giao")
+                    .content("Đơn hàng #" + order.getId() + " đang được giao (DELIVERING_OUT).")
+                    .sendAt(java.time.LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+            notificationService.create(n);
+        } catch (Exception ignored) {}
+        java.util.Map<String,Object> res = new java.util.HashMap<>();
+        res.put("tracking", ot);
+        res.put("orderStatus", order.getStatus());
+        return res;
+    }
+
+    @Override
+    @Transactional
+    public java.util.Map<String,Object> confirmDelivery(Integer currentUserId, Integer id, org.springframework.web.multipart.MultipartFile[] images, java.util.List<String> notes) throws Exception {
+        Order order = orderRepository.findById(id).orElse(null);
+        if (order == null) throw new IllegalArgumentException("Order not found");
+        if (!currentUserId.equals(order.getCosplayerId())) throw new IllegalArgumentException("Order does not belong to user");
+        if (!"DELIVERING_OUT".equals(order.getStatus())) throw new IllegalArgumentException("Order must be in DELIVERING_OUT status to confirm delivery");
+
+        List<OrderImage> uploadedImages = new java.util.ArrayList<>();
+        if (images != null && images.length > 0) {
+            for (int i = 0; i < images.length; i++) {
+                org.springframework.web.multipart.MultipartFile file = images[i];
+                if (file == null || file.isEmpty()) continue;
+                String original = file.getOriginalFilename();
+                String safeName = original == null ? String.valueOf(System.currentTimeMillis()) : original.replaceAll("[^a-zA-Z0-9._-]", "_");
+                String path = String.format("orders/%d/received/%d_%s", order.getId(), System.currentTimeMillis(), safeName);
+                String url = firebaseStorageService.uploadFile(file, path);
+                String note = (notes != null && notes.size() > i) ? notes.get(i) : null;
+                java.util.List<OrderDetail> detailsForOrder = orderDetailRepository.findByOrderId(order.getId());
+                OrderDetail detailForImage = detailsForOrder.isEmpty() ? null : detailsForOrder.get(0);
+                OrderImage oi = OrderImage.builder()
+                        .orderDetail(detailForImage)
+                        .imageUrl(url)
+                        .stage("IN_USE")
+                        .note(note)
+                        .confirm(false)
+                        .build();
+                oi = orderImageRepository.save(oi);
+                uploadedImages.add(oi);
+            }
+        }
+
+        List<OrderTracking> existing = orderTrackingRepository.findByOrderId(order.getId());
+        String trackingCode = null;
+        if (existing != null && !existing.isEmpty()) trackingCode = existing.get(existing.size()-1).getTrackingCode();
+        OrderTracking ot = OrderTracking.builder()
+                .order(order)
+                .trackingCode(trackingCode)
+                .trackingStatus("DELIVERED")
+                .stage("IN_USE")
+                .build();
+        ot = orderTrackingRepository.save(ot);
+        order.setStatus("IN_USE");
+        orderRepository.save(order);
+
+        try {
+            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                    .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                    .type("ORDER_STATUS")
+                    .header("Xác nhận nhận hàng")
+                    .content("Đơn hàng #" + order.getId() + " đã được xác nhận nhận và đang trong quá trình sử dụng (IN_USE).")
+                    .sendAt(java.time.LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+            notificationService.create(n);
+        } catch (Exception ignored) {}
+
+        try {
+            Integer providerUserId = null;
+            try {
+                com.cosmate.entity.Provider prov = providerService.getById(order.getProviderId());
+                if (prov != null) providerUserId = prov.getUserId();
+            } catch (Exception ignored2) { providerUserId = null; }
+            if (providerUserId != null) {
+                com.cosmate.entity.Notification pn = com.cosmate.entity.Notification.builder()
+                        .user(com.cosmate.entity.User.builder().id(providerUserId).build())
+                        .type("ORDER_STATUS")
+                        .header("Khách đã xác nhận nhận hàng")
+                        .content("Khách hàng đã xác nhận nhận hàng cho đơn #" + order.getId() + ".")
+                        .sendAt(java.time.LocalDateTime.now())
+                        .isRead(false)
+                        .build();
+                notificationService.create(pn);
+            }
+        } catch (Exception ignored) {}
+
+        List<Integer> detIdsForConfirm = orderDetailRepository.findByOrderId(order.getId()).stream().map(d -> d.getId()).toList();
+        if (!detIdsForConfirm.isEmpty()) {
+            List<OrderImage> imgsToCheck = orderImageRepository.findByOrderDetailIdIn(detIdsForConfirm);
+            boolean changed = false;
+            for (OrderImage img : imgsToCheck) {
+                if (img != null && img.getStage() != null && "SHIPPING_OUT".equalsIgnoreCase(img.getStage()) && (img.getConfirm() == null || !img.getConfirm())) {
+                    img.setConfirm(true);
+                    changed = true;
+                }
+            }
+            if (changed) orderImageRepository.saveAll(imgsToCheck);
+        }
+
+        java.util.Map<String,Object> res = new java.util.HashMap<>();
+        res.put("tracking", ot);
+        res.put("orderStatus", order.getStatus());
+        res.put("uploadedImages", uploadedImages);
+        return res;
+    }
+
+    @Override
+    @Transactional
+    public String prepareOrder(Integer currentUserId, Integer id, boolean isAdminStaff) throws Exception {
+        Order order = orderRepository.findById(id).orElse(null);
+        if (order == null) throw new IllegalArgumentException("Order not found");
+        if (!isAdminStaff) {
+            com.cosmate.entity.Provider p = providerService.getByUserId(currentUserId);
+            if (p == null || p.getId() == null || !p.getId().equals(order.getProviderId())) throw new IllegalArgumentException("No permission");
+        }
+        if (!"PAID".equals(order.getStatus())) throw new IllegalArgumentException("Order must be in PAID status to move to PREPARING");
+        order.setStatus("PREPARING");
+        orderRepository.save(order);
+        try {
+            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                    .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                    .type("ORDER_STATUS")
+                    .header("Đang chuẩn bị")
+                    .content("Đơn hàng #" + order.getId() + " đang được chuẩn bị (PREPARING).")
+                    .sendAt(java.time.LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+            notificationService.create(n);
+        } catch (Exception ignored) {}
+        return "OK";
+    }
+
+    @Override
+    @Transactional
+    public java.util.Map<String,Object> startReturn(Integer currentUserId, Integer id, String trackingCode, org.springframework.web.multipart.MultipartFile[] images, java.util.List<String> notes) throws Exception {
+        Order order = orderRepository.findById(id).orElse(null);
+        if (order == null) throw new IllegalArgumentException("Order not found");
+        if (!currentUserId.equals(order.getCosplayerId())) throw new IllegalArgumentException("Order does not belong to user");
+        if (!"IN_USE".equals(order.getStatus())) throw new IllegalArgumentException("Order must be in IN_USE status to start return");
+        if (trackingCode == null || trackingCode.isBlank()) throw new IllegalArgumentException("trackingCode is required");
+        if (images == null || images.length == 0) throw new IllegalArgumentException("At least one image file is required to start return");
+
+        OrderTracking ot = OrderTracking.builder()
+                .order(order)
+                .trackingCode(trackingCode)
+                .trackingStatus("RETURN_CREATED")
+                .stage("SHIPPING_BACK")
+                .build();
+        ot = orderTrackingRepository.save(ot);
+
+        List<OrderImage> uploadedImages = new java.util.ArrayList<>();
+        for (int i = 0; i < images.length; i++) {
+            org.springframework.web.multipart.MultipartFile file = images[i];
+            if (file == null || file.isEmpty()) continue;
+            String original = file.getOriginalFilename();
+            String safeName = original == null ? String.valueOf(System.currentTimeMillis()) : original.replaceAll("[^a-zA-Z0-9._-]", "_");
+            String path = String.format("orders/%d/return/%d_%s", order.getId(), System.currentTimeMillis(), safeName);
+            String url = firebaseStorageService.uploadFile(file, path);
+            String note = (notes != null && notes.size() > i) ? notes.get(i) : null;
+            java.util.List<OrderDetail> detailsForOrder = orderDetailRepository.findByOrderId(order.getId());
+            OrderDetail detailForImage = detailsForOrder.isEmpty() ? null : detailsForOrder.get(0);
+            OrderImage oi = OrderImage.builder()
+                    .orderDetail(detailForImage)
+                    .imageUrl(url)
+                    .stage("SHIPPING_BACK")
+                    .note(note)
+                    .confirm(false)
+                    .build();
+            oi = orderImageRepository.save(oi);
+            uploadedImages.add(oi);
+        }
+
+        order.setStatus("SHIPPING_BACK");
+        orderRepository.save(order);
+        try {
+            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                    .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                    .type("ORDER_STATUS")
+                    .header("Đang trả hàng")
+                    .content("Đơn hàng #" + order.getId() + " đang trong quá trình trả hàng (SHIPPING_BACK).")
+                    .sendAt(java.time.LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+            notificationService.create(n);
+        } catch (Exception ignored) {}
+
+        java.util.Map<String,Object> res = new java.util.HashMap<>();
+        res.put("tracking", ot);
+        res.put("orderStatus", order.getStatus());
+        List<Integer> detIds = orderDetailRepository.findByOrderId(order.getId()).stream().map(d -> d.getId()).toList();
+        res.put("uploadedImages", detIds.isEmpty() ? java.util.Collections.emptyList() : orderImageRepository.findByOrderDetailIdIn(detIds));
+        return res;
+    }
+
+    @Override
+    @Transactional
+    public java.util.Map<String,Object> completeOrder(Integer currentUserId, Integer id, boolean isAdminStaff) throws Exception {
+        Order order = orderRepository.findById(id).orElse(null);
+        if (order == null) throw new IllegalArgumentException("Order not found");
+        if (!isAdminStaff) {
+            com.cosmate.entity.Provider p = providerService.getByUserId(currentUserId);
+            if (p == null || p.getId() == null || !p.getId().equals(order.getProviderId())) throw new IllegalArgumentException("No permission");
+        }
+        if (!"SHIPPING_BACK".equals(order.getStatus())) throw new IllegalArgumentException("Order must be in SHIPPING_BACK status to complete");
+
+        List<OrderTracking> existing = orderTrackingRepository.findByOrderId(order.getId());
+        String trackingCode = null;
+        if (existing != null && !existing.isEmpty()) trackingCode = existing.get(existing.size()-1).getTrackingCode();
+        OrderTracking ot = OrderTracking.builder()
+                .order(order)
+                .trackingCode(trackingCode)
+                .trackingStatus("RETURN_RECEIVED")
+                .stage("COMPLETED")
+                .build();
+        ot = orderTrackingRepository.save(ot);
+
+        java.math.BigDecimal total = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
+
+        List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
+        java.math.BigDecimal depositTotal = java.math.BigDecimal.ZERO;
+        if (details != null && !details.isEmpty()) {
+            for (OrderDetail d : details) {
+                try { java.math.BigDecimal dep = d.getDepositAmount() == null ? java.math.BigDecimal.ZERO : d.getDepositAmount(); depositTotal = depositTotal.add(dep); } catch (Exception ignored) {}
+            }
+        }
+        if (depositTotal == null) depositTotal = java.math.BigDecimal.ZERO;
+        java.math.BigDecimal providerShare = total.subtract(depositTotal);
+        if (providerShare == null) providerShare = java.math.BigDecimal.ZERO;
+        if (providerShare.compareTo(java.math.BigDecimal.ZERO) < 0) providerShare = java.math.BigDecimal.ZERO;
+
+        java.util.List<com.cosmate.entity.Transaction> txs = new java.util.ArrayList<>();
+        if (depositTotal.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            com.cosmate.entity.User cosUser = com.cosmate.entity.User.builder().id(order.getCosplayerId()).build();
+            com.cosmate.entity.Wallet cosWallet = walletService.createForUser(cosUser);
+            com.cosmate.entity.Transaction txDeposit = walletService.credit(cosWallet, depositTotal, "Deposit returned on order completion", "DEPOSIT_RETURN:" + order.getId(), null, order);
+            if (txDeposit != null) txs.add(txDeposit);
+        }
+        if (providerShare.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            com.cosmate.entity.User provUser = com.cosmate.entity.User.builder().id(order.getProviderId()).build();
+            com.cosmate.entity.Wallet provWallet = walletService.createForUser(provUser);
+            com.cosmate.entity.Transaction txProv = walletService.credit(provWallet, providerShare, "Provider payout on order completion", "PROVIDER_PAYOUT:" + order.getId(), null, order);
+            if (txProv != null) txs.add(txProv);
+        }
+
+        order.setStatus("COMPLETED");
+        orderRepository.save(order);
+        try {
+            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                    .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                    .type("ORDER_STATUS")
+                    .header("Đơn hàng hoàn tất")
+                    .content("Đơn hàng #" + order.getId() + " đã hoàn tất (COMPLETED).")
+                    .sendAt(java.time.LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+            notificationService.create(n);
+        } catch (Exception ignored) {}
+
+        try {
+            if (details != null && !details.isEmpty()) {
+                for (OrderDetail d : details) {
+                    if (d.getCostumeId() == null) continue;
+                    Costume c = costumeRepository.findById(d.getCostumeId()).orElse(null);
+                    if (c != null) { c.setStatus("AVAILABLE"); costumeRepository.save(c); }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        java.util.Map<String,Object> res = new java.util.HashMap<>();
+        res.put("tracking", ot);
+        res.put("orderStatus", order.getStatus());
+        res.put("transactions", txs);
+        res.put("depositReturned", depositTotal);
+        res.put("providerPayout", providerShare);
+        return res;
+    }
+
+    @Override
+    public java.util.List<com.cosmate.dto.response.TransactionResponse> getTransactionsForOrder(Integer id) throws Exception {
+        List<com.cosmate.entity.Transaction> txs = transactionRepository.findByOrder_IdOrderByCreatedAtDesc(id);
+        return txs.stream().map(t -> com.cosmate.dto.response.TransactionResponse.builder()
+                .id(t.getId())
+                .amount(t.getAmount())
+                .type(t.getType())
+                .status(t.getStatus())
+                .paymentMethod(t.getPaymentMethod())
+                .walletId(t.getWallet() == null ? null : t.getWallet().getWalletId())
+                .orderId(t.getOrder() == null ? null : t.getOrder().getId())
+                .createdAt(t.getCreatedAt())
+                .build()).toList();
     }
 }

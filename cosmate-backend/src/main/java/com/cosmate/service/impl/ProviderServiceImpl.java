@@ -8,6 +8,9 @@ import com.cosmate.exception.ErrorCode;
 import com.cosmate.repository.ProviderRepository;
 import com.cosmate.repository.UserRepository;
 import com.cosmate.service.ProviderService;
+import com.cosmate.dto.response.ProviderPublicResponse;
+import org.springframework.web.multipart.MultipartFile;
+import com.cosmate.service.FirebaseStorageService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,6 +25,7 @@ public class ProviderServiceImpl implements ProviderService {
 
     private final ProviderRepository providerRepository;
     private final UserRepository userRepository;
+    private final FirebaseStorageService firebaseStorageService;
 
     @Override
     @Transactional
@@ -45,6 +49,45 @@ public class ProviderServiceImpl implements ProviderService {
         Provider saved = providerRepository.save(p);
 
         return saved;
+    }
+
+    @Override
+    public List<ProviderPublicResponse> listAllProvidersPublic() {
+        return providerRepository.findAll().stream().map(this::mapToPublicResponse).collect(Collectors.toList());
+    }
+
+    @Override
+    public ProviderResponse getResponseByProviderId(Integer providerId, boolean includeBankInfo) {
+        Provider p = getById(providerId);
+        ProviderResponse resp = mapToResponse(p);
+        if (!includeBankInfo) {
+            resp.setBankAccountNumber(null);
+            resp.setBankName(null);
+        }
+        return resp;
+    }
+
+    @Override
+    public ProviderResponse getResponseByUserId(Integer userId, boolean includeBankInfo) {
+        Provider p = getByUserId(userId);
+        ProviderResponse resp = mapToResponse(p);
+        if (!includeBankInfo) {
+            resp.setBankAccountNumber(null);
+            resp.setBankName(null);
+        }
+        return resp;
+    }
+
+    @Override
+    @Transactional
+    public ProviderResponse updateCoverImageForUserUpload(Integer userId, MultipartFile coverImage) throws Exception {
+        // generate filename and upload
+        String filename = String.format("providers/%d/cover_%d", userId, System.currentTimeMillis());
+        String original = coverImage.getOriginalFilename();
+        if (original != null && original.contains(".")) filename += original.substring(original.lastIndexOf('.'));
+        String url = firebaseStorageService.uploadFile(coverImage, filename);
+        Provider p = updateCoverImageForUser(userId, url);
+        return mapToResponse(p);
     }
 
     @Override
@@ -123,6 +166,22 @@ public class ProviderServiceImpl implements ProviderService {
                 .bankAccountNumber(p.getBankAccountNumber())
                 .bankName(p.getBankName())
 
+                .verified(p.getVerified())
+                .completedOrders(p.getCompletedOrders())
+                .totalRating(p.getTotalRating())
+                .totalReviews(p.getTotalReviews())
+                .build();
+    }
+
+    private ProviderPublicResponse mapToPublicResponse(Provider p) {
+        return ProviderPublicResponse.builder()
+                .id(p.getId())
+                .userId(p.getUserId())
+                .shopName(p.getShopName())
+                .shopAddressId(p.getShopAddressId())
+                .avatarUrl(p.getAvatarUrl())
+                .coverImageUrl(p.getCoverImageUrl())
+                .bio(p.getBio())
                 .verified(p.getVerified())
                 .completedOrders(p.getCompletedOrders())
                 .totalRating(p.getTotalRating())

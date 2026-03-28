@@ -2,7 +2,6 @@ package com.cosmate.controller;
 
 import com.cosmate.dto.response.ApiResponse;
 import com.cosmate.entity.*;
-import com.cosmate.repository.OrderRepository;
 import com.cosmate.service.DisputeService;
 import com.cosmate.service.ProviderService;
 import lombok.RequiredArgsConstructor;
@@ -10,7 +9,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import com.cosmate.dto.request.ResolveDisputeRequest;
@@ -21,11 +19,6 @@ import jakarta.validation.Valid;
 @RequiredArgsConstructor
 public class DisputeController {
     private final DisputeService disputeService;
-    private final OrderRepository orderRepository;
-    private final ProviderService providerService;
-    private final com.cosmate.repository.ProviderRepository providerRepository;
-    private final com.cosmate.service.WalletService walletService;
-    private final com.cosmate.repository.OrderDetailRepository orderDetailRepository;
 
     // helper to extract current authenticated user id
     private Integer getCurrentUserId() {
@@ -63,30 +56,7 @@ public class DisputeController {
             Integer currentUserId = getCurrentUserId();
             if (currentUserId == null) return ApiResponse.<Dispute>builder().code(401).message("Chưa xác thực - Vui lòng đăng nhập").build();
 
-            // ensure order exists
-            Order order = orderRepository.findById(orderId).orElse(null);
-            if (order == null) return ApiResponse.<Dispute>builder().code(404).message("Order not found").build();
-
-            // only provider owner or cosplayer or admin/staff can create
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            boolean isAdminStaff = hasAdminStaffRole(auth);
-            boolean isProviderOwner = false;
-            try {
-                // If order.providerId directly stores the user id (some historical data), accept that
-                if (order.getProviderId() != null && order.getProviderId().equals(currentUserId)) {
-                    isProviderOwner = true;
-                } else {
-                    java.util.Optional<com.cosmate.entity.Provider> provOpt = providerRepository.findByUserId(currentUserId);
-                    if (provOpt.isPresent()) {
-                        Provider p = provOpt.get();
-                        if (p.getId() != null && p.getId().equals(order.getProviderId())) isProviderOwner = true;
-                      }
-                }
-            } catch (Exception ex) { }
-
-            boolean isCosplayer = currentUserId.equals(order.getCosplayerId());
-            if (!isAdminStaff && !isProviderOwner && !isCosplayer) return ApiResponse.<Dispute>builder().code(403).message("Không có quyền tạo khiếu nại cho đơn hàng này").build();
-
+            // Delegate validation and creation to the service layer
             Dispute d = disputeService.createDispute(currentUserId, orderId, reason);
             return ApiResponse.<Dispute>builder().result(d).message("Dispute created").build();
         } catch (IllegalArgumentException ex) {
@@ -102,25 +72,14 @@ public class DisputeController {
         if (dopt.isEmpty()) return ApiResponse.<Dispute>builder().code(404).message("Dispute not found").build();
         Dispute d = dopt.get();
 
-        // authorize: opener, order provider, or staff/admin
         Integer currentUserId = getCurrentUserId();
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         boolean isAdminStaff = hasAdminStaffRole(auth);
-        boolean isProviderOwner = false;
-        try {
-            Order od = d.getOrder();
-            if (od != null && od.getProviderId() != null && od.getProviderId().equals(currentUserId)) {
-                isProviderOwner = true;
-            } else {
-                java.util.Optional<com.cosmate.entity.Provider> provOpt = providerRepository.findByUserId(currentUserId);
-                if (provOpt.isPresent()) {
-                    Provider p = provOpt.get();
-                    if (p.getId() != null && od != null && p.getId().equals(od.getProviderId())) isProviderOwner = true;
-                }
-            }
-        } catch (Exception ex) { }
-        boolean isOpener = currentUserId != null && currentUserId.equals(d.getCreatedByUserId());
-        if (!isAdminStaff && !isProviderOwner && !isOpener) return ApiResponse.<Dispute>builder().code(403).message("Không có quyền xem khiếu nại này").build();
+        // allow staff/admin
+        if (!isAdminStaff) {
+            boolean canView = disputeService.canViewDispute(id, currentUserId);
+            if (!canView) return ApiResponse.<Dispute>builder().code(403).message("Không có quyền xem khiếu nại này").build();
+        }
 
         return ApiResponse.<Dispute>builder().result(d).build();
     }
@@ -190,48 +149,13 @@ public class DisputeController {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         Integer currentUserId = getCurrentUserId();
         if (currentUserId == null || !hasAdminStaffRole(auth)) return ApiResponse.<java.util.Map<String,Object>>builder().code(403).message("Forbidden").build();
-
-        Optional<Dispute> dopt = disputeService.getById(id);
-        if (dopt.isEmpty()) return ApiResponse.<java.util.Map<String,Object>>builder().code(404).message("Dispute not found").build();
-        Dispute d = dopt.get();
-        Order order = d.getOrder();
-        java.util.Map<String,Object> res = new java.util.HashMap<>();
-        res.put("dispute", d);
-        res.put("order", order);
-
-        // compute deposit total
-        BigDecimal depositTotal = BigDecimal.ZERO;
-        java.util.List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
-        for (OrderDetail od : details) {
-            if (od.getDepositAmount() != null) depositTotal = depositTotal.add(od.getDepositAmount());
+        try {
+            java.util.Map<String,Object> res = disputeService.debugDispute(id);
+            return ApiResponse.<java.util.Map<String,Object>>builder().result(res).build();
+        } catch (IllegalArgumentException ex) {
+            return ApiResponse.<java.util.Map<String,Object>>builder().code(404).message(ex.getMessage()).build();
+        } catch (Exception ex) {
+            return ApiResponse.<java.util.Map<String,Object>>builder().code(500).message("Failed to debug dispute: " + ex.getMessage()).build();
         }
-        res.put("depositTotal", depositTotal);
-
-        // provider user id
-        Integer providerUserId = null;
-        if (order.getProviderId() != null) {
-            java.util.Optional<com.cosmate.entity.Provider> provOpt = providerRepository.findById(order.getProviderId());
-            if (provOpt.isPresent()) providerUserId = provOpt.get().getUserId();
-        }
-        res.put("providerUserId", providerUserId);
-
-        // provider wallet
-        com.cosmate.entity.Wallet providerWallet = null;
-        if (providerUserId != null) {
-            providerWallet = walletService.getByUserId(providerUserId).orElse(null);
-        }
-        res.put("providerWallet", providerWallet);
-
-        // cosplayer wallet
-        com.cosmate.entity.Wallet cosWallet = walletService.getByUserId(order.getCosplayerId()).orElse(null);
-        res.put("cosplayerWallet", cosWallet);
-
-        // recent transactions (limit 10)
-        java.util.List<com.cosmate.entity.Transaction> providerTxs = providerWallet == null ? java.util.Collections.emptyList() : walletService.getTransactionsForWallet(providerWallet);
-        java.util.List<com.cosmate.entity.Transaction> cosTxs = cosWallet == null ? java.util.Collections.emptyList() : walletService.getTransactionsForWallet(cosWallet);
-        res.put("providerTransactions", providerTxs.size() > 10 ? providerTxs.subList(0,10) : providerTxs);
-        res.put("cosplayerTransactions", cosTxs.size() > 10 ? cosTxs.subList(0,10) : cosTxs);
-
-        return ApiResponse.<java.util.Map<String,Object>>builder().result(res).build();
     }
 }

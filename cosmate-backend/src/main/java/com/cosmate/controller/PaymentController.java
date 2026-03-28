@@ -121,56 +121,32 @@ public class PaymentController {
             String status = result.get("status");
             Integer forwardedTxnId = null;
             Integer forwardedOrderId = null;
-            if ("OK".equals(status)) {
+            if ("OK".equals(status) || "ALREADY_DONE".equals(status)) {
                 String txnRef = allParams.get("vnp_TxnRef");
-                if (txnRef != null) {
-                    if (txnRef.startsWith("SUB")) {
-                        String idPart = txnRef.substring("SUB".length());
-                        try {
-                            Integer txnId = Integer.valueOf(idPart);
-                            forwardedTxnId = txnId;
-                            subscriptionService.finalizeSubscriptionPayment(txnId);
-                        } catch (Exception e) {
-                            // log and continue; return will still be OK to VNPay
-                        }
-                    } else if (txnRef.startsWith("WALLET")) {
-                        String idPart = txnRef.substring("WALLET".length());
-                        try {
-                            Integer txnId = Integer.valueOf(idPart);
-                            forwardedTxnId = txnId;
-                            Optional<Transaction> optTx = transactionRepository.findById(txnId);
-                            if (optTx.isPresent()) {
-                                Transaction tx = optTx.get();
-                                String type = tx.getType();
-                                if (type != null && type.startsWith("ORDER#")) {
-                                    try {
-                                        Integer orderId = Integer.valueOf(type.substring("ORDER#".length()));
-                                        forwardedOrderId = orderId;
-                                        Optional<Order> oOpt = orderRepository.findById(orderId);
-                                        if (oOpt.isPresent()) {
-                                            Order o = oOpt.get();
-                                            o.setStatus("PAID");
-                                            orderRepository.save(o);
-                                        }
-                                    } catch (Exception ex) {
-                                        // ignore
-                                    }
-                                }
+                // prefer transactionId/orderId provided by service
+                try { if (result.containsKey("transactionId")) forwardedTxnId = Integer.valueOf(result.get("transactionId")); } catch (Exception ignored) {}
+                try { if (result.containsKey("orderId")) forwardedOrderId = Integer.valueOf(result.get("orderId")); } catch (Exception ignored) {}
+
+                // Only perform DB updates and finalize work when the service reported a fresh OK.
+                if ("OK".equals(status)) {
+                    if (txnRef != null) {
+                        if (txnRef.startsWith("SUB")) {
+                            String idPart = txnRef.substring("SUB".length());
+                            try {
+                                Integer txnId = Integer.valueOf(idPart);
+                                forwardedTxnId = txnId;
+                                subscriptionService.finalizeSubscriptionPayment(txnId);
+                            } catch (Exception e) {
+                                // log and continue; return will still be OK to VNPay
                             }
-                        } catch (NumberFormatException ignore) {
-                        }
-                    } else if (txnRef.startsWith("ORDER#")) {
-                        String idPart = null;
-                        if (txnRef.startsWith("ORDER#")) idPart = txnRef.substring("ORDER#".length());
-                        if (idPart != null) {
+                        } else if (txnRef.startsWith("WALLET")) {
+                            String idPart = txnRef.substring("WALLET".length());
                             try {
                                 Integer txnId = Integer.valueOf(idPart);
                                 forwardedTxnId = txnId;
                                 Optional<Transaction> optTx = transactionRepository.findById(txnId);
                                 if (optTx.isPresent()) {
                                     Transaction tx = optTx.get();
-                                    tx.setStatus("COMPLETED");
-                                    transactionRepository.save(tx);
                                     String type = tx.getType();
                                     if (type != null && type.startsWith("ORDER#")) {
                                         try {
@@ -189,6 +165,37 @@ public class PaymentController {
                                 }
                             } catch (NumberFormatException ignore) {
                             }
+                        } else if (txnRef.startsWith("ORDER#")) {
+                            String idPart = null;
+                            if (txnRef.startsWith("ORDER#")) idPart = txnRef.substring("ORDER#".length());
+                            if (idPart != null) {
+                                try {
+                                    Integer txnId = Integer.valueOf(idPart);
+                                    forwardedTxnId = txnId;
+                                    Optional<Transaction> optTx = transactionRepository.findById(txnId);
+                                    if (optTx.isPresent()) {
+                                        Transaction tx = optTx.get();
+                                        tx.setStatus("COMPLETED");
+                                        transactionRepository.save(tx);
+                                        String type = tx.getType();
+                                        if (type != null && type.startsWith("ORDER#")) {
+                                            try {
+                                                Integer orderId = Integer.valueOf(type.substring("ORDER#".length()));
+                                                forwardedOrderId = orderId;
+                                                Optional<Order> oOpt = orderRepository.findById(orderId);
+                                                if (oOpt.isPresent()) {
+                                                    Order o = oOpt.get();
+                                                    o.setStatus("PAID");
+                                                    orderRepository.save(o);
+                                                }
+                                            } catch (Exception ex) {
+                                                // ignore
+                                            }
+                                        }
+                                    }
+                                } catch (NumberFormatException ignore) {
+                                }
+                            }
                         }
                     }
                 }
@@ -200,7 +207,7 @@ public class PaymentController {
             String frontendStatus = "failed";
             if (status != null) {
                 String s = status.trim();
-                if (s.equalsIgnoreCase("OK") || s.equalsIgnoreCase("SUCCESS") || s.equals("00") || s.equals("0")) {
+                if (s.equalsIgnoreCase("OK") || s.equalsIgnoreCase("SUCCESS") || s.equals("00") || s.equals("0") || s.equalsIgnoreCase("ALREADY_DONE")) {
                     frontendStatus = "success";
                 }
             }
@@ -313,7 +320,7 @@ public class PaymentController {
             String frontendStatus = "failed";
             if (status != null) {
                 String s = status.trim();
-                if (s.equalsIgnoreCase("OK") || s.equalsIgnoreCase("SUCCESS") || s.equals("00") || s.equals("0")) {
+                if (s.equalsIgnoreCase("OK") || s.equalsIgnoreCase("SUCCESS") || s.equals("00") || s.equals("0") || s.equalsIgnoreCase("ALREADY_DONE")) {
                     frontendStatus = "success";
                 }
             }

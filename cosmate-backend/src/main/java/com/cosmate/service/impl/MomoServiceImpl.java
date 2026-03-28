@@ -261,6 +261,12 @@ public class MomoServiceImpl implements MomoService {
         }
 
         Transaction t = op.get();
+        // idempotency: if this transaction is already completed, do not credit wallet again
+        if (t.getStatus() != null && t.getStatus().equalsIgnoreCase("COMPLETED")) {
+            result.put("status", "ALREADY_DONE");
+            result.put("transactionId", String.valueOf(txnId));
+            return result;
+        }
         // ensure payment method recorded
         if (t.getPaymentMethod() == null || t.getPaymentMethod().isEmpty()) {
             t.setPaymentMethod("MOMO");

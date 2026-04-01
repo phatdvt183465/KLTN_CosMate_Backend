@@ -64,9 +64,12 @@ public class AIController {
     }
 
     // Tiện ích: AI tự động viết mô tả chi tiết cho trang phục dựa trên ảnh
-    @PostMapping("/generate-description")
-    public ApiResponse<String> generateDescription(@RequestParam("files") List<MultipartFile> files) {
-        String description = aiService.generateCostumeDescription(files);
+    @PostMapping(value = "/generate-description", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<String> generateDescription(
+            @RequestParam(value = "name", required = false) String name,
+            @RequestParam("files") List<MultipartFile> files) {
+
+        String description = aiService.generateCostumeDescription(name, files);
         return ApiResponse.<String>builder()
                 .message("Tạo mô tả thành công!")
                 .result(description)

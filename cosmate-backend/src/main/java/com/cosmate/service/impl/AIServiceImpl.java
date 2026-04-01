@@ -389,22 +389,27 @@ public class AIServiceImpl implements AIService {
     }
 
     @Override
-    public String generateCostumeDescription(List<MultipartFile> files) {
+    public String generateCostumeDescription(String costumeName, List<MultipartFile> files) {
         if (files == null || files.isEmpty()) return null;
 
         try {
-            // 1. Tạo URL sạch giống luồng kiểm duyệt
             String url = GENERATION_MODEL_URL + "?key=" + apiKey;
 
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
 
-            // 2. [PROMPT THẦN THÁNH] Ép AI tả chi tiết theo góc nhìn thị giác
+            // [NÂNG CẤP PROMPT] Linh hoạt ghép thêm tên bộ đồ nếu có
+            String promptStr = "Bạn là một chuyên gia về trang phục cosplay. ";
+            if (costumeName != null && !costumeName.trim().isEmpty()) {
+                promptStr += "Tên nhân vật/bộ trang phục này là: '" + costumeName + "'. ";
+            }
+            promptStr += "Hãy nhìn vào những hình ảnh đính kèm và tạo ra một đoạn mô tả chi tiết, hấp dẫn và chính xác cho bộ đồ này để đăng bán trên sàn thương mại điện tử CosMate. Tập trung vào kiểu dáng, màu sắc, hoa văn, vật liệu nhìn thấy được. Hãy làm cho mô tả trở nên thu hút người thuê/mua. Chỉ trả về văn bản mô tả, không kèm theo lời dẫn hay định dạng markdown (như dấu sao, dấu thăng).";
+
             ObjectNode textPart = objectMapper.createObjectNode();
-            textPart.put("text", "Bạn là một chuyên gia về trang phục cosplay. Hãy nhìn vào những hình ảnh đính kèm và tạo ra một đoạn mô tả chi tiết, hấp dẫn và chính xác cho bộ đồ này để đăng bán trên sàn thương mại điện tử CosMate. Tập trung vào kiểu dáng, màu sắc, hoa văn, vật liệu nhìn thấy được và nhân vật/anime tham chiếu nếu có. Hãy làm cho mô tả trở nên thu hút người thuê/mua. Chỉ trả về văn bản mô tả, không kèm theo lời dẫn.");
+            textPart.put("text", promptStr);
             partsNode.add(textPart);
 
-            // 3. Mã hóa toàn bộ ảnh sang Base64 giống luồng kiểm duyệt
+            // Mã hóa ảnh sang Base64
             for (MultipartFile file : files) {
                 if (file == null || file.isEmpty()) continue;
 
@@ -420,7 +425,6 @@ public class AIServiceImpl implements AIService {
                 partsNode.add(imagePart);
             }
 
-            // 4. Build payload JSON và gửi request
             ObjectNode contentNode = objectMapper.createObjectNode();
             contentNode.set("parts", partsNode);
             ArrayNode contentsArray = objectMapper.createArrayNode();
@@ -429,23 +433,20 @@ public class AIServiceImpl implements AIService {
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("x-goog-api-key", apiKey); // An toàn nhét Key vào Header
             HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
 
             JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
 
-            // 5. Bóc tách văn bản mô tả trả về
             if (response != null && response.has("candidates")) {
                 String resultText = response.path("candidates").get(0)
-
                         .path("content").path("parts").get(0)
                         .path("text").asText().trim();
-
-                // Loại bỏ mấy cái dấu markdown (như ** hay #) nếu AI có lỡ tay thêm vào
                 return resultText.replaceAll("[*#_]", "");
             }
             return "Không thể generate được description, vui lòng tả thủ công.";
         } catch (Exception e) {
-            log.error("Lỗi khi AI generate description hàng loạt: {}", e.getMessage());
+            log.error("Lỗi khi AI generate description: {}", e.getMessage());
             return "Lỗi khi generate description: " + e.getMessage();
         }
     }

@@ -56,11 +56,52 @@
     },
     {
       "question_id": "S1_Q6",
-      "question": "Ngân sách bạn muốn đầu tư cho bộ cosplay sắp tới?",
+      "question": "Khi tham gia một lễ hội, bạn thường xuất hiện với tư cách nào?",
       "options": [
-        { "text": "Dưới 150k (Nhanh, gọn, rẻ).", "points_to": ["ARCH_12", "ARCH_05"] },
-        { "text": "150k - 300k (Mức trung bình, vừa đủ xài).", "points_to": ["ARCH_07", "ARCH_06", "ARCH_01"] },
-        { "text": "Trên 300k (Càng lộng lẫy, nhiều phụ kiện càng tốt).", "points_to": ["ARCH_10", "ARCH_08", "ARCH_03"] }
+        { "text": "Người tổ chức hoặc dẫn dắt đám đông.", "points_to": ["ARCH_10", "ARCH_01"] },
+        { "text": "Người lặng lẽ quan sát và ghi chép từ xa.", "points_to": ["ARCH_03", "ARCH_11"] },
+        { "text": "Người quẩy nhiệt tình nhất, trung tâm của tiếng cười.", "points_to": ["ARCH_05"] },
+        { "text": "Người đi hỗ trợ hậu cần cho bạn bè.", "points_to": ["ARCH_06", "ARCH_12"] }
+      ]
+    },
+    {
+      "question_id": "S1_Q7",
+      "question": "Một món vũ khí/pháp bảo lý tưởng với bạn là?",
+      "options": [
+        { "text": "Kiếm hoặc khiên mạnh mẽ, trực diện.", "points_to": ["ARCH_01", "ARCH_10"] },
+        { "text": "Gậy phép hoặc sách cổ đầy tri thức.", "points_to": ["ARCH_03", "ARCH_11", "ARCH_09"] },
+        { "text": "Bẫy, bom hoặc những thứ gây bất ngờ.", "points_to": ["ARCH_02", "ARCH_05"] },
+        { "text": "Vật dụng chữa lành hoặc bảo vệ.", "points_to": ["ARCH_06", "ARCH_04"] }
+      ]
+    },
+    {
+      "question_id": "S1_Q8",
+      "question": "Bạn phản ứng thế nào khi thấy một quy tắc bất hợp lý?",
+      "options": [
+        { "text": "Công khai phản đối và tìm cách lật đổ nó ngay.", "points_to": ["ARCH_02"] },
+        { "text": "Tìm hiểu nguyên nhân sâu xa trước khi đưa ra ý kiến.", "points_to": ["ARCH_03"] },
+        { "text": "Lách luật một cách khôn khéo để đạt được mục đích.", "points_to": ["ARCH_11", "ARCH_05"] },
+        { "text": "Cố gắng thích nghi nếu nó không gây hại quá lớn.", "points_to": ["ARCH_12", "ARCH_04"] }
+      ]
+    },
+    {
+      "question_id": "S1_Q9",
+      "question": "Không gian sống mơ ước của bạn trông như thế nào?",
+      "options": [
+        { "text": "Một tòa lâu đài uy nghi và trật tự.", "points_to": ["ARCH_10"] },
+        { "text": "Một căn lều giữa thiên nhiên hoang dã, tự do.", "points_to": ["ARCH_07"] },
+        { "text": "Một phòng thí nghiệm hoặc thư viện khổng lồ.", "points_to": ["ARCH_03", "ARCH_09"] },
+        { "text": "Một căn nhà nhỏ ấm cúng, đầy ắp tiếng cười bạn bè.", "points_to": ["ARCH_06", "ARCH_08"] }
+      ]
+    },
+    {
+      "question_id": "S1_Q10",
+      "question": "Bạn muốn người khác nhớ đến mình như thế nào?",
+      "options": [
+        { "text": "Một người truyền cảm hứng và dũng cảm.", "points_to": ["ARCH_01"] },
+        { "text": "Một người bí ẩn và đầy quyền năng.", "points_to": ["ARCH_11", "ARCH_02"] },
+        { "text": "Một người tử tế và luôn sẵn lòng giúp đỡ.", "points_to": ["ARCH_06", "ARCH_04"] },
+        { "text": "Một người thông minh, thấu hiểu mọi chuyện.", "points_to": ["ARCH_03"] }
       ]
     }
-  ]
+]

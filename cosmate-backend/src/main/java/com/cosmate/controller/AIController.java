@@ -126,4 +126,13 @@ public class AIController {
                 .result(aiKnowledgeBase.getArchetypes())
                 .build();
     }
+
+    // Trong file AIController.java
+    @GetMapping("/survey-end")
+    public ApiResponse<JsonNode> getSurveyEnd() {
+        return ApiResponse.<JsonNode>builder()
+                .result(aiKnowledgeBase.getSurveyEnd())
+                .message("Tải câu hỏi kết thúc thành công!")
+                .build();
+    }
 }

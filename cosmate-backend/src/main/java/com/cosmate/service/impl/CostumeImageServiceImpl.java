@@ -52,9 +52,13 @@ public class CostumeImageServiceImpl implements CostumeImageService {
         // 1. Kiểm duyệt nội dung 18+ (Gom lô)
         aiService.validateMultipleImageContents(files);
 
-        // 2. Lấy vector nhúng (embedding) của bộ đồ
-        String textForVector = costume.getName() + " " + costume.getDescription();
+        // 2. Cập nhật lại vector nhúng (embedding) của bộ đồ khi có ảnh mới
+        String hiddenTags = aiService.extractFeaturesFromMultipleImages(files);
+        String textForVector = costume.getName() + " " + costume.getDescription() + " " + hiddenTags;
         String costumeVector = aiService.generateVectorForText(textForVector);
+
+        costume.setCostumeVector(costumeVector);
+        costumeRepository.save(costume); // Save lại Costume để cập nhật Vector mới vào DB
 
         // 3. Xử lý đa luồng tải ảnh lên Firebase
         ExecutorService executor = Executors.newFixedThreadPool(Math.min(files.size(), 10));
@@ -75,7 +79,6 @@ public class CostumeImageServiceImpl implements CostumeImageService {
                     img.setImageUrl(imageUrl);
                     img.setType((type != null && !type.isEmpty()) ? type : "DETAIL");
                     img.setCostume(costume);
-                    img.setImageVector(costumeVector);
 
                     return img;
                 } catch (Exception e) {

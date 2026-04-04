@@ -5,8 +5,10 @@ import com.cosmate.dto.request.RecommendationRequest;
 import com.cosmate.dto.request.SearchByImageRequest;
 import com.cosmate.dto.response.PoseScoringResponse;
 import com.cosmate.dto.response.SearchResponse;
+import com.cosmate.entity.Costume;
 import com.cosmate.entity.CostumeImage;
 import com.cosmate.repository.CostumeImageRepository;
+import com.cosmate.repository.CostumeRepository;
 import com.cosmate.service.AIService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -34,6 +36,7 @@ public class AIServiceImpl implements AIService {
     private final CostumeImageRepository costumeImageRepository;
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate = new RestTemplate();
+    private final CostumeRepository costumeRepository;
 
     @Value("${gemini.api.key}")
     private String apiKey;
@@ -48,43 +51,61 @@ public class AIServiceImpl implements AIService {
     @Override
     public List<SearchResponse> searchSimilarCostumes(SearchByImageRequest request) {
         try {
-            String queryText = request.getText();
-            if (queryText == null || queryText.trim().isEmpty()) {
-                throw new IllegalArgumentException("Từ khóa tìm kiếm không được để trống.");
+            String queryText = request.getText() != null ? request.getText().trim() : "";
+            List<MultipartFile> imageFiles = request.getFiles();
+
+            if (imageFiles == null || imageFiles.isEmpty() || imageFiles.get(0).isEmpty()) {
+                throw new IllegalArgumentException("Tính năng tìm kiếm bằng AI bắt buộc phải upload hình ảnh!");
             }
 
-            // 1. Tạo vector đại diện cho từ khóa tìm kiếm
-            List<Double> queryVector = callGeminiGetVector(queryText);
+            StringBuilder searchPrompt = new StringBuilder();
 
-            // 2. Lấy tất cả hình ảnh đã được mã hóa vector từ Database
-            List<CostumeImage> allImages = costumeImageRepository.findAllWithVector();
+            // 1. Trích xuất đặc điểm từ NHIỀU ảnh
+            if (imageFiles != null && !imageFiles.isEmpty()) {
+                String imageFeatures = extractFeaturesFromMultipleImages(imageFiles); // Gọi đúng tên hàm mới
+                searchPrompt.append(imageFeatures).append(". ");
+                log.info("AI trích xuất từ khóa từ ảnh: {}", imageFeatures);
+            }
 
-            // 3. Tính toán điểm tương đồng và lọc các kết quả trùng lặp
-            Map<Integer, SearchResponse> uniqueResults = new HashMap<>();
-            final double SIMILARITY_THRESHOLD = 0.55;
+            // 2. Ghép thêm text user nhập (nếu có)
+            if (!queryText.isEmpty()) {
+                searchPrompt.append("Yêu cầu thêm: ").append(queryText);
+            }
 
-            for (CostumeImage img : allImages) {
-                List<Double> dbVector = objectMapper.readValue(img.getImageVector(), new TypeReference<>() {});
+            String finalSearchContent = searchPrompt.toString().trim();
+            log.info("Nội dung tổng hợp đem đi tạo Vector: {}", finalSearchContent);
+
+            // 3. Tạo vector từ nội dung tổng hợp
+            List<Double> queryVector = callGeminiGetVector(finalSearchContent);
+
+            // 4. Tính toán điểm tương đồng (Cosine Similarity)
+            List<Costume> allCostumes = costumeRepository.findAll(); // Hoặc ông tạo hàm findAllWithVector() bên repository
+            List<SearchResponse> results = new ArrayList<>();
+            final double SIMILARITY_THRESHOLD = 0.65;
+
+            for (Costume costume : allCostumes) {
+                // Bỏ qua nếu bộ đồ chưa được tạo vector
+                if (costume.getCostumeVector() == null || costume.getCostumeVector().isEmpty()) continue;
+
+                List<Double> dbVector = objectMapper.readValue(costume.getCostumeVector(), new TypeReference<>() {});
                 double score = calculateCosineSimilarity(queryVector, dbVector);
 
                 if (score > SIMILARITY_THRESHOLD) {
-                    Integer costumeId = img.getCostume().getId();
+                    // Lấy ảnh đầu tiên của bộ đồ để hiển thị (nếu có)
+                    String displayImageUrl = costume.getImages().isEmpty() ? "" : costume.getImages().get(0).getImageUrl();
 
-                    // Chỉ giữ lại hình ảnh có điểm tương đồng cao nhất cho mỗi bộ trang phục
-                    if (!uniqueResults.containsKey(costumeId) || score > uniqueResults.get(costumeId).getSimilarityScore()) {
-                        uniqueResults.put(costumeId, SearchResponse.builder()
-                                .costumeId(costumeId)
-                                .costumeName(img.getCostume().getName())
-                                .imageUrl(img.getImageUrl())
-                                .price(img.getCostume().getPricePerDay())
-                                .similarityScore(score)
-                                .build());
-                    }
+                    results.add(SearchResponse.builder()
+                            .costumeId(costume.getId())
+                            .costumeName(costume.getName())
+                            .imageUrl(displayImageUrl)
+                            .price(costume.getPricePerDay())
+                            .similarityScore(score)
+                            .build());
                 }
             }
 
-            // 4. Sắp xếp điểm giảm dần và trả về top 10 kết quả khớp nhất
-            return uniqueResults.values().stream()
+            // 5. Sắp xếp giảm dần và lấy top 10
+            return results.stream()
                     .sorted(Comparator.comparingDouble(SearchResponse::getSimilarityScore).reversed())
                     .limit(10)
                     .collect(Collectors.toList());
@@ -99,17 +120,31 @@ public class AIServiceImpl implements AIService {
      * Tạo vector nhúng (embedding) cho trang phục và lưu vào Database.
      */
     @Override
-    public void generateAndSaveVector(Integer costumeImageId) {
-        costumeImageRepository.findById(costumeImageId).ifPresent(img -> {
+    public void generateAndSaveVector(Integer costumeId) {
+        costumeRepository.findById(costumeId).ifPresent(costume -> {
             try {
-                String contentToEmbed = img.getCostume().getName() + " " + img.getCostume().getDescription();
-                List<Double> vector = callGeminiGetVector(contentToEmbed);
+                StringBuilder combinedText = new StringBuilder();
+                combinedText.append(costume.getName()).append(" ").append(costume.getDescription());
 
-                img.setImageVector(objectMapper.writeValueAsString(vector));
-                costumeImageRepository.save(img);
-                log.info("Đã tạo và lưu vector thành công cho CostumeImage ID: {}", costumeImageId);
+                // 1. Phải lấy thêm Tag ẩn từ đống ảnh hiện có trong DB
+                if (!costume.getImages().isEmpty()) {
+                    // Chỉ cần lấy ảnh đầu tiên (ảnh MAIN) để AI nhìn là đủ đại diện
+                    String imageUrl = costume.getImages().get(0).getImageUrl();
+                    byte[] imageBytes = downloadImageFromUrl(imageUrl);
+                    if (imageBytes != null) {
+                        String hiddenTags = extractTagsFromBytes(imageBytes);
+                        combinedText.append(" ").append(hiddenTags);
+                    }
+                }
+
+                // 2. Tạo vector từ chuỗi text đã được "cường hóa"
+                String vectorStr = generateVectorForText(combinedText.toString());
+                costume.setCostumeVector(vectorStr);
+                costumeRepository.save(costume);
+
+                log.info("Đã cập nhật Siêu Vector thủ công cho Costume ID: {}", costumeId);
             } catch (Exception e) {
-                log.error("Tạo vector thất bại cho CostumeImage ID {}: {}", costumeImageId, e.getMessage());
+                log.error("Tạo vector thủ công thất bại cho ID {}: {}", costumeId, e.getMessage());
             }
         });
     }
@@ -212,11 +247,11 @@ public class AIServiceImpl implements AIService {
             String url = GENERATION_MODEL_URL + "?key=" + apiKey;
             String base64Image = Base64.getEncoder().encodeToString(request.getImage().getBytes());
 
-            String promptText = "Bạn là một giám khảo chấm điểm Cosplay chuyên nghiệp. " +
-                    "So sánh mức độ hóa trang, tạo dáng, biểu cảm của người trong ảnh với nhân vật gốc: '" + request.getCharacterName() + "'. " +
-                    "Chấm điểm từ 1 đến 100. " +
-                    "Chỉ trả về ĐÚNG một chuỗi JSON hợp lệ, KHÔNG có markdown: " +
-                    "{\"score\": 85, \"comment\": \"Lời nhận xét ngắn gọn...\"}";
+            String promptText = "Bạn là một giám khảo Cosplay áp dụng tiêu chuẩn World Cosplay Summit. " +
+                    "Hãy so sánh ảnh này với nhân vật '" + request.getCharacterName() + "' và chấm điểm dựa trên 3 tiêu chí: " +
+                    "1. Tư thế (40%), 2. Biểu cảm (30%), 3. Chi tiết trang phục (30%). " +
+                    "Chỉ trả về JSON định dạng: " +
+                    "{\"score\": [Điểm tổng 1-100], \"pose_score\": [1-40], \"expression_score\": [1-30], \"costume_score\": [1-30], \"comment\": \"[Nhận xét kỹ thuật...]\"}";
 
             Map<String, Object> textPart = Map.of("text", promptText);
             Map<String, Object> imagePart = Map.of("inline_data", Map.of(
@@ -350,42 +385,45 @@ public class AIServiceImpl implements AIService {
 
     @Override
     public void generateVectorsForMissingImages() {
-        // 1. Lấy toàn bộ ảnh trong DB
-        List<CostumeImage> allImages = costumeImageRepository.findAll();
-        List<CostumeImage> imagesToUpdate = new ArrayList<>();
-
+        List<Costume> allCostumes = costumeRepository.findAll();
         int successCount = 0;
 
-        // 2. Lọc ra những ảnh đang bị null hoặc rỗng ở cột image_vector
-        for (CostumeImage img : allImages) {
-            if (img.getImageVector() == null || img.getImageVector().trim().isEmpty()) {
-                if (img.getCostume() != null) {
-                    try {
-                        // Lấy Tên + Mô tả để tạo Vector
-                        String textForVector = img.getCostume().getName() + " " + img.getCostume().getDescription();
-                        String vectorStr = generateVectorForText(textForVector);
+        for (Costume costume : allCostumes) {
+            if (costume.getCostumeVector() == null || costume.getCostumeVector().trim().isEmpty()) {
+                try {
+                    StringBuilder combinedText = new StringBuilder();
+                    combinedText.append(costume.getName()).append(" ").append(costume.getDescription());
 
-                        if (vectorStr != null && !vectorStr.isEmpty()) {
-                            img.setImageVector(vectorStr);
-                            imagesToUpdate.add(img);
-                            successCount++;
-                            log.info("Đã tạo thành công vector cho ảnh ID: {}", img.getId());
+                    // 1. Lấy ảnh đầu tiên của bộ đồ để AI "nhìn"
+                    if (!costume.getImages().isEmpty()) {
+                        String firstImageUrl = costume.getImages().get(0).getImageUrl();
+                        byte[] imageBytes = downloadImageFromUrl(firstImageUrl);
+
+                        if (imageBytes != null) {
+                            // 2. Chế biến byte[] thành định dạng Gemini hiểu được để lấy Tag
+                            String hiddenTags = extractTagsFromBytes(imageBytes);
+                            combinedText.append(" ").append(hiddenTags);
+                            log.info("Costume ID {}: Đã bóc được tag ẩn: {}", costume.getId(), hiddenTags);
                         }
-                    } catch (Exception e) {
-                        log.error("Lỗi khi tạo vector cho ảnh ID {}: {}", img.getId(), e.getMessage());
-                        // Bỏ qua lỗi để vòng lặp chạy tiếp các ảnh khác
                     }
+
+                    // 3. Tạo "Siêu Vector" từ (Tên + Mô tả + Tag ẩn)
+                    String vectorStr = generateVectorForText(combinedText.toString());
+
+                    if (vectorStr != null) {
+                        costume.setCostumeVector(vectorStr);
+                        costumeRepository.save(costume);
+                        successCount++;
+                    }
+
+                    Thread.sleep(500); // Tránh bị Google chặn do gọi quá nhanh
+
+                } catch (Exception e) {
+                    log.error("Lỗi tạo vector cho Costume {}: {}", costume.getId(), e.getMessage());
                 }
             }
         }
-
-        // 3. Lưu hàng loạt xuống DB
-        if (!imagesToUpdate.isEmpty()) {
-            costumeImageRepository.saveAll(imagesToUpdate);
-            log.info("Đã quét và cập nhật thành công tổng cộng {} vectors!", successCount);
-        } else {
-            log.info("Không có ảnh nào cần cập nhật vector.");
-        }
+        log.info("Hoàn tất! Đã nâng cấp {} bộ đồ lên Siêu Vector.", successCount);
     }
 
     @Override
@@ -448,6 +486,130 @@ public class AIServiceImpl implements AIService {
         } catch (Exception e) {
             log.error("Lỗi khi AI generate description: {}", e.getMessage());
             return "Lỗi khi generate description: " + e.getMessage();
+        }
+    }
+
+    public String extractFeaturesFromMultipleImages(List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) return "";
+        try {
+            String url = GENERATION_MODEL_URL + "?key=" + apiKey;
+            ObjectNode body = objectMapper.createObjectNode();
+            ArrayNode partsNode = objectMapper.createArrayNode();
+
+            // Prompt chung cho toàn bộ ảnh
+            String promptText = "Trích xuất các từ khóa đặc trưng nhất của bộ trang phục xuất hiện trong TẤT CẢ các bức ảnh đính kèm. Tập trung vào: loại trang phục, màu sắc, họa tiết, và tên nhân vật. Chỉ trả về một chuỗi các từ khóa ngăn cách bằng dấu phẩy.";
+            partsNode.add(objectMapper.createObjectNode().put("text", promptText));
+
+            // Vòng lặp add tất cả ảnh vào chung 1 Request
+            for (MultipartFile file : files) {
+                if (file == null || file.isEmpty()) continue;
+                String base64Image = java.util.Base64.getEncoder().encodeToString(file.getBytes());
+                String mimeType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
+
+                ObjectNode inlineData = objectMapper.createObjectNode();
+                inlineData.put("mime_type", mimeType);
+                inlineData.put("data", base64Image);
+                partsNode.add(objectMapper.createObjectNode().set("inline_data", inlineData));
+            }
+
+            body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
+
+            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
+
+            if (response != null && response.has("candidates")) {
+                return response.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText().trim();
+            }
+            return "";
+        } catch (Exception e) {
+            log.error("Lỗi khi trích xuất đặc điểm từ nhiều ảnh: {}", e.getMessage());
+            return "";
+        }
+    }
+
+    private byte[] downloadImageFromUrl(String imageUrl) {
+        try {
+            // Dùng RestTemplate tải ảnh về dưới dạng mảng byte
+            return restTemplate.getForObject(imageUrl, byte[].class);
+        } catch (Exception e) {
+            log.error("Không thể tải ảnh từ URL: {}. Lỗi: {}", imageUrl, e.getMessage());
+            return null;
+        }
+    }
+
+    private String extractTagsFromBytes(byte[] imageBytes) {
+        if (imageBytes == null || imageBytes.length == 0) return "";
+        try {
+            String url = GENERATION_MODEL_URL + "?key=" + apiKey;
+            ObjectNode body = objectMapper.createObjectNode();
+            ArrayNode partsNode = objectMapper.createArrayNode();
+
+            // 1. Prompt để AI nhìn ảnh và bóc tag
+            String promptText = "Hãy phân tích hình ảnh bộ trang phục này và liệt kê các từ khóa (tags) đặc trưng nhất. " +
+                    "Tập trung vào: loại trang phục, màu sắc, họa tiết, chất liệu, phong cách, và tên nhân vật nếu nhận diện được. " +
+                    "Chỉ trả về chuỗi các từ khóa ngăn cách bằng dấu phẩy, không giải thích dài dòng.";
+            partsNode.add(objectMapper.createObjectNode().put("text", promptText));
+
+            // 2. Chuyển byte[] sang Base64
+            String base64Image = Base64.getEncoder().encodeToString(imageBytes);
+
+            ObjectNode inlineData = objectMapper.createObjectNode();
+            inlineData.put("mime_type", "image/jpeg"); // Mặc định là jpeg vì tải từ Firebase
+            inlineData.put("data", base64Image);
+
+            ObjectNode imagePart = objectMapper.createObjectNode();
+            imagePart.set("inline_data", inlineData);
+            partsNode.add(imagePart);
+
+            // 3. Xây dựng payload và gửi request
+            body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
+
+            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
+
+            if (response != null && response.has("candidates")) {
+                return response.path("candidates").get(0)
+                        .path("content").path("parts").get(0)
+                        .path("text").asText().trim();
+            }
+            return "";
+        } catch (Exception e) {
+            log.error("Lỗi AI khi bóc tag từ mảng byte: {}", e.getMessage());
+            return "";
+        }
+    }
+
+    @Override
+    public List<SearchResponse> fallbackSearch(String keyword) {
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return Collections.emptyList(); // Nếu user không nhập chữ gì thì trả về rỗng
+        }
+
+        try {
+            // Tìm kiếm cơ bản trong Database (giống hệt API search thường của ông)
+            List<Costume> costumes = costumeRepository.findByNameContainingIgnoreCaseAndStatusNot(keyword.trim(), "DELETED");
+
+            return costumes.stream().map(c -> {
+                String displayImageUrl = c.getImages().isEmpty() ? "" : c.getImages().get(0).getImageUrl();
+
+                return SearchResponse.builder()
+                        .costumeId(c.getId())
+                        .costumeName(c.getName())
+                        .imageUrl(displayImageUrl)
+                        .price(c.getPricePerDay())
+                        .similarityScore(0.0) // AI tèo rồi nên điểm tương đồng = 0
+                        .build();
+            }).limit(10).collect(Collectors.toList());
+
+        } catch (Exception e) {
+            log.error("Lỗi cả tìm kiếm dự phòng: {}", e.getMessage());
+            return Collections.emptyList();
         }
     }
 }

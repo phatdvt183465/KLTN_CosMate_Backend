@@ -24,16 +24,31 @@ public class AIController {
     // API tìm kiếm: POST /api/search/ai
     @PostMapping(value = "/ai", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<List<SearchResponse>> searchByAI(@ModelAttribute SearchByImageRequest request) {
-        return ApiResponse.<List<SearchResponse>>builder()
-                .result(aiService.searchSimilarCostumes(request))
-                .message("Kết quả tìm kiếm AI")
-                .build();
+        try {
+            // Cố gắng gọi AI trước
+            List<SearchResponse> results = aiService.searchSimilarCostumes(request);
+            return ApiResponse.<List<SearchResponse>>builder()
+                    .result(results)
+                    .message("Kết quả tìm kiếm AI thông minh!")
+                    .build();
+
+        } catch (Exception e) {
+            // Nếu AI ném lỗi (hết Quota, sai Key, rớt mạng...) -> Bắt lỗi ngay
+            String text = request.getText() != null ? request.getText() : "";
+            List<SearchResponse> fallbackResults = aiService.fallbackSearch(text);
+
+            return ApiResponse.<List<SearchResponse>>builder()
+                    .result(fallbackResults)
+                    // Báo thẳng cho frontend biết để hiển thị Toast/Alert
+                    .message("Hệ thống AI đang bảo trì hoặc quá tải. Trả về kết quả tìm kiếm thông thường cho từ khóa: " + text)
+                    .build();
+        }
     }
 
-    // API test tạo vector cho 1 ảnh cụ thể (dùng để test): POST /api/search/generate-vector/{id}
-    @PostMapping("/generate-vector/{costumeImageId}")
-    public ApiResponse<Void> generateVector(@PathVariable Integer costumeImageId) {
-        aiService.generateAndSaveVector(costumeImageId);
+    // Đổi URL và param từ costumeImageId sang costumeId
+    @PostMapping("/generate-vector/{costumeId}")
+    public ApiResponse<Void> generateVector(@PathVariable Integer costumeId) {
+        aiService.generateAndSaveVector(costumeId);
         return ApiResponse.<Void>builder().message("Đã tạo vector thành công!").build();
     }
 

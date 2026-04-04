@@ -10,6 +10,7 @@ import com.cosmate.service.CostumeService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -22,6 +23,7 @@ import java.math.BigDecimal;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CostumeServiceImpl implements CostumeService {
@@ -189,9 +191,13 @@ public class CostumeServiceImpl implements CostumeService {
         // [TỐI ƯU 1] Kiểm duyệt 18+ toàn bộ ảnh trong 1 lần gọi AI
         aiService.validateMultipleImageContents(files);
 
-        // [TỐI ƯU 2] Tạo vector nhúng 1 lần duy nhất bằng Text và dùng chung cho mọi ảnh
-        String textForVector = costume.getName() + " " + costume.getDescription();
+        // [TỐI ƯU 2] Sinh Tag ngầm và Tạo vector cho toàn bộ Costume
+        String hiddenTags = aiService.extractFeaturesFromMultipleImages(files);
+        String textForVector = costume.getName() + " " + costume.getDescription() + " " + hiddenTags;
+        log.info("Chuỗi tổng hợp tạo vector: {}", textForVector);
+
         String costumeVector = aiService.generateVectorForText(textForVector);
+        costume.setCostumeVector(costumeVector); // LƯU VECTOR VÀO COSTUME
 
         // [TỐI ƯU 3] Upload ảnh lên Firebase đồng thời bằng ThreadPool
         ExecutorService executor = Executors.newFixedThreadPool(Math.min(files.size(), 10));
@@ -201,7 +207,7 @@ public class CostumeServiceImpl implements CostumeService {
         for (MultipartFile file : files) {
             if (file == null || file.isEmpty()) continue;
 
-            final boolean isMainImage = (index == 0); // Ảnh đầu tiên mặc định là MAIN
+            final boolean isMainImage = (index == 0);
             index++;
 
             CompletableFuture<CostumeImage> future = CompletableFuture.supplyAsync(() -> {
@@ -211,14 +217,13 @@ public class CostumeServiceImpl implements CostumeService {
                     String folderName = costume.getId() != null ? String.valueOf(costume.getId()) : "new_" + System.currentTimeMillis();
                     String path = String.format("costumes/%s/%d_%s", folderName, System.currentTimeMillis(), safeName);
 
-                    // Upload bất đồng bộ
                     String imageUrl = firebaseStorageService.uploadFile(file, path);
 
                     CostumeImage img = new CostumeImage();
                     img.setImageUrl(imageUrl);
                     img.setType(isMainImage ? "MAIN" : "DETAIL");
                     img.setCostume(costume);
-                    img.setImageVector(costumeVector); // Dán vector dùng chung
+                    // ĐÃ XÓA DÒNG img.setImageVector(costumeVector); ĐỂ TRÁNH LỖI
 
                     return img;
                 } catch (Exception e) {
@@ -229,7 +234,6 @@ public class CostumeServiceImpl implements CostumeService {
             futures.add(future);
         }
 
-        // Đợi tất cả luồng hoàn thành và lưu vào danh sách của entity
         try {
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
             for (CompletableFuture<CostumeImage> future : futures) {
@@ -238,7 +242,7 @@ public class CostumeServiceImpl implements CostumeService {
         } catch (Exception e) {
             throw new RuntimeException("Tiến trình upload ảnh thất bại: " + e.getCause().getMessage(), e);
         } finally {
-            executor.shutdown(); // Giải phóng tài nguyên ThreadPool
+            executor.shutdown();
         }
     }
 

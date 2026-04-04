@@ -51,4 +51,7 @@ public class Costume {
 
     @OneToMany(mappedBy = "costume", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CostumeRentalOption> rentalOptions = new ArrayList<>();
+
+    @Column(name = "costume_vector", columnDefinition = "NVARCHAR(MAX)")
+    private String costumeVector;
 }

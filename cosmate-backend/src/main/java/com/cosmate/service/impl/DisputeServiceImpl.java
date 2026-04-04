@@ -42,6 +42,81 @@ public class DisputeServiceImpl implements DisputeService {
     }
 
     @Override
+    public boolean canViewDispute(Integer disputeId, Integer userId) {
+        try {
+            Dispute d = disputeRepository.findById(disputeId).orElse(null);
+            if (d == null) return false;
+            Order od = d.getOrder();
+            if (od != null && userId != null) {
+                if (userId.equals(d.getCreatedByUserId())) return true;
+                // provider owner match
+                if (od.getProviderId() != null && od.getProviderId().equals(userId)) return true;
+                // try resolving via Provider table
+                try {
+                    java.util.Optional<com.cosmate.entity.Provider> provOpt = providerRepository.findByUserId(userId);
+                    if (provOpt.isPresent()) {
+                        com.cosmate.entity.Provider prov = provOpt.get();
+                        if (prov.getId() != null && prov.getId().equals(od.getProviderId())) return true;
+                        if (prov.getUserId() != null && prov.getUserId().equals(od.getProviderId())) return true;
+                    }
+                } catch (Exception ignored) {}
+            }
+            return false;
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
+    @Override
+    public java.util.Map<String, Object> debugDispute(Integer disputeId) throws Exception {
+        Dispute d = disputeRepository.findById(disputeId).orElse(null);
+        if (d == null) throw new IllegalArgumentException("Dispute not found");
+        Order order = d.getOrder();
+        java.util.Map<String,Object> res = new java.util.HashMap<>();
+        res.put("dispute", d);
+        res.put("order", order);
+
+        // compute deposit total
+        java.math.BigDecimal depositTotal = java.math.BigDecimal.ZERO;
+        try {
+            java.util.List<com.cosmate.entity.OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
+            for (com.cosmate.entity.OrderDetail od : details) {
+                if (od.getDepositAmount() != null) depositTotal = depositTotal.add(od.getDepositAmount());
+            }
+        } catch (Exception ignored) {}
+        res.put("depositTotal", depositTotal);
+
+        // provider user id
+        Integer providerUserId = null;
+        if (order.getProviderId() != null) {
+            try {
+                java.util.Optional<com.cosmate.entity.Provider> provOpt = providerRepository.findById(order.getProviderId());
+                if (provOpt.isPresent()) providerUserId = provOpt.get().getUserId();
+            } catch (Exception ignored) {}
+        }
+        res.put("providerUserId", providerUserId);
+
+        // provider wallet
+        com.cosmate.entity.Wallet providerWallet = null;
+        if (providerUserId != null) {
+            providerWallet = walletService.getByUserId(providerUserId).orElse(null);
+        }
+        res.put("providerWallet", providerWallet);
+
+        // cosplayer wallet
+        com.cosmate.entity.Wallet cosWallet = walletService.getByUserId(order.getCosplayerId()).orElse(null);
+        res.put("cosplayerWallet", cosWallet);
+
+        // recent transactions (limit 10)
+        java.util.List<com.cosmate.entity.Transaction> providerTxs = providerWallet == null ? java.util.Collections.emptyList() : walletService.getTransactionsForWallet(providerWallet);
+        java.util.List<com.cosmate.entity.Transaction> cosTxs = cosWallet == null ? java.util.Collections.emptyList() : walletService.getTransactionsForWallet(cosWallet);
+        res.put("providerTransactions", providerTxs.size() > 10 ? providerTxs.subList(0,10) : providerTxs);
+        res.put("cosplayerTransactions", cosTxs.size() > 10 ? cosTxs.subList(0,10) : cosTxs);
+
+        return res;
+    }
+
+    @Override
     public Dispute createDispute(Integer openerUserId, Integer orderId, String reason) throws Exception {
         Order order = orderRepository.findById(orderId).orElse(null);
         if (order == null) throw new IllegalArgumentException("Order not found");

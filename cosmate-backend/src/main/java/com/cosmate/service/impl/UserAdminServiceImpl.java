@@ -22,7 +22,7 @@ public class UserAdminServiceImpl extends CrudServiceImpl<User, Integer, UserRes
     private final UserMapper userMapper;
 
     @Override
-    protected BaseCrudRepository<User, Integer> getRepository() { return userRepository; }
+    public BaseCrudRepository<User, Integer> getRepository() { return userRepository; }
 
     @Override
     protected BaseCrudMapper<User, UserResponse> getMapper() { return userMapper; }

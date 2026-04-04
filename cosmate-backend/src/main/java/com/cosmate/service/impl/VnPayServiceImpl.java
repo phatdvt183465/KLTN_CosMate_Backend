@@ -203,6 +203,15 @@ public class VnPayServiceImpl implements VnPayService {
         // idempotency: if already completed, return
         if ("COMPLETED".equalsIgnoreCase(t.getStatus())) {
             result.put("status", "ALREADY_DONE");
+            result.put("transactionId", String.valueOf(t.getId()));
+            // if this transaction is associated with an order, include orderId for caller convenience
+            try {
+                String type = t.getType();
+                if (type != null && type.startsWith("ORDER#")) {
+                    Integer orderId = Integer.valueOf(type.substring("ORDER#".length()));
+                    result.put("orderId", String.valueOf(orderId));
+                }
+            } catch (Exception ignored) {}
             return result;
         }
 

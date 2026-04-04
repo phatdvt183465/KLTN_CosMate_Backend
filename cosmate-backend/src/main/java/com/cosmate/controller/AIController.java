@@ -1,5 +1,6 @@
 package com.cosmate.controller;
 
+import com.cosmate.configuration.AiKnowledgeBase;
 import com.cosmate.dto.request.PoseScoringRequest;
 import com.cosmate.dto.request.RecommendationRequest;
 import com.cosmate.dto.request.SearchByImageRequest;
@@ -7,6 +8,7 @@ import com.cosmate.dto.response.ApiResponse;
 import com.cosmate.dto.response.PoseScoringResponse;
 import com.cosmate.dto.response.SearchResponse;
 import com.cosmate.service.AIService;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +22,7 @@ import java.util.List;
 public class AIController {
 
     private final AIService aiService;
+    private final AiKnowledgeBase aiKnowledgeBase;
 
     // API tìm kiếm: POST /api/search/ai
     @PostMapping(value = "/ai", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -88,6 +91,39 @@ public class AIController {
         return ApiResponse.<String>builder()
                 .message("Tạo mô tả thành công!")
                 .result(description)
+                .build();
+    }
+
+    // Frontend gọi API này để lấy 6 câu hỏi đầu tiên
+    @GetMapping("/stage-1")
+    public ApiResponse<JsonNode> getStage1Survey() {
+        return ApiResponse.<JsonNode>builder()
+                .result(aiKnowledgeBase.getStage1Survey())
+                .message("Tải bộ câu hỏi Quick Test thành công!")
+                .build();
+    }
+
+    // Khi có kết quả Archetype ID (VD: ARCH_01), Frontend gọi API này để lấy bộ câu hỏi chuyên sâu
+    @GetMapping("/stage-2/{archetypeId}")
+    public ApiResponse<JsonNode> getStage2Survey(@PathVariable String archetypeId) {
+        JsonNode allStage2 = aiKnowledgeBase.getStage2Survey();
+        JsonNode specificQuestions = allStage2.path(archetypeId);
+
+        if (specificQuestions.isMissingNode()) {
+            throw new RuntimeException("Không tìm thấy bộ câu hỏi cho Archetype này!");
+        }
+
+        return ApiResponse.<JsonNode>builder()
+                .result(specificQuestions)
+                .message("Tải bộ câu hỏi Deep Analysis thành công!")
+                .build();
+    }
+
+    // (Tùy chọn) Khuyến mãi thêm cái API lấy danh sách Archetype nếu sau này Frontend cần
+    @GetMapping("/archetypes")
+    public ApiResponse<JsonNode> getAllArchetypes() {
+        return ApiResponse.<JsonNode>builder()
+                .result(aiKnowledgeBase.getArchetypes())
                 .build();
     }
 }

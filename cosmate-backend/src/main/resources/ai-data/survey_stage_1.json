@@ -1,0 +1,66 @@
+[
+    {
+      "question_id": "S1_Q1",
+      "question": "Mục tiêu cốt lõi của bạn trong một thế giới Fantasy là gì?",
+      "options": [
+        { "text": "Khám phá mọi vùng đất và tận hưởng tự do.", "points_to": ["ARCH_07", "ARCH_05"] },
+        { "text": "Đạt được sức mạnh tuyệt đối để không ai dám bắt nạt mình.", "points_to": ["ARCH_01", "ARCH_10"] },
+        { "text": "Tìm ra mọi bí mật của vũ trụ và ma thuật.", "points_to": ["ARCH_03", "ARCH_11", "ARCH_09"] },
+        { "text": "Bảo vệ những người tôi yêu thương, dù phải trả giá.", "points_to": ["ARCH_06", "ARCH_08"] },
+        { "text": "Đập nát những luật lệ thối nát của vương quốc này.", "points_to": ["ARCH_02"] },
+        { "text": "Chỉ cần sống một cuộc đời bình yên, làm vườn nấu ăn.", "points_to": ["ARCH_04", "ARCH_12"] }
+      ]
+    },
+    {
+      "question_id": "S1_Q2",
+      "question": "Khi đối mặt với một vấn đề nan giải, phản xạ đầu tiên của bạn là?",
+      "options": [
+        { "text": "Lao vào giải quyết ngay, tới đâu hay tới đó.", "points_to": ["ARCH_01", "ARCH_07", "ARCH_05"] },
+        { "text": "Lùi lại một bước, lập bảng kế hoạch chi tiết A-B-C.", "points_to": ["ARCH_03", "ARCH_09"] },
+        { "text": "Tìm xem có ai đang gặp nguy hiểm không để ưu tiên cứu họ.", "points_to": ["ARCH_06", "ARCH_04"] },
+        { "text": "Tìm cách lách luật hoặc dùng mánh khóe để vượt qua.", "points_to": ["ARCH_02", "ARCH_11"] }
+      ]
+    },
+    {
+      "question_id": "S1_Q3",
+      "question": "Vai trò nào khiến bạn thấy 'ngầu' nhất trong một tổ đội?",
+      "options": [
+        { "text": "Đội trưởng tiền phong, truyền cảm hứng cho mọi người.", "points_to": ["ARCH_01", "ARCH_10"] },
+        { "text": "Quân sư thầm lặng, đưa ra các nước cờ chí mạng.", "points_to": ["ARCH_03", "ARCH_11"] },
+        { "text": "Hỗ trợ (Support/Healer), giữ mạng cho cả team.", "points_to": ["ARCH_04", "ARCH_06", "ARCH_08"] },
+        { "text": "Người tự do (Roamer), thích đi lẻ, thoắt ẩn thoắt hiện.", "points_to": ["ARCH_02", "ARCH_07"] },
+        { "text": "Chế tạo vũ khí, rèn đồ cung cấp cho team.", "points_to": ["ARCH_09", "ARCH_12"] }
+      ]
+    },
+    {
+      "question_id": "S1_Q4",
+      "question": "Thẩm mỹ (Aesthetic) trang phục nào làm bạn mê mẩn nhất?",
+      "options": [
+        { "text": "Áo choàng dài bay trong gió, tone màu tối bí ẩn.", "points_to": ["ARCH_02", "ARCH_11", "ARCH_03"] },
+        { "text": "Trang phục hoàng gia, đính đá, giáp trụ uy nghi.", "points_to": ["ARCH_10", "ARCH_01"] },
+        { "text": "Váy Lolita xòe, nhiều nơ, màu sắc pastel ngọt ngào.", "points_to": ["ARCH_04", "ARCH_08"] },
+        { "text": "Đồ bụi bặm, túi hộp nhiều ngăn, dễ dàng vận động.", "points_to": ["ARCH_07", "ARCH_09", "ARCH_12"] },
+        { "text": "Càng dị biệt, sặc sỡ và không giống ai càng tốt.", "points_to": ["ARCH_05"] }
+      ]
+    },
+    {
+      "question_id": "S1_Q5",
+      "question": "Nỗi sợ lớn nhất cản bước bạn là gì?",
+      "options": [
+        { "text": "Sự yếu kém và thất bại.", "points_to": ["ARCH_01", "ARCH_10"] },
+        { "text": "Bị mất tự do, bị ép vào khuôn khổ.", "points_to": ["ARCH_02", "ARCH_07"] },
+        { "text": "Sự dốt nát và bị lừa dối.", "points_to": ["ARCH_03", "ARCH_11"] },
+        { "text": "Sự cô đơn, bị bỏ rơi bởi những người thân thiết.", "points_to": ["ARCH_08", "ARCH_06", "ARCH_04"] },
+        { "text": "Cuộc sống nhàm chán, lặp đi lặp lại không có gì mới.", "points_to": ["ARCH_05", "ARCH_09"] }
+      ]
+    },
+    {
+      "question_id": "S1_Q6",
+      "question": "Ngân sách bạn muốn đầu tư cho bộ cosplay sắp tới?",
+      "options": [
+        { "text": "Dưới 150k (Nhanh, gọn, rẻ).", "points_to": ["ARCH_12", "ARCH_05"] },
+        { "text": "150k - 300k (Mức trung bình, vừa đủ xài).", "points_to": ["ARCH_07", "ARCH_06", "ARCH_01"] },
+        { "text": "Trên 300k (Càng lộng lẫy, nhiều phụ kiện càng tốt).", "points_to": ["ARCH_10", "ARCH_08", "ARCH_03"] }
+      ]
+    }
+  ]

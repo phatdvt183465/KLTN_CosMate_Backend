@@ -1,0 +1,116 @@
+{
+    "ARCH_01": [
+      {
+        "question": "Bạn đã ra dáng một Người Hùng. Vậy động lực lớn nhất khiến bạn vung kiếm là gì?",
+        "options": [
+          { "text": "Trách nhiệm với những người yếu thế hơn mình.", "points_to_subtype": "01_A" },
+          { "text": "Sự phẫn nộ và khao khát trả thù những kẻ đã phá hoại đời mình.", "points_to_subtype": "01_B" },
+          { "text": "Tôi chả muốn đâu, nhưng không đánh thì chết, đành nhắm mắt làm liều.", "points_to_subtype": "01_C" },
+          { "text": "Đơn giản là tôi muốn gặp những kẻ mạnh hơn để thử thách giới hạn.", "points_to_subtype": "01_D" }
+        ]
+      }
+    ],
+    "ARCH_02": [
+      {
+        "question": "Bạn mang dòng máu Kẻ Nổi Loạn. Cách bạn đối đầu với thế giới là?",
+        "options": [
+          { "text": "Mặc kệ thế giới, tôi sống theo cách của tôi, ai ngáng đường thì dọn.", "points_to_subtype": "02_A" },
+          { "text": "Tôi sẽ lập một tổ chức ngầm để thay đổi hoàn toàn hệ thống mục nát này.", "points_to_subtype": "02_B" },
+          { "text": "Tôi chỉ muốn thấy mọi thứ hỗn loạn, nổ tung lên cho vui mắt.", "points_to_subtype": "02_C" }
+        ]
+      }
+    ],
+    "ARCH_03": [
+      {
+        "question": "Trí tuệ của bạn ở bậc Nhà Thông Thái. Bạn sử dụng kiến thức đó để làm gì?",
+        "options": [
+          { "text": "Mở trường đào tạo, truyền dạy cho những đứa trẻ tiềm năng.", "points_to_subtype": "03_A" },
+          { "text": "Đứng trong bóng tối, thao túng các thế lực để đạt được mục đích.", "points_to_subtype": "03_B" },
+          { "text": "Làm thí nghiệm liên tục, chân lý khoa học quan trọng hơn đạo đức.", "points_to_subtype": "03_C" }
+        ]
+      }
+    ],
+    "ARCH_04": [
+      {
+        "question": "Sự ngây thơ của bạn thật đáng quý. Nhưng bên trong bạn thực sự là...",
+        "options": [
+          { "text": "Một tâm hồn trong vắt, luôn tin vào những điều tốt đẹp nhất.", "points_to_subtype": "04_A" },
+          { "text": "Một người hiểu biết sự tàn khốc của thế giới, nhưng vẫn chọn cách bao dung.", "points_to_subtype": "04_B" }
+        ]
+      }
+    ],
+    "ARCH_05": [
+      {
+        "question": "Bạn là Kẻ Pha Trò. Đằng sau tiếng cười đó là gì?",
+        "options": [
+          { "text": "Một quá khứ đau thương mà tôi cố giấu đi để mọi người được vui.", "points_to_subtype": "05_A" },
+          { "text": "Một cái đầu ma mãnh, tiếng cười chỉ là đòn bẩy tâm lý để lừa họ.", "points_to_subtype": "05_B" },
+          { "text": "Chả có gì cả, đầu tôi trống rỗng, tôi chỉ làm theo bản năng thôi.", "points_to_subtype": "05_C" }
+        ]
+      }
+    ],
+    "ARCH_06": [
+      {
+        "question": "Là một Người Chăm Sóc, sự hy sinh của bạn được thể hiện qua:",
+        "options": [
+          { "text": "Quán xuyến mọi việc nhỏ nhặt, nấu ăn, dọn dẹp cho cả team.", "points_to_subtype": "06_A" },
+          { "text": "Sẵn sàng nhận lấy sự căm ghét, làm bia đỡ đạn để bảo vệ hòa bình.", "points_to_subtype": "06_B" }
+        ]
+      }
+    ],
+    "ARCH_07": [
+      {
+        "question": "Chuyến phiêu lưu của Người Khám Phá sẽ hướng về đâu?",
+        "options": [
+          { "text": "Nhắm thẳng tới đại dương/vùng đất chưa ai từng đặt chân tới.", "points_to_subtype": "07_A" },
+          { "text": "Cứ bước đi vô định, nơi nào có rượu ngon và phong cảnh đẹp thì dừng lại.", "points_to_subtype": "07_B" }
+        ]
+      }
+    ],
+    "ARCH_08": [
+      {
+        "question": "Trong tình yêu, Người Tình sẽ hành động thế nào?",
+        "options": [
+          { "text": "Trở thành tấm khiên vững chắc, âm thầm đi theo bảo vệ crush.", "points_to_subtype": "08_A" },
+          { "text": "Tình yêu là sở hữu, ai tiếp cận crush của tôi thì chuẩn bị tinh thần đi.", "points_to_subtype": "08_B" },
+          { "text": "Rắc thính khắp nơi, làm trái tim bao người thổn thức rồi rời đi nhẹ nhàng.", "points_to_subtype": "08_C" }
+        ]
+      }
+    ],
+    "ARCH_09": [
+      {
+        "question": "Sự sáng tạo của bạn tập trung vào lĩnh vực nào?",
+        "options": [
+          { "text": "Chế tạo máy móc, vũ khí hiện đại để nâng tầm sức mạnh.", "points_to_subtype": "09_A" },
+          { "text": "Tạo ra những tác phẩm nghệ thuật, dù nó có thể gây nổ hay nguy hiểm.", "points_to_subtype": "09_B" }
+        ]
+      }
+    ],
+    "ARCH_10": [
+      {
+        "question": "Nếu là Người Trị Vì, bạn sẽ cai trị vương quốc bằng cách nào?",
+        "options": [
+          { "text": "Lắng nghe thần dân, dùng ngoại giao và sự bao dung để thu phục.", "points_to_subtype": "10_A" },
+          { "text": "Quyền lực tuyệt đối! Ai không tuân lệnh sẽ bị loại bỏ ngay lập tức.", "points_to_subtype": "10_B" }
+        ]
+      }
+    ],
+    "ARCH_11": [
+      {
+        "question": "Phép thuật của bạn mang bản chất gì?",
+        "options": [
+          { "text": "Nghiên cứu các trận pháp, giả kim thuật tuân theo quy luật tự nhiên.", "points_to_subtype": "11_A" },
+          { "text": "Sử dụng tà thuật, giao kèo với quỷ dữ để có sức mạnh vô hạn.", "points_to_subtype": "11_B" }
+        ]
+      }
+    ],
+    "ARCH_12": [
+      {
+        "question": "Dù chỉ là Người Thường, nhưng điểm tự hào nhất của bạn là?",
+        "options": [
+          { "text": "Ý chí sắt đá, nỗ lực 200% sức lực để bắt kịp những thiên tài.", "points_to_subtype": "12_A" },
+          { "text": "Khả năng sinh tồn và tấu hài trong những tình huống oái oăm nhất.", "points_to_subtype": "12_B" }
+        ]
+      }
+    ]
+  }

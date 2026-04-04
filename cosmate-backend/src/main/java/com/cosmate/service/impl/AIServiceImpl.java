@@ -1,5 +1,6 @@
 package com.cosmate.service.impl;
 
+import com.cosmate.configuration.AiKnowledgeBase;
 import com.cosmate.dto.request.PoseScoringRequest;
 import com.cosmate.dto.request.RecommendationRequest;
 import com.cosmate.dto.request.SearchByImageRequest;
@@ -37,6 +38,7 @@ public class AIServiceImpl implements AIService {
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate = new RestTemplate();
     private final CostumeRepository costumeRepository;
+    private final AiKnowledgeBase aiKnowledgeBase;
 
     @Value("${gemini.api.key}")
     private String apiKey;
@@ -152,24 +154,80 @@ public class AIServiceImpl implements AIService {
     /**
      * Phân tích hồ sơ người dùng và đưa ra gợi ý nhân vật Cosplay phù hợp.
      */
+    @Override
     public List<SearchResponse> recommendCosplay(RecommendationRequest request) {
-        String userProfile = String.format(
-                "Giới tính: %s. Phong cách: %s. Màu yêu thích: %s. Ngân sách: %s. Sở thích: %s.",
-                request.getGender(), request.getStyle(), request.getFavoriteColor(), request.getBudgetRange(), request.getHobby()
-        );
+        try {
+            // 1. Trích xuất dữ liệu học thuật từ RAG (In-Memory Cache)
+            JsonNode archetypes = aiKnowledgeBase.getArchetypes();
+            JsonNode targetArchetype = null;
 
-        String prompt = "Dựa trên hồ sơ người dùng sau: [" + userProfile + "]. " +
-                "Hãy gợi ý duy nhất 01 nhân vật Anime/Game/Manga nổi tiếng phù hợp nhất để họ cosplay. " +
-                "Chỉ trả về 01 câu mô tả ngắn gọn về đặc điểm trang phục của nhân vật đó bằng tiếng Việt để dùng làm từ khóa tìm kiếm. " +
-                "Ví dụ: 'Trang phục Kimono màu hồng ống tre xanh'. Không giải thích thêm.";
+            for (JsonNode node : archetypes) {
+                if (node.path("archetype_id").asText().equals(request.getArchetypeId())) {
+                    targetArchetype = node;
+                    break;
+                }
+            }
 
-        String suggestedKeyword = callGeminiGenerateText(prompt);
-        log.info("Từ khóa AI gợi ý: {}", suggestedKeyword);
+            if (targetArchetype == null) {
+                throw new RuntimeException("Không tìm thấy dữ liệu Archetype trong RAG!");
+            }
 
-        SearchByImageRequest searchRequest = new SearchByImageRequest();
-        searchRequest.setText(suggestedKeyword);
+            String archName = targetArchetype.path("archetype_name").asText();
+            String colors = targetArchetype.path("color_palette").toString();
+            String style = targetArchetype.path("clothing_style").asText();
 
-        return searchSimilarCostumes(searchRequest);
+            // Tìm thông tin Subtype chi tiết
+            String subTypeName = "";
+            JsonNode subTypes = targetArchetype.path("sub_types");
+            for (JsonNode sub : subTypes) {
+                if (sub.path("id").asText().equals(request.getSubTypeId())) {
+                    subTypeName = sub.path("name").asText();
+                    break;
+                }
+            }
+
+            // 2. Tạo nội dung Vector Search từ dữ liệu Tâm lý học
+            String searchContent = String.format("Trang phục dành cho nguyên mẫu %s, cụ thể là %s. Phong cách quần áo chủ đạo: %s. Bảng màu ưu tiên: %s. Mức ngân sách: %s.",
+                    archName, subTypeName, style, colors, request.getBudgetMetadata());
+
+            log.info("Nội dung đưa vào Vector AI Suggestion: {}", searchContent);
+
+            // 3. Tạo Vector và tự đi so khớp (Không gọi ké hàm search ảnh nữa)
+            List<Double> queryVector = callGeminiGetVector(searchContent);
+            List<Costume> allCostumes = costumeRepository.findAll();
+            List<SearchResponse> results = new ArrayList<>();
+
+            // Recommend thì lấy ngưỡng thấp một chút (0.50) để kết quả đa dạng, phong phú hơn
+            final double RECOMMEND_THRESHOLD = 0.50;
+
+            for (Costume costume : allCostumes) {
+                if (costume.getCostumeVector() == null || costume.getCostumeVector().isEmpty()) continue;
+
+                List<Double> dbVector = objectMapper.readValue(costume.getCostumeVector(), new TypeReference<>() {});
+                double score = calculateCosineSimilarity(queryVector, dbVector);
+
+                if (score > RECOMMEND_THRESHOLD) {
+                    String displayImageUrl = costume.getImages().isEmpty() ? "" : costume.getImages().get(0).getImageUrl();
+                    results.add(SearchResponse.builder()
+                            .costumeId(costume.getId())
+                            .costumeName(costume.getName())
+                            .imageUrl(displayImageUrl)
+                            .price(costume.getPricePerDay())
+                            .similarityScore(score)
+                            .build());
+                }
+            }
+
+            // 4. Lấy Top 5 kết quả đỉnh nhất trả về cho người dùng
+            return results.stream()
+                    .sorted(Comparator.comparingDouble(SearchResponse::getSimilarityScore).reversed())
+                    .limit(5)
+                    .collect(Collectors.toList());
+
+        } catch (Exception e) {
+            log.error("Lỗi hệ thống Recommend RAG: {}", e.getMessage(), e);
+            throw new RuntimeException("Gợi ý thất bại: " + e.getMessage());
+        }
     }
 
     /**
@@ -247,11 +305,11 @@ public class AIServiceImpl implements AIService {
             String url = GENERATION_MODEL_URL + "?key=" + apiKey;
             String base64Image = Base64.getEncoder().encodeToString(request.getImage().getBytes());
 
-            String promptText = "Bạn là một giám khảo Cosplay áp dụng tiêu chuẩn World Cosplay Summit. " +
-                    "Hãy so sánh ảnh này với nhân vật '" + request.getCharacterName() + "' và chấm điểm dựa trên 3 tiêu chí: " +
-                    "1. Tư thế (40%), 2. Biểu cảm (30%), 3. Chi tiết trang phục (30%). " +
-                    "Chỉ trả về JSON định dạng: " +
-                    "{\"score\": [Điểm tổng 1-100], \"pose_score\": [1-40], \"expression_score\": [1-30], \"costume_score\": [1-30], \"comment\": \"[Nhận xét kỹ thuật...]\"}";
+            String promptText = "Bạn là một giám khảo Cosplay. Dưới đây là bộ tiêu chuẩn WCS chính thức:\n"
+                    + aiKnowledgeBase.getWcsRules() + "\n"
+                    + "Hãy so sánh ảnh user chụp với nhân vật '" + request.getCharacterName() + "' và chấm điểm nghiêm ngặt theo luật trên. "
+                    + "Chỉ trả về JSON định dạng: "
+                    + "{\"score\": [Điểm tổng 1-100], \"pose_score\": [1-40], \"expression_score\": [1-40], \"costume_score\": [1-20], \"comment\": \"[Nhận xét kỹ thuật...]\"}";
 
             Map<String, Object> textPart = Map.of("text", promptText);
             Map<String, Object> imagePart = Map.of("inline_data", Map.of(

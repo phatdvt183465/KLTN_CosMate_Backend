@@ -4,6 +4,7 @@ import com.cosmate.dto.request.ChatMessageRequest;
 import com.cosmate.dto.response.ApiResponse;
 import com.cosmate.dto.response.ChatMessageResponse;
 import com.cosmate.dto.response.ChatPartnerProfileResponse;
+import com.cosmate.dto.response.ChatRoomResponse;
 import com.cosmate.entity.ChatRoom;
 import com.cosmate.service.ChatService;
 import lombok.RequiredArgsConstructor;
@@ -56,5 +57,14 @@ public class ChatController {
     @MessageMapping("/chat.sendMessage")
     public void processMessage(@Payload ChatMessageRequest request) {
         chatService.saveMessageAndBroadcast(request);
+    }
+
+    // API Lấy danh sách phòng chat của 1 user (Làm giao diện Inbox)
+    @GetMapping("/rooms/user/{userId}")
+    public ApiResponse<List<ChatRoomResponse>> getUserChatRooms(@PathVariable Integer userId) {
+        return ApiResponse.<List<ChatRoomResponse>>builder()
+                .result(chatService.getUserChatRooms(userId))
+                .message("Lấy danh sách phòng chat thành công")
+                .build();
     }
 }

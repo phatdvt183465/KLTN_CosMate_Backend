@@ -3,6 +3,7 @@ package com.cosmate.service;
 import com.cosmate.dto.request.ChatMessageRequest;
 import com.cosmate.dto.response.ChatMessageResponse;
 import com.cosmate.dto.response.ChatPartnerProfileResponse;
+import com.cosmate.dto.response.ChatRoomResponse;
 import com.cosmate.entity.ChatMessage;
 import com.cosmate.entity.ChatRoom;
 
@@ -13,4 +14,5 @@ public interface ChatService {
     ChatMessage saveMessageAndBroadcast(ChatMessageRequest request);
     List<ChatMessageResponse> getMessageHistory(Integer roomId);
     ChatPartnerProfileResponse getPartnerProfile(Integer roomId, Integer currentUserId);
+    List<ChatRoomResponse> getUserChatRooms(Integer userId);
 }

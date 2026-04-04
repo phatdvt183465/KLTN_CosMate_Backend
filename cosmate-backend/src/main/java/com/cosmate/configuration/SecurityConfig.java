@@ -61,6 +61,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/accessories/**").permitAll()
                         .requestMatchers("/api/rental-options/**").permitAll()
                         .requestMatchers("/api/services/**").permitAll()
+                        .requestMatchers("/ws/**").permitAll()
                         // Auth endpoints
                         .requestMatchers("/api/auth/**").permitAll()
                         // Allow VNPay return endpoint (VNPay redirect must be anonymous)

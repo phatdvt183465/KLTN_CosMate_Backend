@@ -3,6 +3,7 @@ package com.cosmate.service.impl;
 import com.cosmate.dto.request.ChatMessageRequest;
 import com.cosmate.dto.response.ChatMessageResponse;
 import com.cosmate.dto.response.ChatPartnerProfileResponse;
+import com.cosmate.dto.response.ChatRoomResponse;
 import com.cosmate.entity.ChatMessage;
 import com.cosmate.entity.ChatRoom;
 import com.cosmate.repository.ChatMessageRepository;
@@ -104,5 +105,35 @@ public class ChatServiceImpl implements ChatService {
                         .avatarUrl(user.getAvatarUrl())
                         .build())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin đối tác!"));
+    }
+
+    @Override
+    public List<ChatRoomResponse> getUserChatRooms(Integer userId) {
+        // Lấy tất cả các phòng của user này
+        List<ChatRoom> rooms = chatRoomRepository.findAllRoomsByUserId(userId);
+
+        // Map sang DTO để trả cho frontend
+        return rooms.stream().map(room -> {
+            // Lấy ID của người đối diện
+            Integer partnerId = room.getUser1Id().equals(userId) ? room.getUser2Id() : room.getUser1Id();
+
+            // Tìm thông tin của người đối diện (tránh lỗi null nếu lỡ DB chưa có)
+            String partnerName = "Người dùng ẩn danh";
+            String partnerAvatar = null;
+
+            var partnerOpt = userRepository.findById(partnerId);
+            if (partnerOpt.isPresent()) {
+                partnerName = partnerOpt.get().getFullName();
+                partnerAvatar = partnerOpt.get().getAvatarUrl();
+            }
+
+            return ChatRoomResponse.builder()
+                    .roomId(room.getId())
+                    .partnerId(partnerId)
+                    .partnerName(partnerName)
+                    .partnerAvatar(partnerAvatar)
+                    .lastMessageAt(room.getLastMessageAt())
+                    .build();
+        }).collect(Collectors.toList());
     }
 }

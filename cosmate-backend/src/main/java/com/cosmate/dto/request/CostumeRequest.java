@@ -14,6 +14,7 @@ public class CostumeRequest {
     private Integer numberOfItems;
     private BigDecimal pricePerDay;
     private BigDecimal depositAmount;
+    private Integer rentDiscount;
     private Integer providerId;
     private List<MultipartFile> imageFiles;
     private String surcharges;

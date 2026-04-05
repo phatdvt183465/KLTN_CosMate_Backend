@@ -20,6 +20,7 @@ public class CostumeResponse {
     private Integer numberOfItems;
     private BigDecimal pricePerDay;
     private BigDecimal depositAmount;
+    private Integer rentDiscount;
     private String status;
     private Integer providerId;
     private List<String> imageUrls;

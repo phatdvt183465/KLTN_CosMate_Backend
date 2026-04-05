@@ -48,6 +48,10 @@ public class CostumeServiceImpl implements CostumeService {
 
         Costume costume = new Costume();
         mapBaseInfo(costume, request);
+        // Ensure a default rentDiscount is set to avoid null DB inserts and to have consistent pricing behavior
+        if (costume.getRentDiscount() == null) {
+            costume.setRentDiscount(100); // default = 100% (no discount for subsequent days)
+        }
         costume.setProviderId(request.getProviderId());
         costume.setStatus("AVAILABLE");
 
@@ -157,6 +161,7 @@ public class CostumeServiceImpl implements CostumeService {
         costume.setNumberOfItems(request.getNumberOfItems());
         costume.setPricePerDay(request.getPricePerDay());
         costume.setDepositAmount(request.getDepositAmount());
+        if (request.getRentDiscount() != null) costume.setRentDiscount(request.getRentDiscount());
     }
 
     private void updateBaseInfo(Costume costume, CostumeRequest request) {
@@ -175,6 +180,11 @@ public class CostumeServiceImpl implements CostumeService {
             if (request.getDepositAmount().compareTo(BigDecimal.ZERO) < 0)
                 throw new RuntimeException("Deposit cannot be negative");
             costume.setDepositAmount(request.getDepositAmount());
+        }
+        if (request.getRentDiscount() != null) {
+            if (request.getRentDiscount() < 0 || request.getRentDiscount() > 100)
+                throw new RuntimeException("rentDiscount must be between 0 and 100");
+            costume.setRentDiscount(request.getRentDiscount());
         }
     }
 
@@ -310,6 +320,7 @@ public class CostumeServiceImpl implements CostumeService {
                 .numberOfItems(costume.getNumberOfItems())
                 .pricePerDay(costume.getPricePerDay())
                 .depositAmount(costume.getDepositAmount())
+                .rentDiscount(costume.getRentDiscount())
                 .status(costume.getStatus())
                 .providerId(costume.getProviderId())
                 .imageUrls(costume.getImages().stream().map(CostumeImage::getImageUrl).collect(Collectors.toList()))
@@ -339,6 +350,10 @@ public class CostumeServiceImpl implements CostumeService {
         boolean hasImage = request.getImageFiles() != null &&
                 request.getImageFiles().stream().anyMatch(f -> f != null && !f.isEmpty());
         if (!hasImage) throw new RuntimeException("At least one valid image is required.");
+        if (request.getRentDiscount() != null) {
+            if (request.getRentDiscount() < 0 || request.getRentDiscount() > 100)
+                throw new RuntimeException("rentDiscount must be between 0 and 100");
+        }
     }
 
     private boolean isValidString(String input) {

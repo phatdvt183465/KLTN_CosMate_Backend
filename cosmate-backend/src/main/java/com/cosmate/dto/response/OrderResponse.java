@@ -15,6 +15,7 @@ public class OrderResponse {
     private BigDecimal totalAmount;
     private BigDecimal totalDepositAmount;
     private LocalDateTime createdAt;
+    private LocalDateTime rentDate;
 
     // When payment requires external redirect, include paymentUrl
     private String paymentUrl;

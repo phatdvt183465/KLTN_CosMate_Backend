@@ -23,6 +23,7 @@ public class OrderFullResponse {
     private BigDecimal totalAmount;
     private BigDecimal totalDepositAmount;
     private LocalDateTime createdAt;
+    private LocalDateTime rentDate;
 
     private List<OrderDetail> details;
     private List<OrderCostumeSurcharge> surcharges;

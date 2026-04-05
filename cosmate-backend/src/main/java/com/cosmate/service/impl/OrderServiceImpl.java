@@ -160,6 +160,7 @@ public class OrderServiceImpl implements OrderService {
                 .totalAmount(totalAmount)
                 .totalDepositAmount(totalDeposit)
                 .createdAt(LocalDateTime.now())
+                .rentDate(rentStart)
                 .build();
         order = orderRepository.save(order);
         final Integer savedOrderId = order.getId();
@@ -318,6 +319,7 @@ public class OrderServiceImpl implements OrderService {
         resp.setTotalAmount(order.getTotalAmount());
         resp.setTotalDepositAmount(order.getTotalDepositAmount());
         resp.setCreatedAt(order.getCreatedAt());
+        resp.setRentDate(order.getRentDate());
 
         if ("WALLET".equalsIgnoreCase(pm)) {
             // debit user's wallet
@@ -429,6 +431,7 @@ public class OrderServiceImpl implements OrderService {
                 .totalAmount(total)
                 .totalDepositAmount(deposit)
                 .createdAt(java.time.LocalDateTime.now())
+                .rentDate(java.time.LocalDateTime.of(bookingDate, java.time.LocalTime.MIDNIGHT))
                 .build();
         order = orderRepository.save(order);
 
@@ -464,6 +467,7 @@ public class OrderServiceImpl implements OrderService {
         resp.setStatus(order.getStatus());
         resp.setTotalAmount(order.getTotalAmount());
         resp.setCreatedAt(order.getCreatedAt());
+        resp.setRentDate(order.getRentDate());
         return resp;
     }
 
@@ -514,6 +518,7 @@ public class OrderServiceImpl implements OrderService {
         resp.setStatus(order.getStatus());
         resp.setTotalAmount(order.getTotalAmount());
         resp.setCreatedAt(order.getCreatedAt());
+        resp.setRentDate(order.getRentDate());
         return resp;
     }
 
@@ -548,6 +553,7 @@ public class OrderServiceImpl implements OrderService {
         resp.setStatus(order.getStatus());
         resp.setTotalAmount(order.getTotalAmount());
         resp.setCreatedAt(order.getCreatedAt());
+        resp.setRentDate(order.getRentDate());
         return resp;
     }
 
@@ -587,6 +593,7 @@ public class OrderServiceImpl implements OrderService {
         resp.setStatus(order.getStatus());
         resp.setTotalAmount(order.getTotalAmount());
         resp.setCreatedAt(order.getCreatedAt());
+        resp.setRentDate(order.getRentDate());
         return resp;
     }
 
@@ -646,6 +653,7 @@ public class OrderServiceImpl implements OrderService {
         resp.setStatus(order.getStatus());
         resp.setTotalAmount(order.getTotalAmount());
         resp.setCreatedAt(order.getCreatedAt());
+        resp.setRentDate(order.getRentDate());
         return resp;
     }
 
@@ -717,6 +725,7 @@ public class OrderServiceImpl implements OrderService {
         resp.setStatus(order.getStatus());
         resp.setTotalAmount(order.getTotalAmount());
         resp.setCreatedAt(order.getCreatedAt());
+        resp.setRentDate(order.getRentDate());
         return resp;
     }
 

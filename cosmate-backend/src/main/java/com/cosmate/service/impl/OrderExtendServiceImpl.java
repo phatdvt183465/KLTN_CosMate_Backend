@@ -241,6 +241,35 @@ public class OrderExtendServiceImpl implements OrderExtendService {
         return toDto(ext);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public OrderExtendResponse getExtendById(Integer userId, Integer orderId, Integer extendId) throws Exception {
+        OrderDetailExtend ext = orderDetailExtendRepository.findById(extendId).orElseThrow(() -> new IllegalArgumentException("Extend request not found"));
+        Order order = orderRepository.findById(orderId).orElseThrow(() -> new IllegalArgumentException("Order not found"));
+        if (order.getCosplayerId() == null || !order.getCosplayerId().equals(userId)) throw new IllegalArgumentException("No permission to view this extend");
+        // ensure the extend belongs to an order detail that is part of this order
+        OrderDetail od = orderDetailRepository.findById(ext.getOrderDetailId()).orElseThrow(() -> new IllegalArgumentException("Order detail for extend not found"));
+        if (od.getOrderId() == null || !od.getOrderId().equals(orderId)) throw new IllegalArgumentException("Extend does not belong to this order");
+        return toDto(ext);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<OrderExtendResponse> getExtendsByOrder(Integer userId, Integer orderId) throws Exception {
+        Order order = orderRepository.findById(orderId).orElseThrow(() -> new IllegalArgumentException("Order not found"));
+        if (order.getCosplayerId() == null || !order.getCosplayerId().equals(userId)) throw new IllegalArgumentException("No permission to view extends for this order");
+        // fetch all order details for this order and collect their extends
+        java.util.List<OrderDetail> details = orderDetailRepository.findByOrderId(orderId);
+        java.util.List<OrderExtendResponse> res = new java.util.ArrayList<>();
+        for (OrderDetail d : details) {
+            java.util.List<OrderDetailExtend> exts = orderDetailExtendRepository.findByOrderDetailId(d.getId());
+            if (exts != null) {
+                for (OrderDetailExtend e : exts) res.add(toDto(e));
+            }
+        }
+        return res;
+    }
+
     private OrderExtendResponse toDto(OrderDetailExtend e) {
         OrderExtendResponse r = new OrderExtendResponse();
         r.setId(e.getId());

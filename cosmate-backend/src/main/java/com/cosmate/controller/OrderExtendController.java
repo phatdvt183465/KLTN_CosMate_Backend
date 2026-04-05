@@ -74,6 +74,36 @@ public class OrderExtendController {
             return ApiResponse.<OrderExtendResponse>builder().code(500).message("Failed to cancel extend: " + ex.getMessage()).build();
         }
     }
+
+    @GetMapping("/{orderId}/details/{detailId}/extend/{extendId}")
+    public ApiResponse<OrderExtendResponse> getExtendById(@PathVariable Integer orderId,
+                                                          @PathVariable Integer detailId,
+                                                          @PathVariable Integer extendId) {
+        try {
+            Integer userId = getCurrentUserId();
+            if (userId == null) return ApiResponse.<OrderExtendResponse>builder().code(401).message("Unauthorized").build();
+            OrderExtendResponse resp = orderExtendService.getExtendById(userId, orderId, extendId);
+            return ApiResponse.<OrderExtendResponse>builder().result(resp).message("Extend fetched").build();
+        } catch (IllegalArgumentException ex) {
+            return ApiResponse.<OrderExtendResponse>builder().code(400).message(ex.getMessage()).build();
+        } catch (Exception ex) {
+            return ApiResponse.<OrderExtendResponse>builder().code(500).message("Failed to fetch extend: " + ex.getMessage()).build();
+        }
+    }
+
+    @GetMapping("/{orderId}/extends")
+    public ApiResponse<java.util.List<OrderExtendResponse>> getExtendsByOrder(@PathVariable Integer orderId) {
+        try {
+            Integer userId = getCurrentUserId();
+            if (userId == null) return ApiResponse.<java.util.List<OrderExtendResponse>>builder().code(401).message("Unauthorized").build();
+            java.util.List<OrderExtendResponse> resp = orderExtendService.getExtendsByOrder(userId, orderId);
+            return ApiResponse.<java.util.List<OrderExtendResponse>>builder().result(resp).message("Extends fetched").build();
+        } catch (IllegalArgumentException ex) {
+            return ApiResponse.<java.util.List<OrderExtendResponse>>builder().code(400).message(ex.getMessage()).build();
+        } catch (Exception ex) {
+            return ApiResponse.<java.util.List<OrderExtendResponse>>builder().code(500).message("Failed to fetch extends: " + ex.getMessage()).build();
+        }
+    }
 }
 
 

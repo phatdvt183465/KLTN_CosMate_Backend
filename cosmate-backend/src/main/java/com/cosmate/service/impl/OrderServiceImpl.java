@@ -1070,16 +1070,18 @@ public class OrderServiceImpl implements OrderService {
             if (p == null || p.getId() == null || !p.getId().equals(order.getProviderId())) throw new IllegalArgumentException("No permission");
         }
         if (!"SHIPPING_OUT".equals(order.getStatus())) throw new IllegalArgumentException("Order must be in SHIPPING_OUT status to mark delivering out");
+        // Do NOT create a new OrderTracking entry here because the table is reserved for
+        // user-submitted tracking codes. Instead, include the most recent existing
+        // tracking record (if any) in the response so callers can see the active code.
         List<OrderTracking> existing = orderTrackingRepository.findByOrderId(order.getId());
-        String trackingCode = null;
-        if (existing != null && !existing.isEmpty()) trackingCode = existing.get(existing.size()-1).getTrackingCode();
-        OrderTracking ot = OrderTracking.builder()
-                .order(order)
-                .trackingCode(trackingCode)
-                .trackingStatus("DELIVERING")
-                .stage("DELIVERING_OUT")
-                .build();
-        ot = orderTrackingRepository.save(ot);
+        OrderTracking ot = null;
+        if (existing != null && !existing.isEmpty()) {
+            // find the last tracking that has a non-null trackingCode (user submitted)
+            for (int i = existing.size() - 1; i >= 0; i--) {
+                OrderTracking t = existing.get(i);
+                if (t.getTrackingCode() != null && !t.getTrackingCode().isBlank()) { ot = t; break; }
+            }
+        }
         order.setStatus("DELIVERING_OUT");
         orderRepository.save(order);
         try {
@@ -1131,16 +1133,15 @@ public class OrderServiceImpl implements OrderService {
             }
         }
 
+        // Do NOT create a new OrderTracking entry for confirmation; only read existing user-submitted tracking code
         List<OrderTracking> existing = orderTrackingRepository.findByOrderId(order.getId());
-        String trackingCode = null;
-        if (existing != null && !existing.isEmpty()) trackingCode = existing.get(existing.size()-1).getTrackingCode();
-        OrderTracking ot = OrderTracking.builder()
-                .order(order)
-                .trackingCode(trackingCode)
-                .trackingStatus("DELIVERED")
-                .stage("IN_USE")
-                .build();
-        ot = orderTrackingRepository.save(ot);
+        OrderTracking ot = null;
+        if (existing != null && !existing.isEmpty()) {
+            for (int i = existing.size() - 1; i >= 0; i--) {
+                OrderTracking t = existing.get(i);
+                if (t.getTrackingCode() != null && !t.getTrackingCode().isBlank()) { ot = t; break; }
+            }
+        }
         order.setStatus("IN_USE");
         orderRepository.save(order);
 
@@ -1294,16 +1295,15 @@ public class OrderServiceImpl implements OrderService {
         }
         if (!"SHIPPING_BACK".equals(order.getStatus())) throw new IllegalArgumentException("Order must be in SHIPPING_BACK status to complete");
 
+        // Do NOT create a new OrderTracking entry for return receipt; only include existing user-submitted tracking
         List<OrderTracking> existing = orderTrackingRepository.findByOrderId(order.getId());
-        String trackingCode = null;
-        if (existing != null && !existing.isEmpty()) trackingCode = existing.get(existing.size()-1).getTrackingCode();
-        OrderTracking ot = OrderTracking.builder()
-                .order(order)
-                .trackingCode(trackingCode)
-                .trackingStatus("RETURN_RECEIVED")
-                .stage("COMPLETED")
-                .build();
-        ot = orderTrackingRepository.save(ot);
+        OrderTracking ot = null;
+        if (existing != null && !existing.isEmpty()) {
+            for (int i = existing.size() - 1; i >= 0; i--) {
+                OrderTracking t = existing.get(i);
+                if (t.getTrackingCode() != null && !t.getTrackingCode().isBlank()) { ot = t; break; }
+            }
+        }
 
         java.math.BigDecimal total = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
 

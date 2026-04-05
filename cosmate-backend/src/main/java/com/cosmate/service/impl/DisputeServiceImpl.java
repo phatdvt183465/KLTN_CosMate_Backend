@@ -17,7 +17,6 @@ public class DisputeServiceImpl implements DisputeService {
     private final DisputeRepository disputeRepository;
     private final DisputeResultRepository disputeResultRepository;
     private final OrderRepository orderRepository;
-    private final OrderTrackingRepository orderTrackingRepository;
     private final WalletService walletService;
     private final OrderDetailRepository orderDetailRepository;
     private final com.cosmate.repository.ProviderRepository providerRepository;
@@ -26,7 +25,6 @@ public class DisputeServiceImpl implements DisputeService {
     public DisputeServiceImpl(DisputeRepository disputeRepository,
                               DisputeResultRepository disputeResultRepository,
                               OrderRepository orderRepository,
-                              OrderTrackingRepository orderTrackingRepository,
                               WalletService walletService,
                               OrderDetailRepository orderDetailRepository,
                               com.cosmate.repository.ProviderRepository providerRepository,
@@ -34,7 +32,6 @@ public class DisputeServiceImpl implements DisputeService {
         this.disputeRepository = disputeRepository;
         this.disputeResultRepository = disputeResultRepository;
         this.orderRepository = orderRepository;
-        this.orderTrackingRepository = orderTrackingRepository;
         this.walletService = walletService;
         this.orderDetailRepository = orderDetailRepository;
         this.providerRepository = providerRepository;
@@ -169,14 +166,11 @@ public class DisputeServiceImpl implements DisputeService {
             notificationService.create(n);
         } catch (Exception ignored) {}
 
-        // add tracking entry
-        OrderTracking ot = OrderTracking.builder()
-                .order(order)
-                .trackingCode(null)
-                .trackingStatus("DISPUTE_OPENED")
-                .stage("DISPUTE")
-                .build();
-        orderTrackingRepository.save(ot);
+        // NOTE: Do not create OrderTracking entries for dispute status changes.
+        // OrderTracking is reserved only for courier/tracking code updates submitted by users
+        // (e.g., when a cosplayer or provider supplies a shipment tracking code). Dispute
+        // lifecycle events are intentionally not recorded here to avoid mixing dispute
+        // workflow with delivery tracking.
 
         return d;
     }
@@ -352,13 +346,7 @@ public class DisputeServiceImpl implements DisputeService {
             notificationService.create(n);
         } catch (Exception ignored) {}
 
-        OrderTracking ot = OrderTracking.builder()
-                .order(order)
-                .trackingCode(null)
-                .trackingStatus("DISPUTE_RESOLVED")
-                .stage("COMPLETED")
-                .build();
-        orderTrackingRepository.save(ot);
+        // NOTE: Do not create OrderTracking entries for dispute resolution. See note above.
 
         return saved;
     }

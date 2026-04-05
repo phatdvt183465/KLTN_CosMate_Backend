@@ -58,6 +58,8 @@ public class OrderServiceImpl implements OrderService {
     private final com.cosmate.repository.OrderTrackingRepository orderTrackingRepository;
     private final com.cosmate.service.FirebaseStorageService firebaseStorageService;
 
+    private final com.cosmate.repository.OrderDetailExtendRepository orderDetailExtendRepository;
+
     // user repository used for wallet creation fallback
     private final com.cosmate.repository.UserRepository userRepository;
 
@@ -1325,6 +1327,24 @@ public class OrderServiceImpl implements OrderService {
         }
         if (depositTotal == null) depositTotal = java.math.BigDecimal.ZERO;
         java.math.BigDecimal providerShare = total.subtract(depositTotal);
+        // Add any paid extension amounts for this order to provider payout
+        java.math.BigDecimal extendTotalPaid = java.math.BigDecimal.ZERO;
+        if (details != null && !details.isEmpty()) {
+            for (OrderDetail d : details) {
+                try {
+                    java.util.List<com.cosmate.entity.OrderDetailExtend> exts = orderDetailExtendRepository.findByOrderDetailId(d.getId());
+                    if (exts != null && !exts.isEmpty()) {
+                        for (com.cosmate.entity.OrderDetailExtend ex : exts) {
+                            if (ex != null && "PAID".equalsIgnoreCase(ex.getPaymentStatus())) {
+                                java.math.BigDecimal p = ex.getExtendPrice() == null ? java.math.BigDecimal.ZERO : ex.getExtendPrice();
+                                extendTotalPaid = extendTotalPaid.add(p);
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+        providerShare = providerShare.add(extendTotalPaid);
         if (providerShare == null) providerShare = java.math.BigDecimal.ZERO;
         if (providerShare.compareTo(java.math.BigDecimal.ZERO) < 0) providerShare = java.math.BigDecimal.ZERO;
 

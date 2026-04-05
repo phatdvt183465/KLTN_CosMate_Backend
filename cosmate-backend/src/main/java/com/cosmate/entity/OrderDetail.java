@@ -56,4 +56,7 @@ public class OrderDetail {
 
     @Column(name = "rent_option_amount", precision = 12, scale = 2)
     private BigDecimal rentOptionAmount;
+
+    @Column(name = "rent_discount")
+    private Integer rentDiscount;
 }

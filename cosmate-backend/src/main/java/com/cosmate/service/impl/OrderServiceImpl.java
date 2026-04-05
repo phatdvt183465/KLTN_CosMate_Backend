@@ -22,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -92,8 +93,24 @@ public class OrderServiceImpl implements OrderService {
 
         // compute base rent and deposit
         BigDecimal pricePerDay = c.getPricePerDay() == null ? BigDecimal.ZERO : c.getPricePerDay();
-        BigDecimal rentAmount = pricePerDay.multiply(new BigDecimal(rentDay));
         BigDecimal deposit = c.getDepositAmount() == null ? BigDecimal.ZERO : c.getDepositAmount();
+
+        // rentDiscount is a percentage (0..100) representing how much to charge for each day from day 2 onward
+        // default to 100% (no discount) when costume record has null rentDiscount
+        Integer rentDiscountInt = c.getRentDiscount() == null ? 100 : c.getRentDiscount();
+        BigDecimal rentDiscountPct = new BigDecimal(rentDiscountInt);
+
+        BigDecimal rentAmount;
+        if (rentDay <= 1) {
+            rentAmount = pricePerDay;
+        } else {
+            // first day full price
+            BigDecimal firstDay = pricePerDay;
+            // subsequent days use rentDiscount percent of pricePerDay
+            BigDecimal subsequentRate = pricePerDay.multiply(rentDiscountPct).divide(new BigDecimal(100), 2, RoundingMode.HALF_UP);
+            BigDecimal subsequentTotal = subsequentRate.multiply(new BigDecimal(rentDay - 1));
+            rentAmount = firstDay.add(subsequentTotal);
+        }
 
         // sum surcharges for this costume
         BigDecimal surchargeSum = BigDecimal.ZERO;
@@ -177,6 +194,7 @@ public class OrderServiceImpl implements OrderService {
                 .rentEnd(rentStart.plusDays(rentDay))
                 .depositAmount(deposit)
                 .rentAmount(rentAmount)
+                .rentDiscount(rentDiscountInt)
                 .surchargeAmount(surchargeSum)
                 .accessoriesAmount(accessoriesSum)
                 .rentOptionAmount(rentalOptionPrice)

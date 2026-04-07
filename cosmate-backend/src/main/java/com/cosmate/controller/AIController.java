@@ -149,4 +149,43 @@ public class AIController {
                 .message("Lấy lịch sử Pose Battle thành công!")
                 .build();
     }
+
+    // 1. API Lấy lịch sử (Hỗ trợ Search theo keyword)
+    @GetMapping("/pose-history")
+    public ApiResponse<List<PoseScore>> getMyPoseHistory(@RequestParam(required = false) String keyword) {
+        Integer currentUserId = getCurrentUserId();
+        return ApiResponse.<List<PoseScore>>builder()
+                .result(aiService.getMyPoseHistory(currentUserId, keyword))
+                .message("Lấy lịch sử Pose Battle thành công!")
+                .build();
+    }
+
+    // 2. API Cập nhật tên nhân vật
+    @PutMapping("/pose-history/{id}/name")
+    public ApiResponse<PoseScore> updatePoseName(@PathVariable Integer id, @RequestParam String newName) {
+        Integer currentUserId = getCurrentUserId();
+        return ApiResponse.<PoseScore>builder()
+                .result(aiService.updatePoseCharacterName(id, currentUserId, newName))
+                .message("Cập nhật tên nhân vật thành công!")
+                .build();
+    }
+
+    // 3. API Xóa lịch sử chấm điểm
+    @DeleteMapping("/pose-history/{id}")
+    public ApiResponse<Void> deletePoseHistory(@PathVariable Integer id) {
+        Integer currentUserId = getCurrentUserId();
+        aiService.deletePoseScore(id, currentUserId);
+        return ApiResponse.<Void>builder()
+                .message("Đã xóa lịch sử chấm điểm thành công!")
+                .build();
+    }
+
+    // --- Hàm Helper (Viết thêm xuống dưới cùng của AIController) ---
+    private Integer getCurrentUserId() {
+        org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.getPrincipal().getClass().equals(String.class) || authentication.getPrincipal().equals("anonymousUser")) {
+            throw new RuntimeException("Vui lòng đăng nhập để thực hiện chức năng này!");
+        }
+        return Integer.parseInt((String) authentication.getPrincipal());
+    }
 }

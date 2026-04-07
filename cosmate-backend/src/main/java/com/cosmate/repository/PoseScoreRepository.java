@@ -7,6 +7,9 @@ import java.util.List;
 
 @Repository
 public interface PoseScoreRepository extends JpaRepository<PoseScore, Integer> {
-    // Thêm dòng này để lấy lịch sử của 1 user, sắp xếp mới nhất lên đầu
+    // Lấy tất cả lịch sử của user
     List<PoseScore> findByCosplayerIdOrderByCreatedAtDesc(Integer cosplayerId);
+
+    // Lấy lịch sử CÓ TÌM KIẾM theo tên nhân vật
+    List<PoseScore> findByCosplayerIdAndCharacterNameContainingIgnoreCaseOrderByCreatedAtDesc(Integer cosplayerId, String characterName);
 }

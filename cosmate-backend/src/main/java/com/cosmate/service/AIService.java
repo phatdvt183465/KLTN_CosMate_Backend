@@ -47,4 +47,8 @@ public interface AIService {
 
     // Lấy lịch sử chấm điểm Pose
     List<PoseScore> getPoseHistoryByUserId(Integer userId);
+
+    List<PoseScore> getMyPoseHistory(Integer userId, String keyword);
+    PoseScore updatePoseCharacterName(Integer scoreId, Integer userId, String newName);
+    void deletePoseScore(Integer scoreId, Integer userId);
 }

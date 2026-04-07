@@ -311,21 +311,40 @@ public class AIServiceImpl implements AIService {
     public PoseScoringResponse scorePose(PoseScoringRequest request) {
         try {
             String url = GENERATION_MODEL_URL + "?key=" + apiKey;
-            String base64Image = Base64.getEncoder().encodeToString(request.getImage().getBytes());
 
+            List<Object> partsList = new ArrayList<>();
+
+            // 1. Nhồi Prompt text vào
             String promptText = "Bạn là một giám khảo Cosplay. Dưới đây là bộ tiêu chuẩn WCS chính thức:\n"
                     + aiKnowledgeBase.getWcsRules() + "\n"
-                    + "Hãy so sánh ảnh user chụp với nhân vật '" + request.getCharacterName() + "' và chấm điểm nghiêm ngặt theo luật trên. "
-                    + "Chỉ trả về JSON định dạng: "
-                    + "{\"score\": [Điểm tổng 1-100], \"pose_score\": [1-40], \"expression_score\": [1-40], \"costume_score\": [1-20], \"comment\": \"[Nhận xét kỹ thuật...]\"}";
+                    + "Hãy so sánh ảnh user chụp với nhân vật '" + request.getCharacterName() + "'. ";
 
-            Map<String, Object> textPart = Map.of("text", promptText);
-            Map<String, Object> imagePart = Map.of("inline_data", Map.of(
+            if (request.getReferenceImage() != null && !request.getReferenceImage().isEmpty()) {
+                promptText += "Tôi có đính kèm 2 bức ảnh. Ảnh thứ hai là ảnh nhân vật gốc (Reference). Hãy chấm điểm dựa trên độ tương đồng về góc độ, tạo dáng và biểu cảm so với ảnh gốc này. ";
+            } else {
+                promptText += "Hãy dựa vào cơ sở dữ liệu của bạn về nhân vật này để chấm điểm. ";
+            }
+
+            promptText += "Chỉ trả về JSON định dạng: {\"score\": [Điểm tổng 1-100], \"pose_score\": [1-40], \"expression_score\": [1-40], \"costume_score\": [1-20], \"comment\": \"[Nhận xét kỹ thuật...]\"}";
+            partsList.add(Map.of("text", promptText));
+
+            // 2. Nhồi ảnh User (Bắt buộc)
+            String base64Image = java.util.Base64.getEncoder().encodeToString(request.getImage().getBytes());
+            partsList.add(Map.of("inline_data", Map.of(
                     "mime_type", request.getImage().getContentType() != null ? request.getImage().getContentType() : "image/jpeg",
                     "data", base64Image
-            ));
+            )));
 
-            Map<String, Object> content = Map.of("parts", List.of(textPart, imagePart));
+            // 3. Nhồi ảnh Mẫu (Nếu có)
+            if (request.getReferenceImage() != null && !request.getReferenceImage().isEmpty()) {
+                String base64RefImage = java.util.Base64.getEncoder().encodeToString(request.getReferenceImage().getBytes());
+                partsList.add(Map.of("inline_data", Map.of(
+                        "mime_type", request.getReferenceImage().getContentType() != null ? request.getReferenceImage().getContentType() : "image/jpeg",
+                        "data", base64RefImage
+                )));
+            }
+
+            Map<String, Object> content = Map.of("parts", partsList);
             Map<String, Object> body = Map.of("contents", List.of(content));
 
             HttpHeaders headers = new HttpHeaders();
@@ -379,6 +398,7 @@ public class AIServiceImpl implements AIService {
                     .imageUrl(uploadedImageUrl)
                     .score(BigDecimal.valueOf(finalScore))
                     .comment(aiComment)
+                    .characterName(request.getCharacterName())
                     .build();
 
             poseScoreRepository.save(newScoreRecord);
@@ -723,5 +743,41 @@ public class AIServiceImpl implements AIService {
             return Collections.emptyList();
         }
         return poseScoreRepository.findByCosplayerIdOrderByCreatedAtDesc(userId);
+    }
+
+    @Override
+    public List<PoseScore> getMyPoseHistory(Integer userId, String keyword) {
+        if (userId == null) return Collections.emptyList();
+
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            return poseScoreRepository.findByCosplayerIdAndCharacterNameContainingIgnoreCaseOrderByCreatedAtDesc(userId, keyword.trim());
+        }
+        return poseScoreRepository.findByCosplayerIdOrderByCreatedAtDesc(userId);
+    }
+
+    @Override
+    public PoseScore updatePoseCharacterName(Integer scoreId, Integer userId, String newName) {
+        PoseScore score = poseScoreRepository.findById(scoreId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy kết quả chấm điểm này!"));
+
+        // Bảo mật: Kiểm tra xem bài chấm này có phải của user đang request không
+        if (!score.getCosplayerId().equals(userId)) {
+            throw new RuntimeException("Bạn không có quyền sửa kết quả của người khác!");
+        }
+
+        score.setCharacterName(newName);
+        return poseScoreRepository.save(score);
+    }
+
+    @Override
+    public void deletePoseScore(Integer scoreId, Integer userId) {
+        PoseScore score = poseScoreRepository.findById(scoreId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy kết quả chấm điểm này!"));
+
+        if (!score.getCosplayerId().equals(userId)) {
+            throw new RuntimeException("Bạn không có quyền xóa kết quả của người khác!");
+        }
+
+        poseScoreRepository.delete(score);
     }
 }

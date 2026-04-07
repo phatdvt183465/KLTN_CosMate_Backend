@@ -378,6 +378,7 @@ public class AIServiceImpl implements AIService {
                     .cosplayerId(currentUserId)
                     .imageUrl(uploadedImageUrl)
                     .score(BigDecimal.valueOf(finalScore))
+                    .comment(aiComment)
                     .build();
 
             poseScoreRepository.save(newScoreRecord);

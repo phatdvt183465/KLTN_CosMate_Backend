@@ -107,18 +107,11 @@ public class AIController {
                 .build();
     }
 
-    // Khi có kết quả Archetype ID (VD: ARCH_01), Frontend gọi API này để lấy bộ câu hỏi chuyên sâu
+    // Khi user làm xong 8 câu đầu, gọi API này để lấy 7 câu hỏi chuyên sâu
     @GetMapping("/stage-2")
-    public ApiResponse<JsonNode> getStage2Survey(@PathVariable String archetypeId) {
-        JsonNode allStage2 = aiKnowledgeBase.getStage2Survey();
-        JsonNode specificQuestions = allStage2.path(archetypeId);
-
-        if (specificQuestions.isMissingNode()) {
-            throw new RuntimeException("Không tìm thấy bộ câu hỏi cho Archetype này!");
-        }
-
+    public ApiResponse<JsonNode> getStage2Survey() {
         return ApiResponse.<JsonNode>builder()
-                .result(specificQuestions)
+                .result(aiKnowledgeBase.getStage2Survey())
                 .message("Tải bộ câu hỏi Deep Analysis thành công!")
                 .build();
     }
@@ -128,25 +121,6 @@ public class AIController {
     public ApiResponse<JsonNode> getAllArchetypes() {
         return ApiResponse.<JsonNode>builder()
                 .result(aiKnowledgeBase.getArchetypes())
-                .build();
-    }
-
-    // API Lấy lịch sử Pose Score của user đang đăng nhập
-    @GetMapping("/pose-history")
-    public ApiResponse<List<PoseScore>> getMyPoseHistory() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        // Check xem có đăng nhập thật không
-        if (authentication == null || !authentication.getPrincipal().getClass().equals(String.class) || authentication.getPrincipal().equals("anonymousUser")) {
-            throw new RuntimeException("Vui lòng đăng nhập để xem lịch sử Pose Battle!");
-        }
-
-        Integer currentUserId = Integer.parseInt((String) authentication.getPrincipal());
-        List<PoseScore> history = aiService.getPoseHistoryByUserId(currentUserId);
-
-        return ApiResponse.<List<PoseScore>>builder()
-                .result(history)
-                .message("Lấy lịch sử Pose Battle thành công!")
                 .build();
     }
 

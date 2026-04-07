@@ -401,11 +401,16 @@ public class AIServiceImpl implements AIService {
                     .characterName(request.getCharacterName())
                     .build();
 
-            poseScoreRepository.save(newScoreRecord);
+            // QUAN TRỌNG: Gán lại biến để lấy ID do Database tự động sinh ra
+            newScoreRecord = poseScoreRepository.save(newScoreRecord);
 
+            // Trả về DTO đầy đủ thông tin
             return PoseScoringResponse.builder()
+                    .id(newScoreRecord.getId())
                     .score(finalScore)
                     .comment(aiComment)
+                    .characterName(newScoreRecord.getCharacterName())
+                    .imageUrl(newScoreRecord.getImageUrl())
                     .build();
 
         } catch (Exception e) {

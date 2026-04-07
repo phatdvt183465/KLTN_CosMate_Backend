@@ -1,26 +1,26 @@
 [
   {
     "question_id": "S1_Q1",
-    "question": "Lý do lớn nhất khiến bạn quyết định 'chốt sổ' cos một nhân vật là gì?",
+    "question": "Lý do lớn nhất khiến bạn quyết định Cosplay một nhân vật là gì?",
     "options": [
       { "text": "Thiết kế quá đỉnh, thử thách làm đồ.", "scores": { "E": -1, "A": -1, "O": -1 } },
-      { "text": "Nhân vật đang hot, ra Fes có ngàn tấm ảnh xịn.", "scores": { "E": 2, "A": 0, "O": 1 } },
+      { "text": "Nhân vật đang hot, ra Fes (Lễ hội Cosplay) có ngàn tấm ảnh xịn.", "scores": { "E": 2, "A": 0, "O": 1 } },
       { "text": "Đồng điệu mãnh liệt về nội tâm.", "scores": { "E": -1, "A": 2, "O": 0 } },
-      { "text": "Nhóm rủ chạy project chung cho đủ mâm.", "scores": { "E": 1, "A": 1, "O": 1 } }
+      { "text": "Nhóm rủ chạy project (dự án nhóm) chung cho vui.", "scores": { "E": 1, "A": 1, "O": 1 } }
     ]
   },
   {
     "question_id": "S1_Q2",
-    "question": "Quan điểm của bạn về độ 'Chuẩn Auth' (Canon) khi hóa thân?",
+    "question": "Quan điểm của bạn về độ 'Chuẩn' khi Cosplay?",
     "options": [
       { "text": "Giống 100% bản gốc, sai một ly đi một dặm.", "scores": { "E": 0, "A": -1, "O": -2 } },
-      { "text": "Giống 70-80% là được, quan trọng thần thái.", "scores": { "E": 0, "A": 1, "O": 1 } },
-      { "text": "Thích sáng tạo (AU), phá cách khác bản gốc.", "scores": { "E": 1, "A": 0, "O": 2 } }
+      { "text": "Giống 70-80% là được, quan trọng là thần thái.", "scores": { "E": 0, "A": 1, "O": 1 } },
+      { "text": "Thích sáng tạo AU (Vũ trụ thay thế / Ngoại truyện), phá cách khác bản gốc.", "scores": { "E": 1, "A": 0, "O": 2 } }
     ]
   },
   {
     "question_id": "S1_Q3",
-    "question": "Đêm trước ngày đi Fes, tình trạng của bạn thường là?",
+    "question": "Đêm trước ngày đi Fes (Lễ hội Cosplay), tình trạng của bạn thường là?",
     "options": [
       { "text": "Đồ đạc xếp sẵn từ 2 ngày trước, đắp mặt nạ ngủ sớm.", "scores": { "E": 0, "A": 0, "O": -2 } },
       { "text": "Thức trắng đêm cày deadline, sửa đồ phút 89.", "scores": { "E": 0, "A": 1, "O": 2 } }
@@ -28,20 +28,20 @@
   },
   {
     "question_id": "S1_Q4",
-    "question": "Đang đi Fes thì một phụ kiện đột nhiên gãy/rớt. Phản ứng của bạn?",
+    "question": "Đang đi sự kiện thì một phụ kiện đột nhiên gãy/rớt. Phản ứng của bạn?",
     "options": [
       { "text": "Đứng hình, hoảng loạn đi tìm bạn bè cầu cứu.", "scores": { "E": 0, "A": 2, "O": 0 } },
-      { "text": "Lôi đồ nghề thủ sẵn trong túi ra 'fix' ngay.", "scores": { "E": 0, "A": -2, "O": -1 } },
+      { "text": "Lôi đồ nghề thủ sẵn trong túi ra sửa ngay tại chỗ.", "scores": { "E": 0, "A": -2, "O": -1 } },
       { "text": "Kệ nó luôn, tháo cho cân, diễn nét ngầu.", "scores": { "E": 0, "A": 1, "O": 1 } }
     ]
   },
   {
     "question_id": "S1_Q5",
-    "question": "Có một nháy lạ mặt đến xin chụp ảnh bạn, bạn sẽ:",
+    "question": "Có một 'nháy' (người chụp ảnh) lạ mặt đến xin chụp bạn, bạn sẽ:",
     "options": [
       { "text": "Mừng húm, tạo đủ dáng bốc lửa, tương tác cực mạnh.", "scores": { "E": 2, "A": 0, "O": 0 } },
       { "text": "Hơi ngại, tạo vài dáng an toàn, chuẩn mực.", "scores": { "E": -1, "A": 0, "O": -1 } },
-      { "text": "Hỏi kỹ chụp cho trang nào, yêu cầu set ánh sáng.", "scores": { "E": -1, "A": -2, "O": -1 } }
+      { "text": "Hỏi kỹ chụp cho trang nào, yêu cầu canh góc và ánh sáng.", "scores": { "E": -1, "A": -2, "O": -1 } }
     ]
   },
   {
@@ -49,26 +49,26 @@
     "question": "Thấy drama bóc phốt giới Cosplay trên mạng, bạn là?",
     "options": [
       { "text": "Đọc lướt, phân tích đúng sai rồi lướt đi, không xen vào.", "scores": { "E": -1, "A": -2, "O": 0 } },
-      { "text": "Bức xúc, lấy nick thật combat bảo vệ lẽ phải.", "scores": { "E": 1, "A": 2, "O": 0 } },
-      { "text": "Tag hội bạn thân vào để cùng buôn dưa lê.", "scores": { "E": 1, "A": 0, "O": 1 } }
+      { "text": "Bức xúc, lấy nick thật bình luận bảo vệ lẽ phải.", "scores": { "E": 1, "A": 2, "O": 0 } },
+      { "text": "Tag hội bạn thân vào để cùng 'hóng' chuyện.", "scores": { "E": 1, "A": 0, "O": 1 } }
     ]
   },
   {
     "question_id": "S1_Q7",
     "question": "Một bộ ảnh Cosplay thành công đối với bạn là khi?",
     "options": [
-      { "text": "Lột tả 100% thần thái, ánh mắt và lore nhân vật.", "scores": { "E": 0, "A": -1, "O": -1 } },
+      { "text": "Lột tả 100% thần thái, ánh mắt và lore (tiểu sử) nhân vật.", "scores": { "E": 0, "A": -1, "O": -1 } },
       { "text": "Ảo diệu, được bão like và share trên mọi mặt trận.", "scores": { "E": 2, "A": 0, "O": 1 } },
-      { "text": "Kỷ niệm quá trình cùng đồng đội làm đồ đầy tiếng cười.", "scores": { "E": 1, "A": 2, "O": 0 } }
+      { "text": "Lưu giữ kỷ niệm quá trình cùng đồng đội làm đồ đầy tiếng cười.", "scores": { "E": 1, "A": 2, "O": 0 } }
     ]
   },
   {
     "question_id": "S1_Q8",
-    "question": "Hậu Fes, bạn đăng ảnh lên mạng xã hội theo phong cách nào?",
+    "question": "Sau lễ hội, bạn đăng ảnh lên mạng xã hội theo phong cách nào?",
     "options": [
-      { "text": "Chỉnh sửa PTS kỹ lưỡng 3 ngày mới dám up.", "scores": { "E": -1, "A": 0, "O": -2 } },
-      { "text": "Up ngay album dìm hàng, meme kèm caption tấu hài.", "scores": { "E": 1, "A": 0, "O": 2 } },
-      { "text": "Viết bài sớ dài cảm ơn nháy, staff vô cùng tình cảm.", "scores": { "E": 1, "A": 2, "O": 0 } }
+      { "text": "Photoshop bóp dáng, chỉnh màu kỹ lưỡng 3 ngày mới dám up.", "scores": { "E": -1, "A": 0, "O": -2 } },
+      { "text": "Up ngay album 'dìm hàng', ảnh chế tấu hài.", "scores": { "E": 1, "A": 0, "O": 2 } },
+      { "text": "Viết bài sớ dài cảm ơn thợ chụp, staff (người hỗ trợ) vô cùng tình cảm.", "scores": { "E": 1, "A": 2, "O": 0 } }
     ]
   }
 ]

@@ -5,6 +5,7 @@ import com.cosmate.dto.request.RecommendationRequest;
 import com.cosmate.dto.request.SearchByImageRequest;
 import com.cosmate.dto.response.PoseScoringResponse;
 import com.cosmate.dto.response.SearchResponse;
+import com.cosmate.entity.PoseScore;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -43,4 +44,7 @@ public interface AIService {
 
     // Hàm tìm kiếm dự phòng khi AI sập
     List<SearchResponse> fallbackSearch(String keyword);
+
+    // Lấy lịch sử chấm điểm Pose
+    List<PoseScore> getPoseHistoryByUserId(Integer userId);
 }

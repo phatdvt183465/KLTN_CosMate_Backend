@@ -8,9 +8,12 @@ import com.cosmate.dto.response.PoseScoringResponse;
 import com.cosmate.dto.response.SearchResponse;
 import com.cosmate.entity.Costume;
 import com.cosmate.entity.CostumeImage;
+import com.cosmate.entity.PoseScore;
 import com.cosmate.repository.CostumeImageRepository;
 import com.cosmate.repository.CostumeRepository;
+import com.cosmate.repository.PoseScoreRepository;
 import com.cosmate.service.AIService;
+import com.cosmate.service.FirebaseStorageService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,10 +25,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -39,6 +45,8 @@ public class AIServiceImpl implements AIService {
     private final RestTemplate restTemplate = new RestTemplate();
     private final CostumeRepository costumeRepository;
     private final AiKnowledgeBase aiKnowledgeBase;
+    private final PoseScoreRepository poseScoreRepository;
+    private final FirebaseStorageService firebaseStorageService;
 
     @Value("${gemini.api.key}")
     private String apiKey;
@@ -218,10 +226,10 @@ public class AIServiceImpl implements AIService {
                 }
             }
 
-            // 4. Lấy Top 5 kết quả đỉnh nhất trả về cho người dùng
+            // 4. Lấy Top 30 kết quả đỉnh nhất trả về cho người dùng
             return results.stream()
                     .sorted(Comparator.comparingDouble(SearchResponse::getSimilarityScore).reversed())
-                    .limit(5)
+                    .limit(30)
                     .collect(Collectors.toList());
 
         } catch (Exception e) {
@@ -329,7 +337,6 @@ public class AIServiceImpl implements AIService {
                     .path("content").path("parts").get(0)
                     .path("text").asText().trim();
 
-            // Làm sạch chuỗi JSON để loại bỏ định dạng Markdown nếu AI sinh ra
             if (resultJson.startsWith("```json")) {
                 resultJson = resultJson.substring(7, resultJson.length() - 3).trim();
             } else if (resultJson.startsWith("```")) {
@@ -337,9 +344,47 @@ public class AIServiceImpl implements AIService {
             }
 
             JsonNode resultNode = objectMapper.readTree(resultJson);
+            int finalScore = resultNode.path("score").asInt();
+            String aiComment = resultNode.path("comment").asText();
+
+            // -------------------------------------------------------------
+            // 1. UPLOAD ẢNH LÊN FIREBASE
+            // -------------------------------------------------------------
+            String originalName = request.getImage().getOriginalFilename();
+            String safeName = originalName == null ? String.valueOf(System.currentTimeMillis()) : originalName.replaceAll("[^a-zA-Z0-9._-]", "_");
+            String path = String.format("pose_battles/%d_%s", System.currentTimeMillis(), safeName);
+
+            String uploadedImageUrl = firebaseStorageService.uploadFile(request.getImage(), path);
+
+            // -------------------------------------------------------------
+            // 2. LẤY USER ID TỪ JWT (SECURITY CONTEXT)
+            // -------------------------------------------------------------
+            Integer currentUserId = null;
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+            // Kiểm tra xem user đã đăng nhập chưa (có Authentication và Principal là String userId)
+            if (authentication != null && authentication.getPrincipal() instanceof String && !authentication.getPrincipal().equals("anonymousUser")) {
+                try {
+                    currentUserId = Integer.parseInt((String) authentication.getPrincipal());
+                } catch (NumberFormatException e) {
+                    log.warn("Không thể parse userId từ JWT Principal: {}", authentication.getPrincipal());
+                }
+            }
+
+            // -------------------------------------------------------------
+            // 3. LƯU KẾT QUẢ VÀO DATABASE
+            // -------------------------------------------------------------
+            PoseScore newScoreRecord = PoseScore.builder()
+                    .cosplayerId(currentUserId)
+                    .imageUrl(uploadedImageUrl)
+                    .score(BigDecimal.valueOf(finalScore))
+                    .build();
+
+            poseScoreRepository.save(newScoreRecord);
+
             return PoseScoringResponse.builder()
-                    .score(resultNode.path("score").asInt())
-                    .comment(resultNode.path("comment").asText())
+                    .score(finalScore)
+                    .comment(aiComment)
                     .build();
 
         } catch (Exception e) {
@@ -669,5 +714,13 @@ public class AIServiceImpl implements AIService {
             log.error("Lỗi cả tìm kiếm dự phòng: {}", e.getMessage());
             return Collections.emptyList();
         }
+    }
+
+    @Override
+    public List<PoseScore> getPoseHistoryByUserId(Integer userId) {
+        if (userId == null) {
+            return Collections.emptyList();
+        }
+        return poseScoreRepository.findByCosplayerIdOrderByCreatedAtDesc(userId);
     }
 }

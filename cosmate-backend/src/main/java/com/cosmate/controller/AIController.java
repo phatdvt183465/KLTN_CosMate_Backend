@@ -7,12 +7,16 @@ import com.cosmate.dto.request.SearchByImageRequest;
 import com.cosmate.dto.response.ApiResponse;
 import com.cosmate.dto.response.PoseScoringResponse;
 import com.cosmate.dto.response.SearchResponse;
+import com.cosmate.repository.PoseScoreRepository;
 import com.cosmate.service.AIService;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import com.cosmate.entity.PoseScore;
 
 import java.util.List;
 
@@ -104,7 +108,7 @@ public class AIController {
     }
 
     // Khi có kết quả Archetype ID (VD: ARCH_01), Frontend gọi API này để lấy bộ câu hỏi chuyên sâu
-    @GetMapping("/stage-2/{archetypeId}")
+    @GetMapping("/stage-2")
     public ApiResponse<JsonNode> getStage2Survey(@PathVariable String archetypeId) {
         JsonNode allStage2 = aiKnowledgeBase.getStage2Survey();
         JsonNode specificQuestions = allStage2.path(archetypeId);
@@ -124,6 +128,25 @@ public class AIController {
     public ApiResponse<JsonNode> getAllArchetypes() {
         return ApiResponse.<JsonNode>builder()
                 .result(aiKnowledgeBase.getArchetypes())
+                .build();
+    }
+
+    // API Lấy lịch sử Pose Score của user đang đăng nhập
+    @GetMapping("/pose-history")
+    public ApiResponse<List<PoseScore>> getMyPoseHistory() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        // Check xem có đăng nhập thật không
+        if (authentication == null || !authentication.getPrincipal().getClass().equals(String.class) || authentication.getPrincipal().equals("anonymousUser")) {
+            throw new RuntimeException("Vui lòng đăng nhập để xem lịch sử Pose Battle!");
+        }
+
+        Integer currentUserId = Integer.parseInt((String) authentication.getPrincipal());
+        List<PoseScore> history = aiService.getPoseHistoryByUserId(currentUserId);
+
+        return ApiResponse.<List<PoseScore>>builder()
+                .result(history)
+                .message("Lấy lịch sử Pose Battle thành công!")
                 .build();
     }
 }

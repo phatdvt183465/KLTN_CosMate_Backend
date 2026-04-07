@@ -32,7 +32,6 @@ public class AiKnowledgeBase {
             archetypes = loadJson("ai-data/jungian_archetypes_extended.json");
             stage1Survey = loadJson("ai-data/survey_stage_1.json");
             stage2Survey = loadJson("ai-data/survey_stage_2.json");
-            surveyEnd = loadJson("ai-data/survey_end.json");
             try (InputStream is = new ClassPathResource("ai-data/wcs_scoring_rules.txt").getInputStream()) {
                 wcsRules = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
             }

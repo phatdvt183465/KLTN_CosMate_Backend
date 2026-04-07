@@ -1,116 +1,152 @@
 [
-    {
-      "archetype_id": "ARCH_01",
-      "archetype_name": "The Hero (Người Hùng)",
-      "core_desire": "Chứng minh giá trị thông qua hành động dũng cảm.",
-      "sub_types": [
-        { "id": "01_A", "name": "Người bảo vệ chính nghĩa", "trait": "Chiến đấu vì người khác, tinh thần bất khuất (VD: Tanjiro, Midoriya)" },
-        { "id": "01_B", "name": "Người hùng bi tráng", "trait": "Mang sứ mệnh nặng nề, đánh đổi hạnh phúc cá nhân (VD: Eren Yeager)" },
-        { "id": "01_C", "name": "Người hùng bất đắc dĩ", "trait": "Không muốn chiến đấu nhưng bị hoàn cảnh ép buộc (VD: Shinji Ikari)" },
-        { "id": "01_D", "name": "Chiến binh thuần túy", "trait": "Chiến đấu chỉ vì đam mê vượt qua giới hạn bản thân (VD: Goku)" }
-      ]
-    },
-    {
-      "archetype_id": "ARCH_02",
-      "archetype_name": "The Rebel (Kẻ Nổi Loạn)",
-      "core_desire": "Phá vỡ các quy tắc và phá hủy những thứ không hiệu quả.",
-      "sub_types": [
-        { "id": "02_A", "name": "Sói cô độc", "trait": "Hành động một mình, khinh thường luật lệ xã hội (VD: Sasuke, Hiei)" },
-        { "id": "02_B", "name": "Nhà cách mạng", "trait": "Lật đổ hệ thống thối nát để xây dựng cái mới (VD: Lelouch)" },
-        { "id": "02_C", "name": "Tác nhân hỗn loạn", "trait": "Chỉ thích sự hủy diệt và nhìn thế giới bốc cháy (VD: Sukuna, Shigaraki)" }
-      ]
-    },
-    {
-      "archetype_id": "ARCH_03",
-      "archetype_name": "The Sage (Nhà Thông Thái)",
-      "core_desire": "Tìm kiếm chân lý và thấu hiểu thế giới.",
-      "sub_types": [
-        { "id": "03_A", "name": "Người thầy đáng kính", "trait": "Dẫn dắt, truyền lại ngọn lửa cho thế hệ sau (VD: Jiraiya, Gojo)" },
-        { "id": "03_B", "name": "Kẻ thao túng trí tuệ", "trait": "Điều khiển mọi quân cờ trên bàn cờ thế giới (VD: Aizen, Makima)" },
-        { "id": "03_C", "name": "Học giả cực đoan", "trait": "Bất chấp luân lý để theo đuổi tri thức tối thượng (VD: Orochimaru)" }
-      ]
-    },
-    {
-      "archetype_id": "ARCH_04",
-      "archetype_name": "The Innocent (Người Ngây Thơ)",
-      "core_desire": "Trải nghiệm thiên đường, mong muốn hạnh phúc bình dị.",
-      "sub_types": [
-        { "id": "04_A", "name": "Đứa trẻ thuần khiết", "trait": "Trong sáng, là liều thuốc tinh thần cho cả nhóm (VD: Anya Forger)" },
-        { "id": "04_B", "name": "Người mang trọng trách", "trait": "Vẻ ngoài nhỏ bé ngây thơ nhưng gánh vác sứ mệnh lớn (VD: Nahida)" }
-      ]
-    },
-    {
-      "archetype_id": "ARCH_05",
-      "archetype_name": "The Jester (Kẻ Pha Trò)",
-      "core_desire": "Sống trọn vẹn từng khoảnh khắc, tận hưởng niềm vui.",
-      "sub_types": [
-        { "id": "05_A", "name": "Kẻ tấu hài mua vui", "trait": "Lạc quan tếu, che giấu nội tâm phức tạp (VD: Gintoki)" },
-        { "id": "05_B", "name": "Trickster (Kẻ lừa gạt)", "trait": "Biến mọi thứ thành trò chơi, thích trêu đùa kẻ khác (VD: Hisoka)" },
-        { "id": "05_C", "name": "Kẻ ngốc gặp may", "trait": "Hành động bản năng nhưng luôn gặp may mắn kỳ lạ (VD: Buggy)" }
-      ]
-    },
-    {
-      "archetype_id": "ARCH_06",
-      "archetype_name": "The Caregiver (Người Chăm Sóc)",
-      "core_desire": "Bảo vệ và quan tâm đến những người xung quanh.",
-      "sub_types": [
-        { "id": "06_A", "name": "Người mẹ/cha của nhóm", "trait": "Bảo bọc, lo lắng từng miếng ăn giấc ngủ (VD: Bruno Bucciarati, Sugawara)" },
-        { "id": "06_B", "name": "Kẻ tử vì đạo", "trait": "Chịu đựng mọi oan khuất và hy sinh trong thầm lặng (VD: Itachi Uchiha)" }
-      ]
-    },
-    {
-      "archetype_id": "ARCH_07",
-      "archetype_name": "The Explorer (Người Khám Phá)",
-      "core_desire": "Tự do tìm hiểu thế giới và trải nghiệm cuộc sống.",
-      "sub_types": [
-        { "id": "07_A", "name": "Kẻ phiêu lưu", "trait": "Luôn hướng tới những chân trời và thử thách mới (VD: Luffy, Gon)" },
-        { "id": "07_B", "name": "Kẻ lang thang chuộc lỗi", "trait": "Đi khắp nơi để chạy trốn quá khứ hoặc tìm kiếm sự bình yên (VD: Kenshin)" }
-      ]
-    },
-    {
-      "archetype_id": "ARCH_08",
-      "archetype_name": "The Lover (Người Tình)",
-      "core_desire": "Đạt được sự gắn kết, thân mật và tình yêu.",
-      "sub_types": [
-        { "id": "08_A", "name": "Kẻ si tình", "trait": "Bảo vệ người thương vô điều kiện (VD: Sanji, Mikasa)" },
-        { "id": "08_B", "name": "Yandere", "trait": "Tình yêu độc hại, sẵn sàng tiêu diệt bất cứ ai cản đường (VD: Yuno Gasai)" },
-        { "id": "08_C", "name": "Kẻ đào hoa", "trait": "Thu hút mọi ánh nhìn nhưng nội tâm trống rỗng (VD: Howl)" }
-      ]
-    },
-    {
-      "archetype_id": "ARCH_09",
-      "archetype_name": "The Creator (Người Sáng Tạo)",
-      "core_desire": "Tạo ra những thứ có giá trị trường tồn.",
-      "sub_types": [
-        { "id": "09_A", "name": "Nhà phát minh", "trait": "Dùng khoa học công nghệ để giải quyết vấn đề (VD: Senku, Bulma)" },
-        { "id": "09_B", "name": "Nghệ sĩ điên", "trait": "Nghệ thuật là sự bùng nổ, theo đuổi cái đẹp cực đoan (VD: Deidara)" }
-      ]
-    },
-    {
-      "archetype_id": "ARCH_10",
-      "archetype_name": "The Ruler (Người Trị Vì)",
-      "core_desire": "Kiểm soát và tạo ra trật tự cho thế giới.",
-      "sub_types": [
-        { "id": "10_A", "name": "Minh quân", "trait": "Thu phục lòng người bằng sự nhân từ và tài năng (VD: Rimuru)" },
-        { "id": "10_B", "name": "Bạo chúa", "trait": "Đế vương tuyệt đối, coi người khác là rác rưởi (VD: Gilgamesh, Frieza)" }
-      ]
-    },
-    {
-      "archetype_id": "ARCH_11",
-      "archetype_name": "The Magician (Nhà Phép Thuật)",
-      "core_desire": "Hiểu biết quy luật vận hành của vũ trụ để biến đổi nó.",
-      "sub_types": [
-        { "id": "11_A", "name": "Nhà giả kim", "trait": "Sử dụng quy luật trao đổi đồng giá để thay đổi thực tại (VD: Edward Elric)" },
-        { "id": "11_B", "name": "Pháp sư hắc ám", "trait": "Lợi dụng những cấm thuật không ai dám đụng tới (VD: Geto Suguru)" }
-      ]
-    },
-    {
-      "archetype_id": "ARCH_12",
-      "archetype_name": "The Everyman (Người Thường)",
-      "core_desire": "Thuộc về một nơi nào đó, hòa nhập với mọi người.",
-      "sub_types": [
-        { "id": "12_A", "name": "Người nỗ lực", "trait": "Không có tài năng bẩm sinh nhưng bù đắp bằng mồ hôi nước mắt (VD: Rock Lee)" },
-        { "id": "12_B", "name": "Người bị cuốn theo chiều gió", "trait": "Chỉ muốn sống bình yên nhưng hay bị kéo vào rắc rối (VD: Shinpachi)" }
-      ]
-    }
-  ]
+  {
+    "archetype_id": "ARCH_01",
+    "archetype_name": "The Hero (Người Hùng)",
+    "core_desire": "Chứng minh giá trị thông qua hành động dũng cảm.",
+    "clothing_style": "Trang phục chiến đấu, giáp nhẹ, thiết kế năng động, dễ di chuyển.",
+    "color_palette": ["#E11D48", "#F59E0B", "#111827"],
+    "famousCharacters": ["Tanjiro Kamado", "Midoriya Izuku", "Eren Yeager", "Son Goku"],
+    "sub_types": [
+      { "id": "01_A", "name": "Người bảo vệ chính nghĩa", "trait": "Chiến đấu vì người khác, tinh thần bất khuất" },
+      { "id": "01_B", "name": "Người hùng bi tráng", "trait": "Mang sứ mệnh nặng nề, đánh đổi hạnh phúc cá nhân" },
+      { "id": "01_C", "name": "Người hùng bất đắc dĩ", "trait": "Không muốn chiến đấu nhưng bị hoàn cảnh ép buộc" },
+      { "id": "01_D", "name": "Chiến binh thuần túy", "trait": "Chiến đấu chỉ vì đam mê vượt qua giới hạn bản thân" }
+    ]
+  },
+  {
+    "archetype_id": "ARCH_02",
+    "archetype_name": "The Rebel (Kẻ Nổi Loạn)",
+    "core_desire": "Phá vỡ các quy tắc và phá hủy những thứ không hiệu quả.",
+    "clothing_style": "Trang phục bụi bặm, da thuộc, đinh tán, phong cách punk hoặc tối màu phá cách.",
+    "color_palette": ["#000000", "#7F1D1D", "#4B5563"],
+    "famousCharacters": ["Sasuke Uchiha", "Lelouch vi Britannia", "Sukuna", "Hiei"],
+    "sub_types": [
+      { "id": "02_A", "name": "Sói cô độc", "trait": "Hành động một mình, khinh thường luật lệ xã hội" },
+      { "id": "02_B", "name": "Nhà cách mạng", "trait": "Lật đổ hệ thống thối nát để xây dựng cái mới" },
+      { "id": "02_C", "name": "Tác nhân hỗn loạn", "trait": "Chỉ thích sự hủy diệt và nhìn thế giới bốc cháy" }
+    ]
+  },
+  {
+    "archetype_id": "ARCH_03",
+    "archetype_name": "The Sage (Nhà Thông Thái)",
+    "core_desire": "Tìm kiếm chân lý và thấu hiểu thế giới.",
+    "clothing_style": "Áo choàng dài, trang phục truyền thống hoặc học giả, phụ kiện mang tính biểu tượng (kính, sách).",
+    "color_palette": ["#1E3A8A", "#D97706", "#F3F4F6"],
+    "famousCharacters": ["Jiraiya", "Satoru Gojo", "Sousuke Aizen", "Orochimaru"],
+    "sub_types": [
+      { "id": "03_A", "name": "Người thầy đáng kính", "trait": "Dẫn dắt, truyền lại ngọn lửa cho thế hệ sau" },
+      { "id": "03_B", "name": "Kẻ thao túng trí tuệ", "trait": "Điều khiển mọi quân cờ trên bàn cờ thế giới" },
+      { "id": "03_C", "name": "Học giả cực đoan", "trait": "Bất chấp luân lý để theo đuổi tri thức tối thượng" }
+    ]
+  },
+  {
+    "archetype_id": "ARCH_04",
+    "archetype_name": "The Innocent (Người Ngây Thơ)",
+    "core_desire": "Trải nghiệm thiên đường, mong muốn hạnh phúc bình dị.",
+    "clothing_style": "Trang phục màu pastel, váy xòe, nhiều nơ hoặc thiết kế đơn giản, đáng yêu.",
+    "color_palette": ["#FBCFE8", "#BAE6FD", "#FEF08A"],
+    "famousCharacters": ["Anya Forger", "Nahida", "Eri", "Madoka Kaname"],
+    "sub_types": [
+      { "id": "04_A", "name": "Đứa trẻ thuần khiết", "trait": "Trong sáng, là liều thuốc tinh thần cho cả nhóm" },
+      { "id": "04_B", "name": "Người mang trọng trách", "trait": "Vẻ ngoài nhỏ bé ngây thơ nhưng gánh vác sứ mệnh lớn" }
+    ]
+  },
+  {
+    "archetype_id": "ARCH_05",
+    "archetype_name": "The Jester (Kẻ Pha Trò)",
+    "core_desire": "Sống trọn vẹn từng khoảnh khắc, tận hưởng niềm vui.",
+    "clothing_style": "Trang phục sặc sỡ, họa tiết bất đối xứng, độc lạ và mang tính biểu diễn.",
+    "color_palette": ["#9333EA", "#10B981", "#F59E0B"],
+    "famousCharacters": ["Gintoki Sakata", "Hisoka Morow", "Buggy", "Koro-sensei"],
+    "sub_types": [
+      { "id": "05_A", "name": "Kẻ tấu hài mua vui", "trait": "Lạc quan tếu, che giấu nội tâm phức tạp" },
+      { "id": "05_B", "name": "Trickster (Kẻ lừa gạt)", "trait": "Biến mọi thứ thành trò chơi, thích trêu đùa kẻ khác" },
+      { "id": "05_C", "name": "Kẻ ngốc gặp may", "trait": "Hành động bản năng nhưng luôn gặp may mắn kỳ lạ" }
+    ]
+  },
+  {
+    "archetype_id": "ARCH_06",
+    "archetype_name": "The Caregiver (Người Chăm Sóc)",
+    "core_desire": "Bảo vệ và quan tâm đến những người xung quanh.",
+    "clothing_style": "Trang phục mang cảm giác mềm mại, tạp dề, đồng phục y tế hoặc đồ bảo hộ nhẹ.",
+    "color_palette": ["#6EE7B7", "#F87171", "#FFFFFF"],
+    "famousCharacters": ["Bruno Bucciarati", "Itachi Uchiha", "Koushi Sugawara", "Rem"],
+    "sub_types": [
+      { "id": "06_A", "name": "Người mẹ/cha của nhóm", "trait": "Bảo bọc, lo lắng từng miếng ăn giấc ngủ" },
+      { "id": "06_B", "name": "Kẻ tử vì đạo", "trait": "Chịu đựng mọi oan khuất và hy sinh trong thầm lặng" }
+    ]
+  },
+  {
+    "archetype_id": "ARCH_07",
+    "archetype_name": "The Explorer (Người Khám Phá)",
+    "core_desire": "Tự do tìm hiểu thế giới và trải nghiệm cuộc sống.",
+    "clothing_style": "Trang phục sinh tồn, túi hộp, áo khoác dã chiến, phụ kiện du hành (balo, bản đồ).",
+    "color_palette": ["#047857", "#B45309", "#78716C"],
+    "famousCharacters": ["Monkey D. Luffy", "Gon Freecss", "Kenshin Himura", "Kino"],
+    "sub_types": [
+      { "id": "07_A", "name": "Kẻ phiêu lưu", "trait": "Luôn hướng tới những chân trời và thử thách mới" },
+      { "id": "07_B", "name": "Kẻ lang thang chuộc lỗi", "trait": "Đi khắp nơi để chạy trốn quá khứ hoặc tìm kiếm sự bình yên" }
+    ]
+  },
+  {
+    "archetype_id": "ARCH_08",
+    "archetype_name": "The Lover (Người Tình)",
+    "core_desire": "Đạt được sự gắn kết, thân mật và tình yêu.",
+    "clothing_style": "Trang phục tôn dáng, quyến rũ, chất liệu mềm mại như lụa, ren hoặc thiết kế thanh lịch.",
+    "color_palette": ["#BE185D", "#F472B6", "#4C1D95"],
+    "famousCharacters": ["Sanji", "Mikasa Ackerman", "Yuno Gasai", "Howl"],
+    "sub_types": [
+      { "id": "08_A", "name": "Kẻ si tình", "trait": "Bảo vệ người thương vô điều kiện" },
+      { "id": "08_B", "name": "Yandere", "trait": "Tình yêu độc hại, sẵn sàng tiêu diệt bất cứ ai cản đường" },
+      { "id": "08_C", "name": "Kẻ đào hoa", "trait": "Thu hút mọi ánh nhìn nhưng nội tâm trống rỗng" }
+    ]
+  },
+  {
+    "archetype_id": "ARCH_09",
+    "archetype_name": "The Creator (Người Sáng Tạo)",
+    "core_desire": "Tạo ra những thứ có giá trị trường tồn.",
+    "clothing_style": "Trang phục lấm lem dầu mỡ, áo khoác lab, hoặc phong cách avant-garde nghệ thuật.",
+    "color_palette": ["#0284C7", "#EA580C", "#A3E635"],
+    "famousCharacters": ["Senku Ishigami", "Deidara", "Bulma", "Sasori"],
+    "sub_types": [
+      { "id": "09_A", "name": "Nhà phát minh", "trait": "Dùng khoa học công nghệ để giải quyết vấn đề" },
+      { "id": "09_B", "name": "Nghệ sĩ điên", "trait": "Nghệ thuật là sự bùng nổ, theo đuổi cái đẹp cực đoan" }
+    ]
+  },
+  {
+    "archetype_id": "ARCH_10",
+    "archetype_name": "The Ruler (Người Trị Vì)",
+    "core_desire": "Kiểm soát và tạo ra trật tự cho thế giới.",
+    "clothing_style": "Trang phục hoàng gia, giáp trụ nặng, đính đá quý, áo choàng uy nghi.",
+    "color_palette": ["#B91C1C", "#FBBF24", "#1F2937"],
+    "famousCharacters": ["Rimuru Tempest", "Gilgamesh", "Frieza", "Saber"],
+    "sub_types": [
+      { "id": "10_A", "name": "Minh quân", "trait": "Thu phục lòng người bằng sự nhân từ và tài năng" },
+      { "id": "10_B", "name": "Bạo chúa", "trait": "Đế vương tuyệt đối, coi người khác là rác rưởi" }
+    ]
+  },
+  {
+    "archetype_id": "ARCH_11",
+    "archetype_name": "The Magician (Nhà Phép Thuật)",
+    "core_desire": "Hiểu biết quy luật vận hành của vũ trụ để biến đổi nó.",
+    "clothing_style": "Trang phục giả kim, áo choàng pháp sư có mũ trùm, nhiều ký tự chú thuật.",
+    "color_palette": ["#581C87", "#064E3B", "#000000"],
+    "famousCharacters": ["Edward Elric", "Geto Suguru", "Megumin", "Merlin"],
+    "sub_types": [
+      { "id": "11_A", "name": "Nhà giả kim", "trait": "Sử dụng quy luật trao đổi đồng giá để thay đổi thực tại" },
+      { "id": "11_B", "name": "Pháp sư hắc ám", "trait": "Lợi dụng những cấm thuật không ai dám đụng tới" }
+    ]
+  },
+  {
+    "archetype_id": "ARCH_12",
+    "archetype_name": "The Everyman (Người Thường)",
+    "core_desire": "Thuộc về một nơi nào đó, hòa nhập với mọi người.",
+    "clothing_style": "Trang phục đời thường, đồng phục học sinh tiêu chuẩn, thiết kế cơ bản không quá nổi bật.",
+    "color_palette": ["#64748B", "#9CA3AF", "#E5E7EB"],
+    "famousCharacters": ["Rock Lee", "Shinpachi Shimura", "Krillin", "Usopp"],
+    "sub_types": [
+      { "id": "12_A", "name": "Người nỗ lực", "trait": "Không có tài năng bẩm sinh nhưng bù đắp bằng mồ hôi nước mắt" },
+      { "id": "12_B", "name": "Người bị cuốn theo chiều gió", "trait": "Chỉ muốn sống bình yên nhưng hay bị kéo vào rắc rối" }
+    ]
+  }
+]

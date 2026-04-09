@@ -8,9 +8,14 @@ import com.cosmate.dto.response.ChatRoomResponse;
 import com.cosmate.entity.ChatRoom;
 import com.cosmate.service.ChatService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -35,10 +40,26 @@ public class ChatController {
 
     // THÊM API LẤY LỊCH SỬ TIN NHẮN
     @GetMapping("/messages/{roomId}")
-    public ApiResponse<List<ChatMessageResponse>> getMessageHistory(@PathVariable Integer roomId) {
-        return ApiResponse.<List<ChatMessageResponse>>builder()
-                .result(chatService.getMessageHistory(roomId))
+    public ApiResponse<Page<ChatMessageResponse>> getMessageHistory(
+            @PathVariable Integer roomId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+
+        Pageable pageable = PageRequest.of(page, size);
+        return ApiResponse.<Page<ChatMessageResponse>>builder()
+                .result(chatService.getMessageHistory(roomId, pageable))
                 .message("Lấy lịch sử tin nhắn thành công")
+                .build();
+    }
+
+    // THÊM API ĐÁNH DẤU ĐÃ ĐỌC
+    @PostMapping("/room/{roomId}/read")
+    public ApiResponse<Void> markRoomAsRead(
+            @PathVariable Integer roomId,
+            @RequestParam Integer currentUserId) {
+        chatService.markMessagesAsRead(roomId, currentUserId);
+        return ApiResponse.<Void>builder()
+                .message("Đã cập nhật trạng thái đã xem")
                 .build();
     }
 
@@ -66,5 +87,29 @@ public class ChatController {
                 .result(chatService.getUserChatRooms(userId))
                 .message("Lấy danh sách phòng chat thành công")
                 .build();
+    }
+
+    // THÊM API ĐẾM TỔNG SỐ TIN NHẮN CHƯA ĐỌC (GLOBAL UNREAD)
+    @GetMapping("/unread-count/{userId}")
+    public ApiResponse<Integer> getGlobalUnreadCount(@PathVariable Integer userId) {
+        return ApiResponse.<Integer>builder()
+                .result(chatService.getTotalUnreadCount(userId))
+                .message("Lấy số tin nhắn chưa đọc thành công")
+                .build();
+    }
+
+    @PostMapping(value = "/upload-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<String> uploadChatImage(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("roomId") Integer roomId) {
+        try {
+            String imageUrl = chatService.uploadChatImage(file, roomId);
+            return ApiResponse.<String>builder()
+                    .result(imageUrl)
+                    .message("Upload ảnh thành công")
+                    .build();
+        } catch (Exception e) {
+            return ApiResponse.<String>builder().code(500).message("Lỗi upload ảnh: " + e.getMessage()).build();
+        }
     }
 }

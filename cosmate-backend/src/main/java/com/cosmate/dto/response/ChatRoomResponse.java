@@ -12,4 +12,5 @@ public class ChatRoomResponse {
     private String partnerName;
     private String partnerAvatar;
     private LocalDateTime lastMessageAt;
+    private Integer unreadCount;
 }

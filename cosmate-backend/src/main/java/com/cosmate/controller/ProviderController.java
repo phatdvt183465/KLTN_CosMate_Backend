@@ -142,15 +142,23 @@ public class ProviderController {
             api.setMessage("Chưa xác thực - Vui lòng đăng nhập");
             return ResponseEntity.status(401).body(api);
         }
-        if (!currentUserId.equals(id)) {
-            api.setCode(1006);
-            api.setMessage("Không có quyền thực hiện thao tác này!");
-            return ResponseEntity.status(403).body(api);
-        }
         try {
+            // --- ĐOẠN SỬA MỚI ---
+            // Tìm Provider theo id (providerId) truyền từ URL
+            Provider p = providerService.getById(id);
+
+            // Kiểm tra xem user đang đăng nhập có phải là chủ của provider này không
+            if (!currentUserId.equals(p.getUserId())) {
+                api.setCode(1006);
+                api.setMessage("Không có quyền thực hiện thao tác này!");
+                return ResponseEntity.status(403).body(api);
+            }
+
+            // Đã check đúng chủ, tiến hành update (hàm này đang nhận currentUserId)
             providerService.updateOwnProvider(currentUserId, request);
-            // owner can view full bank info
             ProviderResponse resp = providerService.getResponseByUserId(currentUserId, true);
+            // --- KẾT THÚC ĐOẠN SỬA ---
+
             api.setCode(0);
             api.setMessage("OK");
             api.setResult(resp);
@@ -216,14 +224,21 @@ public class ProviderController {
             api.setMessage("Chưa xác thực - Vui lòng đăng nhập");
             return ResponseEntity.status(401).body(api);
         }
-        if (!currentUserId.equals(id)) {
-            api.setCode(1006);
-            api.setMessage("Không có quyền thực hiện thao tác này!");
-            return ResponseEntity.status(403).body(api);
-        }
-
         try {
-            ProviderResponse resp = providerService.updateCoverImageForUserUpload(id, coverImage);
+            // --- ĐOẠN SỬA MỚI ---
+            // Tìm Provider theo id (providerId)
+            Provider p = providerService.getById(id);
+
+            if (!currentUserId.equals(p.getUserId())) {
+                api.setCode(1006);
+                api.setMessage("Không có quyền thực hiện thao tác này!");
+                return ResponseEntity.status(403).body(api);
+            }
+
+            // Truyền currentUserId vào service như cũ
+            ProviderResponse resp = providerService.updateCoverImageForUserUpload(currentUserId, coverImage);
+            // --- KẾT THÚC ĐOẠN SỬA ---
+
             api.setCode(0);
             api.setMessage("OK");
             api.setResult(resp);

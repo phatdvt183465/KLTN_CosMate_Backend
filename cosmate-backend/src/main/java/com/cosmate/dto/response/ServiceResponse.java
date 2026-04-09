@@ -9,6 +9,7 @@ import java.util.List;
 @Builder
 public class ServiceResponse {
     private Integer id;
+    private String serviceName;
     private String serviceType;
     private String description;
     private Integer slotDurationHours;

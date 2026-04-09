@@ -8,6 +8,7 @@ import java.util.List;
 @Data
 public class ServiceRequest {
     private String serviceType; // Tên loại dịch vụ (Makeup, Photo,...)
+    private String serviceName;
     private String description;
     private Integer slotDurationHours; // Số giờ mỗi slot
     private BigDecimal pricePerSlot; // Giá mỗi slot

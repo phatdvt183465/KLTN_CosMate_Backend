@@ -94,6 +94,7 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
 
     // Hàm 1: Chỉ chuyên lo việc cập nhật chữ và số
     private void updateBasicInfo(Service service, ServiceRequest request) {
+        if (hasText(request.getServiceName())) service.setServiceName(request.getServiceName());
         if (hasText(request.getServiceType())) service.setServiceType(request.getServiceType());
         if (hasText(request.getDescription())) service.setDescription(request.getDescription());
         if (request.getSlotDurationHours() != null) service.setSlotDurationHours(request.getSlotDurationHours());
@@ -173,6 +174,7 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
     }
 
     private void mapBaseInfo(Service s, ServiceRequest r) {
+        s.setServiceName(r.getServiceName());
         s.setServiceType(r.getServiceType());
         s.setDescription(r.getDescription());
         s.setSlotDurationHours(r.getSlotDurationHours());
@@ -187,6 +189,7 @@ public class ServiceManagementServiceImpl implements ServiceManagementService {
     private ServiceResponse mapToResponse(Service s) {
         return ServiceResponse.builder()
                 .id(s.getId())
+                .serviceName(s.getServiceName())
                 .serviceType(s.getServiceType())
                 .description(s.getDescription())
                 .slotDurationHours(s.getSlotDurationHours())

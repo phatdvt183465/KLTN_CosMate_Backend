@@ -17,4 +17,6 @@ public interface TransactionRepository extends JpaRepository<Transaction, Intege
     // New: find transactions by Order
     List<Transaction> findByOrderOrderByCreatedAtDesc(Order order);
     List<Transaction> findByOrder_IdOrderByCreatedAtDesc(Integer orderId);
+    // find transactions by status
+    List<Transaction> findByStatus(String status);
 }

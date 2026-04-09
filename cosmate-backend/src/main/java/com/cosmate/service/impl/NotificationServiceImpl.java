@@ -43,23 +43,25 @@ public class NotificationServiceImpl implements NotificationService {
         }
         // Send email if user has email
         try {
-            if (saved.getUser() != null && saved.getUser().getId() != null) {
-                Optional<com.cosmate.entity.User> uOpt = userRepository.findById(saved.getUser().getId());
-                if (uOpt.isPresent()) {
-                    com.cosmate.entity.User u = uOpt.get();
-                    String to = u.getEmail();
-                    if (to != null && !to.isBlank()) {
-                        SimpleMailMessage msg = new SimpleMailMessage();
-                        msg.setTo(to);
-                        msg.setSubject(saved.getHeader() == null ? "Thông báo từ CosMate" : saved.getHeader());
-                        String body = saved.getContent() == null ? "" : saved.getContent();
-                        body += "\n\nThời gian: " + (saved.getSendAt() == null ? "" : saved.getSendAt().toString());
-                        msg.setText(body);
-                        try {
-                            mailSender.send(msg);
-                            logger.info("Sent notification email to {} for notification id={}", to, saved.getId());
-                        } catch (Exception ex) {
-                            logger.error("Failed to send notification email to {} for notification id={}", to, saved.getId(), ex);
+            if (!"CHAT_MESSAGE".equals(saved.getType())) {
+                if (saved.getUser() != null && saved.getUser().getId() != null) {
+                    Optional<com.cosmate.entity.User> uOpt = userRepository.findById(saved.getUser().getId());
+                    if (uOpt.isPresent()) {
+                        com.cosmate.entity.User u = uOpt.get();
+                        String to = u.getEmail();
+                        if (to != null && !to.isBlank()) {
+                            SimpleMailMessage msg = new SimpleMailMessage();
+                            msg.setTo(to);
+                            msg.setSubject(saved.getHeader() == null ? "Thông báo từ CosMate" : saved.getHeader());
+                            String body = saved.getContent() == null ? "" : saved.getContent();
+                            body += "\n\nThời gian: " + (saved.getSendAt() == null ? "" : saved.getSendAt().toString());
+                            msg.setText(body);
+                            try {
+                                mailSender.send(msg);
+                                logger.info("Sent notification email to {} for notification id={}", to, saved.getId());
+                            } catch (Exception ex) {
+                                logger.error("Failed to send notification email to {} for notification id={}", to, saved.getId(), ex);
+                            }
                         }
                     }
                 }

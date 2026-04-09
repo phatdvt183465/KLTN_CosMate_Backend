@@ -19,6 +19,10 @@ public class Service {
     private Integer providerId;
 
     @Nationalized
+    @Column(name = "service_name")
+    private String serviceName;
+
+    @Nationalized
     @Column(name = "service_type")
     private String serviceType;
 

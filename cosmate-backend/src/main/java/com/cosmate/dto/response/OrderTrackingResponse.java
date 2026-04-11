@@ -12,6 +12,7 @@ public class OrderTrackingResponse {
     private String trackingCode;
     private String trackingStatus;
     private String stage;
+    private String shippingCarrierName;
     private LocalDateTime createdAt;
 }
 

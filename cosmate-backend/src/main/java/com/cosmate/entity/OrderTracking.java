@@ -33,6 +33,9 @@ public class OrderTracking {
     @Column(length = 50)
     private String stage;
 
+    @Column(name = "shipping_carrier_name", length = 255)
+    private String shippingCarrierName;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

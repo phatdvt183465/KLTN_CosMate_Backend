@@ -123,6 +123,36 @@ public class ProviderServiceImpl implements ProviderService {
 
     @Override
     @Transactional
+    public Provider incrementCompletedOrders(Integer providerId) {
+        Provider p = providerRepository.findById(providerId).orElseThrow(() -> new AppException(ErrorCode.PROVIDER_NOT_FOUND));
+        Integer cur = p.getCompletedOrders() == null ? 0 : p.getCompletedOrders();
+        p.setCompletedOrders(cur + 1);
+        return providerRepository.save(p);
+    }
+
+    @Override
+    @Transactional
+    public Provider addReviewRating(Integer providerId, Integer rating) {
+        if (providerId == null || rating == null) throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION);
+        Provider p = providerRepository.findById(providerId).orElseThrow(() -> new AppException(ErrorCode.PROVIDER_NOT_FOUND));
+        Integer curReviews = p.getTotalReviews() == null ? 0 : p.getTotalReviews();
+        java.math.BigDecimal curRating = p.getTotalRating() == null ? java.math.BigDecimal.ZERO : p.getTotalRating();
+
+        // new average = (currentAverage * currentCount + newRating) / (currentCount + 1)
+        java.math.BigDecimal total = curRating.multiply(new java.math.BigDecimal(curReviews)).add(new java.math.BigDecimal(rating));
+        int newReviews = curReviews + 1;
+        java.math.BigDecimal newAvg = java.math.BigDecimal.ZERO;
+        if (newReviews > 0) {
+            newAvg = total.divide(new java.math.BigDecimal(newReviews), 2, java.math.RoundingMode.HALF_UP);
+        }
+
+        p.setTotalReviews(newReviews);
+        p.setTotalRating(newAvg);
+        return providerRepository.save(p);
+    }
+
+    @Override
+    @Transactional
     public Provider updateAvatarForUser(Integer userId, String avatarUrl) {
         Optional<Provider> opt = providerRepository.findByUserId(userId);
         if (opt.isEmpty()) return null;

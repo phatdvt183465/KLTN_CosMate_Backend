@@ -57,4 +57,7 @@ public class Costume {
 
     @Column(name = "costume_vector", columnDefinition = "NVARCHAR(MAX)")
     private String costumeVector;
+
+    @Column(name = "completed_rent_count", nullable = false)
+    private Integer completedRentCount = 0;
 }

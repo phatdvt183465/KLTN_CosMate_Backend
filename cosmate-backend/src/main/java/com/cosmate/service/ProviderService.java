@@ -14,6 +14,9 @@ public interface ProviderService {
     Provider getById(Integer providerId);
     Provider updateOwnProvider(Integer userId, UpdateProviderRequest request);
     Provider setVerified(Integer providerId, boolean verified);
+    Provider incrementCompletedOrders(Integer providerId);
+    // update provider totals when a new review is added
+    Provider addReviewRating(Integer providerId, Integer rating);
     Provider updateAvatarForUser(Integer userId, String avatarUrl);
     Provider updateCoverImageForUser(Integer userId, String coverImageUrl);
     List<Provider> listAllProviders();

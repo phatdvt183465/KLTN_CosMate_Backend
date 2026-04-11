@@ -323,6 +323,7 @@ public class CostumeServiceImpl implements CostumeService {
                 .rentDiscount(costume.getRentDiscount())
                 .status(costume.getStatus())
                 .providerId(costume.getProviderId())
+                .completedRentCount(costume.getCompletedRentCount())
                 .imageUrls(costume.getImages().stream().map(CostumeImage::getImageUrl).collect(Collectors.toList()))
                 .surcharges(costume.getSurcharges().stream()
                         .map(s -> CostumeResponse.SurchargeResponse.builder()

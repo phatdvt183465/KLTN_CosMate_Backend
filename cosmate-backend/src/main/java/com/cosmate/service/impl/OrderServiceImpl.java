@@ -1383,8 +1383,22 @@ public class OrderServiceImpl implements OrderService {
                 for (OrderDetail d : details) {
                     if (d.getCostumeId() == null) continue;
                     Costume c = costumeRepository.findById(d.getCostumeId()).orElse(null);
-                    if (c != null) { c.setStatus("AVAILABLE"); costumeRepository.save(c); }
+                    if (c != null) {
+                        // update completed rent count: if null or 0 -> set to 1, otherwise increment
+                        Integer crc = c.getCompletedRentCount();
+                        if (crc == null || crc == 0) c.setCompletedRentCount(1);
+                        else c.setCompletedRentCount(crc + 1);
+                        c.setStatus("AVAILABLE");
+                        costumeRepository.save(c);
+                    }
                 }
+            }
+        } catch (Exception ignored) {}
+
+        // increment provider completed orders count by 1
+        try {
+            if (order.getProviderId() != null) {
+                try { providerService.incrementCompletedOrders(order.getProviderId()); } catch (Exception ignored) {}
             }
         } catch (Exception ignored) {}
 

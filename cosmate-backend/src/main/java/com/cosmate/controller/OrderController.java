@@ -197,6 +197,7 @@ public class OrderController {
     @PostMapping(path = "/{id}/ship", consumes = {"multipart/form-data"})
     public ApiResponse<?> shipOrder(@PathVariable Integer id,
                                     @RequestParam("trackingCode") String trackingCode,
+                                    @RequestParam(value = "shippingCarrierName", required = false) String shippingCarrierName,
                                     @RequestPart(value = "images", required = false) MultipartFile[] images,
                                     @RequestParam(value = "notes", required = false) List<String> notes) {
         try {
@@ -205,7 +206,7 @@ public class OrderController {
             if (currentUserId == null) return ApiResponse.<Object>builder().code(401).message("Chưa xác thực - Vui lòng đăng nhập").build();
             boolean isAdminStaff = hasAdminStaffRole(auth);
             try {
-                java.util.Map<String,Object> result = orderService.shipOrder(currentUserId, id, trackingCode, images, notes, isAdminStaff);
+                java.util.Map<String,Object> result = orderService.shipOrder(currentUserId, id, trackingCode, shippingCarrierName, images, notes, isAdminStaff);
                 return ApiResponse.<Object>builder().result(result).message("Order updated to SHIPPING_OUT").build();
             } catch (IllegalArgumentException ex) {
                 return ApiResponse.<Object>builder().code(400).message(ex.getMessage()).build();
@@ -273,13 +274,14 @@ public class OrderController {
     @PostMapping(path = "/{id}/return", consumes = {"multipart/form-data"})
     public ApiResponse<?> startReturn(@PathVariable Integer id,
                                       @RequestParam("trackingCode") String trackingCode,
+                                      @RequestParam(value = "shippingCarrierName", required = false) String shippingCarrierName,
                                       @RequestPart(value = "images", required = false) MultipartFile[] images,
                                       @RequestParam(value = "notes", required = false) List<String> notes) {
         try {
             Integer currentUserId = getCurrentUserId();
             if (currentUserId == null) return ApiResponse.<Object>builder().code(401).message("Chưa xác thực - Vui lòng đăng nhập").build();
             try {
-                java.util.Map<String,Object> res = orderService.startReturn(currentUserId, id, trackingCode, images, notes);
+                java.util.Map<String,Object> res = orderService.startReturn(currentUserId, id, trackingCode, shippingCarrierName, images, notes);
                 return ApiResponse.<Object>builder().result(res).message("Order updated to SHIPPING_BACK").build();
             } catch (IllegalArgumentException ex) {
                 return ApiResponse.<Object>builder().code(400).message(ex.getMessage()).build();

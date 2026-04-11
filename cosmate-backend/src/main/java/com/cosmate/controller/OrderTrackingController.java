@@ -36,7 +36,7 @@ public class OrderTrackingController {
     // Update only the trackingCode by tracking id
     @PatchMapping("/{id}")
     public ResponseEntity<ApiResponse<OrderTrackingResponse>> updateTrackingCode(@PathVariable Integer id, @RequestBody OrderTrackingRequest req) {
-        OrderTrackingResponse resp = orderTrackingService.updateTrackingCode(id, req.getTrackingCode());
+        OrderTrackingResponse resp = orderTrackingService.updateTrackingCode(id, req.getTrackingCode(), req.getShippingCarrierName());
         return ResponseEntity.ok(ApiResponse.<OrderTrackingResponse>builder().result(resp).build());
     }
 

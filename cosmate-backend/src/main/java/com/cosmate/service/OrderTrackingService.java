@@ -7,6 +7,6 @@ import java.util.List;
 public interface OrderTrackingService {
     List<OrderTrackingResponse> listByOrder(Integer orderId);
     OrderTrackingResponse getById(Integer id);
-    OrderTrackingResponse updateTrackingCode(Integer id, String trackingCode);
+    OrderTrackingResponse updateTrackingCode(Integer id, String trackingCode, String shippingCarrierName);
 }
 

@@ -1008,7 +1008,7 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public java.util.Map<String,Object> shipOrder(Integer currentUserId, Integer id, String trackingCode, org.springframework.web.multipart.MultipartFile[] images, java.util.List<String> notes, boolean isAdminStaff) throws Exception {
+    public java.util.Map<String,Object> shipOrder(Integer currentUserId, Integer id, String trackingCode, String shippingCarrierName, org.springframework.web.multipart.MultipartFile[] images, java.util.List<String> notes, boolean isAdminStaff) throws Exception {
         Order order = orderRepository.findById(id).orElse(null);
         if (order == null) throw new IllegalArgumentException("Order not found");
         if (!isAdminStaff) {
@@ -1024,6 +1024,7 @@ public class OrderServiceImpl implements OrderService {
                 .trackingCode(trackingCode)
                 .trackingStatus("CREATED")
                 .stage("SHIPPING_OUT")
+                .shippingCarrierName(shippingCarrierName)
                 .build();
         ot = orderTrackingRepository.save(ot);
 
@@ -1235,7 +1236,7 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public java.util.Map<String,Object> startReturn(Integer currentUserId, Integer id, String trackingCode, org.springframework.web.multipart.MultipartFile[] images, java.util.List<String> notes) throws Exception {
+    public java.util.Map<String,Object> startReturn(Integer currentUserId, Integer id, String trackingCode, String shippingCarrierName, org.springframework.web.multipart.MultipartFile[] images, java.util.List<String> notes) throws Exception {
         Order order = orderRepository.findById(id).orElse(null);
         if (order == null) throw new IllegalArgumentException("Order not found");
         if (!currentUserId.equals(order.getCosplayerId())) throw new IllegalArgumentException("Order does not belong to user");
@@ -1248,6 +1249,7 @@ public class OrderServiceImpl implements OrderService {
                 .trackingCode(trackingCode)
                 .trackingStatus("RETURN_CREATED")
                 .stage("SHIPPING_BACK")
+                .shippingCarrierName(shippingCarrierName)
                 .build();
         ot = orderTrackingRepository.save(ot);
 

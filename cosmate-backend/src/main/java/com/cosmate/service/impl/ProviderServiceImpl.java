@@ -42,7 +42,7 @@ public class ProviderServiceImpl implements ProviderService {
                 .bankAccountNumber(null)
                 .bankName(null)
                 .completedOrders(0)
-                .totalRating(0)
+                .totalRating(java.math.BigDecimal.ZERO)
                 .totalReviews(0)
                 .verified(false)
                 .build();

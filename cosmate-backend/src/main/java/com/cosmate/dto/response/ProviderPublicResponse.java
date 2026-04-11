@@ -2,6 +2,7 @@ package com.cosmate.dto.response;
 
 import lombok.Builder;
 import lombok.Data;
+import java.math.BigDecimal;
 
 @Data
 @Builder
@@ -16,6 +17,6 @@ public class ProviderPublicResponse {
     private Boolean verified;
 
     private Integer completedOrders;
-    private Integer totalRating;
+    private BigDecimal totalRating;
     private Integer totalReviews;
 }

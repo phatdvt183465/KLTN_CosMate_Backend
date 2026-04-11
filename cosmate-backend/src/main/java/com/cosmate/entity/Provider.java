@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 
 @Entity
 @Table(name = "Providers")
@@ -44,8 +45,8 @@ public class Provider {
     @Column(name = "completed_orders", nullable = false)
     private Integer completedOrders = 0;
 
-    @Column(name = "total_rating", nullable = false)
-    private Integer totalRating = 0;
+    @Column(name = "total_rating", nullable = false, precision = 3, scale = 2)
+    private BigDecimal totalRating = BigDecimal.ZERO;
 
     @Column(name = "total_reviews", nullable = false)
     private Integer totalReviews = 0;
@@ -61,7 +62,7 @@ public class Provider {
         if (createdAt == null) createdAt = LocalDateTime.now();
         if (verified == null) verified = false;
         if (completedOrders == null) completedOrders = 0;
-        if (totalRating == null) totalRating = 0;
+        if (totalRating == null) totalRating = BigDecimal.ZERO;
         if (totalReviews == null) totalReviews = 0;
     }
 }

@@ -667,7 +667,10 @@ public class OrderServiceImpl implements OrderService {
         Order order = opt.get();
 
         boolean isCosplayer = order.getCosplayerId() != null && order.getCosplayerId().equals(userId);
-        com.cosmate.entity.Provider prov = providerService.getByUserId(userId);
+        // providerService.getByUserId throws when the user is not a provider (AppException).
+        // Safely attempt to fetch provider record and treat missing provider as null so cosplayers can cancel.
+        com.cosmate.entity.Provider prov = null;
+        try { prov = providerService.getByUserId(userId); } catch (Exception ignored) { prov = null; }
         boolean isProviderOwner = prov != null && order.getProviderId() != null && order.getProviderId().equals(prov.getId());
         if (!isCosplayer && !isProviderOwner) throw new IllegalArgumentException("No permission to cancel this order");
 

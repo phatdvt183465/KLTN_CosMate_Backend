@@ -15,6 +15,7 @@ public interface ReviewRepository extends JpaRepository<Review, Integer> {
     List<Review> findByOrderProviderId(Integer providerId);
 
     // find reviews for a costume by joining the reviews' orders with the order-costume mapping table
-    @Query(value = "SELECT r.* FROM Reviews r JOIN Order_Costumes_Surcharges ocs ON ocs.order_id = r.order_id WHERE ocs.costume_id = ?1", nativeQuery = true)
+    // Find reviews for a costume by joining order details (which reference costumes) with reviews by order_id
+    @Query(value = "SELECT DISTINCT r.* FROM Reviews r JOIN Order_Detail od ON od.order_id = r.order_id WHERE od.costume_id = ?1", nativeQuery = true)
     List<Review> findByCostumeId(Integer costumeId);
 }

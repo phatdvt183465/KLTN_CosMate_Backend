@@ -122,6 +122,18 @@ public class ReviewServiceImpl implements ReviewService {
         return out;
     }
 
+    @Override
+    public List<ReviewResponse> getByCostumeId(Integer costumeId) {
+        List<Review> reviews = reviewRepository.findByCostumeId(costumeId);
+        List<ReviewResponse> out = new ArrayList<>();
+        if (reviews == null || reviews.isEmpty()) return out;
+        for (Review r : reviews) {
+            ReviewResponse resp = mapToDto(r);
+            out.add(resp);
+        }
+        return out;
+    }
+
     private ReviewResponse mapToDto(Review r) {
         ReviewResponse resp = new ReviewResponse();
         resp.setId(r.getId());

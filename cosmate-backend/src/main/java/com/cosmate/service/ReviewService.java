@@ -12,4 +12,6 @@ public interface ReviewService {
     List<ReviewResponse> getByOrderId(Integer orderId);
 
     List<ReviewResponse> getByProviderId(Integer providerId);
+    
+    List<ReviewResponse> getByCostumeId(Integer costumeId);
 }

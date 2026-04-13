@@ -691,6 +691,21 @@ public class OrderServiceImpl implements OrderService {
 
         order.setStatus("CANCELLED");
         orderRepository.save(order);
+
+        // If this order included costumes, set their status back to AVAILABLE when the order is cancelled
+        try {
+            java.util.List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
+            if (details != null && !details.isEmpty()) {
+                for (OrderDetail d : details) {
+                    if (d == null || d.getCostumeId() == null) continue;
+                    Costume cc = costumeRepository.findById(d.getCostumeId()).orElse(null);
+                    if (cc != null) {
+                        cc.setStatus("AVAILABLE");
+                        costumeRepository.save(cc);
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
         try {
             com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
                     .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
@@ -965,6 +980,18 @@ public class OrderServiceImpl implements OrderService {
         resp.setRentalOptions(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderRentalOptionRepository.findByOrderDetailIdIn(detailIds));
         resp.setImages(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderImageRepository.findByOrderDetailIdIn(detailIds));
         resp.setTrackings(orderTrackingRepository.findByOrderId(o.getId()));
+
+        // include any OrderDetailExtend records related to each order detail
+        java.util.List<com.cosmate.entity.OrderDetailExtend> exts = new java.util.ArrayList<>();
+        if (detailIds != null && !detailIds.isEmpty()) {
+            for (Integer did : detailIds) {
+                try {
+                    java.util.List<com.cosmate.entity.OrderDetailExtend> found = orderDetailExtendRepository.findByOrderDetailId(did);
+                    if (found != null && !found.isEmpty()) exts.addAll(found);
+                } catch (Exception ignored) {}
+            }
+        }
+        resp.setDetailExtends(exts);
         java.util.List<com.cosmate.entity.Transaction> txs = transactionRepository.findByOrder_IdOrderByCreatedAtDesc(o.getId());
         java.util.List<com.cosmate.dto.response.TransactionResponse> txResp = txs.stream().map(t -> com.cosmate.dto.response.TransactionResponse.builder()
                 .id(t.getId())

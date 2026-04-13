@@ -44,6 +44,7 @@ public class OrderServiceImpl implements OrderService {
     private final VnPayService vnPayService;
     private final MomoService momoService;
     private final com.cosmate.service.NotificationService notificationService;
+    private final com.cosmate.repository.WishlistRepository wishlistRepository;
     private final AddressRepository addressRepository;
     private final OrderAddressRepository orderAddressRepository;
     private final ProviderService providerService;
@@ -702,6 +703,24 @@ public class OrderServiceImpl implements OrderService {
                     if (cc != null) {
                         cc.setStatus("AVAILABLE");
                         costumeRepository.save(cc);
+                        try {
+                            java.util.List<com.cosmate.entity.WishlistCostume> watchers = wishlistRepository.findAllByCostumeId(cc.getId());
+                            if (watchers != null && !watchers.isEmpty()) {
+                                for (com.cosmate.entity.WishlistCostume w : watchers) {
+                                    try {
+                                        com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                                                .user(com.cosmate.entity.User.builder().id(w.getUserId()).build())
+                                                .type("WISHLIST_NOTIFY")
+                                                .header("Bộ đồ bạn quan tâm đã có sẵn")
+                                                .content("Bộ đồ '" + cc.getName() + "' hiện đã có sẵn để thuê.")
+                                                .sendAt(java.time.LocalDateTime.now())
+                                                .isRead(false)
+                                                .build();
+                                        notificationService.create(n);
+                                    } catch (Exception ignored) {}
+                                }
+                            }
+                        } catch (Exception ignored) {}
                     }
                 }
             }
@@ -1420,6 +1439,24 @@ public class OrderServiceImpl implements OrderService {
                         else c.setCompletedRentCount(crc + 1);
                         c.setStatus("AVAILABLE");
                         costumeRepository.save(c);
+                        try {
+                            java.util.List<com.cosmate.entity.WishlistCostume> watchers = wishlistRepository.findAllByCostumeId(c.getId());
+                            if (watchers != null && !watchers.isEmpty()) {
+                                for (com.cosmate.entity.WishlistCostume w : watchers) {
+                                    try {
+                                        com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                                                .user(com.cosmate.entity.User.builder().id(w.getUserId()).build())
+                                                .type("WISHLIST_NOTIFY")
+                                                .header("Bộ đồ bạn quan tâm đã có sẵn")
+                                                .content("Bộ đồ '" + c.getName() + "' hiện đã có sẵn để thuê.")
+                                                .sendAt(java.time.LocalDateTime.now())
+                                                .isRead(false)
+                                                .build();
+                                        notificationService.create(n);
+                                    } catch (Exception ignored) {}
+                                }
+                            }
+                        } catch (Exception ignored) {}
                     }
                 }
             }

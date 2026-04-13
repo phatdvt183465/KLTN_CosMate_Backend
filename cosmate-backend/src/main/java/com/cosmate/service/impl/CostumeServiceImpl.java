@@ -30,6 +30,8 @@ public class CostumeServiceImpl implements CostumeService {
 
     private final CostumeRepository costumeRepository;
     private final ProviderRepository providerRepository;
+    private final com.cosmate.repository.WishlistRepository wishlistRepository;
+    private final com.cosmate.service.NotificationService notificationService;
     private final ObjectMapper objectMapper;
     private final AIService aiService;
     private final com.cosmate.service.FirebaseStorageService firebaseStorageService;
@@ -149,6 +151,28 @@ public class CostumeServiceImpl implements CostumeService {
 
         costume.setStatus(newStatus);
         costumeRepository.save(costume);
+
+        // If it becomes AVAILABLE, notify wishlist users
+        if ("AVAILABLE".equalsIgnoreCase(newStatus)) {
+            try {
+                List<com.cosmate.entity.WishlistCostume> watchers = wishlistRepository.findAllByCostumeId(costume.getId());
+                if (watchers != null && !watchers.isEmpty()) {
+                    for (com.cosmate.entity.WishlistCostume w : watchers) {
+                        try {
+                            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                                    .user(com.cosmate.entity.User.builder().id(w.getUserId()).build())
+                                    .type("WISHLIST_NOTIFY")
+                                    .header("Bộ đồ bạn quan tâm đã có sẵn")
+                                    .content("Bộ đồ '" + costume.getName() + "' hiện đã có sẵn để thuê.")
+                                    .sendAt(java.time.LocalDateTime.now())
+                                    .isRead(false)
+                                    .build();
+                            notificationService.create(n);
+                        } catch (Exception ignored) {}
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
     }
 
     // --- Private Business Logic Helpers ---

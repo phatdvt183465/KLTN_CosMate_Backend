@@ -75,7 +75,7 @@ public class SecurityConfig {
                                 "/swagger-resources/**",
                                 "/webjars/**",
                                 "/configuration/**",
-                                "api/payment/**"
+                                "/api/payment/**"
                         ).permitAll()
                         // Allow public GET access to providers list and details
                         .requestMatchers(HttpMethod.GET, "/api/providers/**").permitAll()

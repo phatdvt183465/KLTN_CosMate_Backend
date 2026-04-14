@@ -798,6 +798,36 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    public java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse> listCosplayerServiceOrders(Integer cosplayerUserId, String statuses) throws Exception {
+        java.util.List<String> statusList = null;
+        if (statuses != null && !statuses.trim().isEmpty()) {
+            statusList = java.util.Arrays.stream(statuses.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
+        }
+        // make a final reference for use inside lambda expressions
+        final java.util.List<String> finalStatusList = statusList;
+        java.util.List<Order> orders = orderRepository.findByCosplayerIdOrderByCreatedAtDesc(cosplayerUserId);
+        if (finalStatusList != null && !finalStatusList.isEmpty()) {
+            orders = orders.stream().filter(o -> o.getStatus() != null && finalStatusList.contains(o.getStatus())).toList();
+        }
+
+        java.util.List<Order> serviceOrders = orders.stream().filter(o -> "RENT_SERVICE".equals(o.getOrderType())).toList();
+        java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse> respList = new java.util.ArrayList<>();
+        for (Order o : serviceOrders) {
+            com.cosmate.dto.response.ServiceOrderItemResponse item = new com.cosmate.dto.response.ServiceOrderItemResponse();
+            item.setId(o.getId());
+            item.setCosplayerId(o.getCosplayerId());
+            item.setProviderId(o.getProviderId());
+            item.setOrderType(o.getOrderType());
+            item.setStatus(o.getStatus());
+            item.setTotalAmount(o.getTotalAmount());
+            item.setCreatedAt(o.getCreatedAt());
+            item.setBookings(orderServiceBookingRepository.findByOrderId(o.getId()));
+            respList.add(item);
+        }
+        return respList;
+    }
+
+    @Override
     @Transactional
     public OrderResponse payOrder(Integer cosplayerId, Integer orderId, String paymentMethod, String returnUrl) throws Exception {
         Optional<Order> opt = orderRepository.findById(orderId);

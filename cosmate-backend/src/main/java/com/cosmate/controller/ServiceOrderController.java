@@ -6,17 +6,13 @@ import com.cosmate.dto.response.OrderResponse;
 import com.cosmate.entity.*;
 import com.cosmate.service.OrderService;
 import com.cosmate.service.ProviderService;
-import com.cosmate.service.WalletService;
-import com.cosmate.service.VnPayService;
-import com.cosmate.service.MomoService;
+// ...existing code...
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
-import java.util.Optional;
+// ...existing code...
 
 @RestController
 @RequestMapping("/api/service-orders")
@@ -183,9 +179,11 @@ public class ServiceOrderController {
         }
     }
 
-    // List service orders (RENT_SERVICE) by cosplayer id. Accessible by the cosplayer themself or admin/staff.
+    // List service orders (RENT_SERVICE) by cosplayer id in compact ServiceOrderItemResponse form (same as provider listing).
+    // Accessible by the cosplayer themself or admin/staff.
     @GetMapping("/cosplayer/{userId}")
-    public ApiResponse<java.util.List<com.cosmate.dto.response.OrderFullResponse>> listServiceOrdersByCosplayerId(@PathVariable Integer userId) {
+    public ApiResponse<java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse>> listServiceOrdersByCosplayerId(@PathVariable Integer userId,
+                                                                                                                 @RequestParam(required = false) String statuses) {
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             Integer currentUserId = getCurrentUserId();
@@ -198,13 +196,12 @@ public class ServiceOrderController {
                             || "ADMIN".equals(at) || "STAFF".equals(at) || "SUPERADMIN".equals(at);
                 });
             }
-            if (!allowed) return ApiResponse.<java.util.List<com.cosmate.dto.response.OrderFullResponse>>builder().code(403).message("Không có quyền truy cập danh sách đơn").build();
+            if (!allowed) return ApiResponse.<java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse>>builder().code(403).message("Không có quyền truy cập danh sách đơn").build();
 
-            java.util.List<com.cosmate.dto.response.OrderFullResponse> all = orderService.listOrdersByUserId(userId);
-            java.util.List<com.cosmate.dto.response.OrderFullResponse> filtered = all == null ? java.util.Collections.emptyList() : all.stream().filter(o -> "RENT_SERVICE".equals(o.getOrderType())).toList();
-            return ApiResponse.<java.util.List<com.cosmate.dto.response.OrderFullResponse>>builder().result(filtered).build();
+            java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse> resp = orderService.listCosplayerServiceOrders(userId, statuses);
+            return ApiResponse.<java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse>>builder().result(resp == null ? java.util.Collections.emptyList() : resp).build();
         } catch (Exception ex) {
-            return ApiResponse.<java.util.List<com.cosmate.dto.response.OrderFullResponse>>builder().code(500).message("Failed to list cosplayer service orders: " + ex.getMessage()).build();
+            return ApiResponse.<java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse>>builder().code(500).message("Failed to list cosplayer service orders: " + ex.getMessage()).build();
         }
     }
 }

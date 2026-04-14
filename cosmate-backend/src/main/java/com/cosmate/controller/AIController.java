@@ -1,10 +1,12 @@
 package com.cosmate.controller;
 
 import com.cosmate.configuration.AiKnowledgeBase;
+import com.cosmate.dto.request.CustomAnswerRequest;
 import com.cosmate.dto.request.PoseScoringRequest;
 import com.cosmate.dto.request.RecommendationRequest;
 import com.cosmate.dto.request.SearchByImageRequest;
 import com.cosmate.dto.response.ApiResponse;
+import com.cosmate.dto.response.CustomAnswerResponse;
 import com.cosmate.dto.response.PoseScoringResponse;
 import com.cosmate.dto.response.SearchResponse;
 import com.cosmate.repository.PoseScoreRepository;
@@ -154,7 +156,15 @@ public class AIController {
                 .build();
     }
 
-    // --- Hàm Helper (Viết thêm xuống dưới cùng của AIController) ---
+    @PostMapping("/analyze-custom-answer")
+    public ApiResponse<CustomAnswerResponse> analyzeCustomAnswer(@RequestBody CustomAnswerRequest request) {
+        return ApiResponse.<CustomAnswerResponse>builder()
+                .result(aiService.analyzeCustomAnswer(request))
+                .message("Phân tích câu trả lời thành công!")
+                .build();
+    }
+
+    // --- Hàm Helper ---
     private Integer getCurrentUserId() {
         org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.getPrincipal().getClass().equals(String.class) || authentication.getPrincipal().equals("anonymousUser")) {

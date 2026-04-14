@@ -46,9 +46,14 @@ public interface AIService {
     List<SearchResponse> fallbackSearch(String keyword);
 
     // Lấy lịch sử chấm điểm Pose
-    List<PoseScore> getPoseHistoryByUserId(Integer userId);
-
     List<PoseScore> getMyPoseHistory(Integer userId, String keyword);
+
+    // Thêm tên nhân vật cosplay Pose
     PoseScore updatePoseCharacterName(Integer scoreId, Integer userId, String newName);
+
+    // Xóa lịch sử chấm điểm
     void deletePoseScore(Integer scoreId, Integer userId);
+
+    // Phân tích câu trả lời tự nhập của người dùng (Style Quiz)
+    com.cosmate.dto.response.CustomAnswerResponse analyzeCustomAnswer(com.cosmate.dto.request.CustomAnswerRequest request);
 }

@@ -1,9 +1,11 @@
 package com.cosmate.service.impl;
 
 import com.cosmate.configuration.AiKnowledgeBase;
+import com.cosmate.dto.request.CustomAnswerRequest;
 import com.cosmate.dto.request.PoseScoringRequest;
 import com.cosmate.dto.request.RecommendationRequest;
 import com.cosmate.dto.request.SearchByImageRequest;
+import com.cosmate.dto.response.CustomAnswerResponse;
 import com.cosmate.dto.response.PoseScoringResponse;
 import com.cosmate.dto.response.SearchResponse;
 import com.cosmate.entity.Costume;
@@ -52,9 +54,8 @@ public class AIServiceImpl implements AIService {
     private String apiKey;
 
     // Các hằng số cho Model AI của Google
-    private static final String EMBEDDING_MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent";
-    private static final String GENERATION_MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
-
+    private static final String EMBEDDING_MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent";
+    private static final String GENERATION_MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent";
     /**
      * Tìm kiếm các trang phục có độ tương đồng cao bằng thuật toán Cosine Similarity.
      */
@@ -423,7 +424,7 @@ public class AIServiceImpl implements AIService {
 
     private List<Double> callGeminiGetVector(String text) {
         try {
-            // [SỰ THẬT CHÂN LÝ] Gọi đúng tên con AI mới nhất của Google: gemini-embedding-001
+            // Gọi đúng tên con AI mới nhất của Google: gemini-embedding-001
             String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=" + apiKey;
 
             // Xây dựng JSON Body đơn giản, không màu mè
@@ -614,7 +615,7 @@ public class AIServiceImpl implements AIService {
             return "Không thể generate được description, vui lòng tả thủ công.";
         } catch (Exception e) {
             log.error("Lỗi khi AI generate description: {}", e.getMessage());
-            return "Lỗi khi generate description: " + e.getMessage();
+            throw new RuntimeException("Hệ thống AI của Google đang quá tải (503). Bạn vui lòng đợi vài phút rồi thử bấm lại nha!");
         }
     }
 
@@ -743,14 +744,6 @@ public class AIServiceImpl implements AIService {
     }
 
     @Override
-    public List<PoseScore> getPoseHistoryByUserId(Integer userId) {
-        if (userId == null) {
-            return Collections.emptyList();
-        }
-        return poseScoreRepository.findByCosplayerIdOrderByCreatedAtDesc(userId);
-    }
-
-    @Override
     public List<PoseScore> getMyPoseHistory(Integer userId, String keyword) {
         if (userId == null) return Collections.emptyList();
 
@@ -784,5 +777,65 @@ public class AIServiceImpl implements AIService {
         }
 
         poseScoreRepository.delete(score);
+    }
+
+    @Override
+    public CustomAnswerResponse analyzeCustomAnswer(CustomAnswerRequest request) {
+        try {
+            String url = GENERATION_MODEL_URL + "?key=" + apiKey;
+
+            String promptText = "Bạn là một chuyên gia tâm lý học phân tích hành vi của giới Cosplay.\n"
+                    + "Câu hỏi trắc nghiệm hiện tại là: '" + request.getQuestionContext() + "'.\n"
+                    + "Người dùng đã từ chối các đáp án có sẵn và nhập câu trả lời riêng của họ là: '" + request.getUserAnswer() + "'.\n"
+                    + "Hãy thực hiện 2 nhiệm vụ:\n"
+                    + "1. Kiểm tra tính hợp lệ: Câu trả lời này có ý nghĩa và trả lời đúng trọng tâm câu hỏi không? Nếu người dùng nhập linh tinh, chửi thề, hoặc không liên quan (ví dụ: đồ ăn, thời tiết), đánh giá là KHÔNG HỢP LỆ.\n"
+                    + "2. Nếu HỢP LỆ, hãy phân tích tâm lý của câu trả lời này dựa trên 3 hệ trục E, A, O và cho điểm từ -2 đến +2 cho mỗi trục.\n"
+                    + "BẮT BUỘC chỉ trả về định dạng JSON sau, không kèm giải thích hay định dạng markdown:\n"
+                    + "{\"isValid\": true, \"reason\": \"Lý do ngắn gọn\", \"scores\": {\"E\": 0, \"A\": 0, \"O\": 0}}";
+
+            Map<String, Object> textPart = Map.of("text", promptText);
+            Map<String, Object> content = Map.of("parts", List.of(textPart));
+            Map<String, Object> body = Map.of("contents", List.of(content));
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+
+            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
+
+            if (response != null && response.has("candidates")) {
+                String resultJson = response.path("candidates").get(0)
+                        .path("content").path("parts").get(0)
+                        .path("text").asText().trim();
+
+                // Gọt bỏ markdown rác nếu AI trả về lỗi định dạng
+                if (resultJson.startsWith("```json")) {
+                    resultJson = resultJson.substring(7, resultJson.length() - 3).trim();
+                } else if (resultJson.startsWith("```")) {
+                    resultJson = resultJson.substring(3, resultJson.length() - 3).trim();
+                }
+
+                JsonNode resultNode = objectMapper.readTree(resultJson);
+
+                boolean isValid = resultNode.path("isValid").asBoolean();
+                String reason = resultNode.path("reason").asText();
+
+                Map<String, Integer> scores = null;
+                if (isValid && resultNode.has("scores")) {
+                    scores = objectMapper.convertValue(resultNode.path("scores"), new TypeReference<Map<String, Integer>>() {});
+                }
+
+                return CustomAnswerResponse.builder()
+                        .isValid(isValid)
+                        .reason(reason)
+                        .scores(scores)
+                        .build();
+            }
+            throw new RuntimeException("AI không trả về kết quả hợp lệ.");
+
+        } catch (Exception e) {
+            log.error("Lỗi khi phân tích câu trả lời Custom: {}", e.getMessage(), e);
+            throw new RuntimeException("Lỗi phân tích AI: " + e.getMessage());
+        }
     }
 }

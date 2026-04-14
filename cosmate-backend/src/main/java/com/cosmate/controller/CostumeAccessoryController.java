@@ -28,6 +28,12 @@ public class CostumeAccessoryController {
                 .result(accessoryService.create(costumeId, request)).message("Thêm phụ kiện thành công").build();
     }
 
+    @PutMapping("/{id}")
+    public ApiResponse<CostumeResponse.AccessoryResponse> update(@PathVariable Integer id, @RequestBody AccessoryRequest request) {
+        return ApiResponse.<CostumeResponse.AccessoryResponse>builder()
+                .result(accessoryService.update(id, request)).message("Cập nhật phụ kiện thành công").build();
+    }
+
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable Integer id) {
         accessoryService.delete(id);

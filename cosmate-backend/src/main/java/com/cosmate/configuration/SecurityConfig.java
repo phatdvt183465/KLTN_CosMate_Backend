@@ -55,11 +55,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // public business api
                         .requestMatchers("/api/events/**").permitAll()
-                        .requestMatchers("/api/costumes/**").permitAll()
-                        .requestMatchers("/api/surcharges/**").permitAll()
-                        .requestMatchers("/api/images/**").permitAll()
-                        .requestMatchers("/api/accessories/**").permitAll()
-                        .requestMatchers("/api/rental-options/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/costumes/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/surcharges/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/images/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/accessories/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/rental-options/**").permitAll()
                         .requestMatchers("/api/services/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         // Auth endpoints

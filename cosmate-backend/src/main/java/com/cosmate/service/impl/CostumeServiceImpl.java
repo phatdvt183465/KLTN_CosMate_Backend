@@ -3,6 +3,8 @@ package com.cosmate.service.impl;
 import com.cosmate.dto.request.CostumeRequest;
 import com.cosmate.dto.response.CostumeResponse;
 import com.cosmate.entity.*;
+import com.cosmate.exception.AppException;
+import com.cosmate.exception.ErrorCode;
 import com.cosmate.repository.CostumeRepository;
 import com.cosmate.repository.ProviderRepository;
 import com.cosmate.service.AIService;
@@ -11,6 +13,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -32,7 +36,7 @@ public class CostumeServiceImpl implements CostumeService {
     private final ProviderRepository providerRepository;
     private final ObjectMapper objectMapper;
     private final AIService aiService;
-    private final com.cosmate.service.FirebaseStorageService firebaseStorageService;
+    private final FirebaseStorageServiceImpl firebaseStorageService;
 
     @Override
     public List<CostumeResponse> getByProviderId(Integer providerId) {
@@ -43,8 +47,11 @@ public class CostumeServiceImpl implements CostumeService {
 
     @Override
     @Transactional
-    public CostumeResponse createCostume(CostumeRequest request) {
-        validateCreateRequest(request);
+    public CostumeResponse createCostume(Integer currentUserId, CostumeRequest request) {
+        if (currentUserId == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+        validateCreateRequest(currentUserId, request);
 
         Costume costume = new Costume();
         mapBaseInfo(costume, request);
@@ -66,16 +73,19 @@ public class CostumeServiceImpl implements CostumeService {
 
     @Override
     @Transactional
-    public CostumeResponse updateCostume(Integer id, CostumeRequest request) {
-        Costume costume = costumeRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Error: Costume ID " + id + " not found."));
+    public CostumeResponse updateCostume(Integer currentUserId, Integer id, CostumeRequest request) {
+        if (currentUserId == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
 
-        // 1. Cập nhật Provider nếu hợp lệ
-        if (request.getProviderId() != null) {
-            if (!providerRepository.existsById(request.getProviderId())) {
-                throw new RuntimeException("Error: Provider ID " + request.getProviderId() + " does not exist.");
-            }
-            costume.setProviderId(request.getProviderId());
+        Costume costume = costumeRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.COSTUME_NOT_FOUND));
+
+        ensureCurrentUserOwnsCostume(currentUserId, costume);
+
+        // 1. Không cho phép đổi quyền sở hữu costume qua API update
+        if (request.getProviderId() != null && !request.getProviderId().equals(costume.getProviderId())) {
+            throw new AppException(ErrorCode.FORBIDDEN);
         }
 
         // 2. Cập nhật thông tin cơ bản (Partial Update)
@@ -112,9 +122,14 @@ public class CostumeServiceImpl implements CostumeService {
 
     @Override
     @Transactional
-    public void deleteCostume(Integer id) {
+    public void deleteCostume(Integer currentUserId, Integer id) {
+        if (currentUserId == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
         Costume costume = costumeRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Error: Costume not found."));
+                .orElseThrow(() -> new AppException(ErrorCode.COSTUME_NOT_FOUND));
+        ensureCurrentUserOwnsCostume(currentUserId, costume);
+
         costume.setStatus("DELETED");
         costumeRepository.save(costume);
     }
@@ -129,22 +144,31 @@ public class CostumeServiceImpl implements CostumeService {
 
     @Override
     public CostumeResponse getById(Integer id) {
-        return mapToResponse(costumeRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Error: Costume not found.")));
+        Costume costume = costumeRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Error: Costume not found."));
+        if ("DELETED".equalsIgnoreCase(costume.getStatus())) {
+            throw new AppException(ErrorCode.COSTUME_NOT_FOUND);
+        }
+        return mapToResponse(costume);
     }
 
     @Override
     @Transactional
-    public void changeStatus(Integer id, String newStatus) {
+    public void changeStatus(Integer currentUserId, Integer id, String newStatus) {
+        if (currentUserId == null) {
+            throw new RuntimeException("Unauthorized");
+        }
         Costume costume = costumeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Error: Costume ID " + id + " not found."));
 
+        ensureCurrentUserOwnsCostume(currentUserId, costume);
+
         List<String> validStatuses = Arrays.asList("AVAILABLE", "DISABLED", "MAINTENANCE");
         if (!validStatuses.contains(newStatus)) {
-            throw new RuntimeException("Invalid status. Allowed: " + validStatuses);
+            throw new AppException(ErrorCode.INVALID_COSTUME_STATUS);
         }
         if ("DELETED".equals(costume.getStatus())) {
-            throw new RuntimeException("Cannot change status of a deleted costume.");
+            throw new AppException(ErrorCode.COSTUME_DELETED);
         }
 
         costume.setStatus(newStatus);
@@ -173,17 +197,17 @@ public class CostumeServiceImpl implements CostumeService {
 
         if (request.getPricePerDay() != null) {
             if (request.getPricePerDay().compareTo(BigDecimal.ZERO) <= 0)
-                throw new RuntimeException("Price must be > 0");
+                throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
             costume.setPricePerDay(request.getPricePerDay());
         }
         if (request.getDepositAmount() != null) {
             if (request.getDepositAmount().compareTo(BigDecimal.ZERO) < 0)
-                throw new RuntimeException("Deposit cannot be negative");
+                throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
             costume.setDepositAmount(request.getDepositAmount());
         }
         if (request.getRentDiscount() != null) {
             if (request.getRentDiscount() < 0 || request.getRentDiscount() > 100)
-                throw new RuntimeException("rentDiscount must be between 0 and 100");
+                throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
             costume.setRentDiscount(request.getRentDiscount());
         }
     }
@@ -269,7 +293,7 @@ public class CostumeServiceImpl implements CostumeService {
                 costume.getSurcharges().add(s);
             }
         } catch (IOException e) {
-            throw new RuntimeException("Invalid Surcharge JSON format.");
+            throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
         }
     }
 
@@ -288,7 +312,7 @@ public class CostumeServiceImpl implements CostumeService {
                 costume.getAccessories().add(acc);
             }
         } catch (IOException e) {
-            throw new RuntimeException("Invalid Accessories JSON format.");
+            throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
         }
     }
 
@@ -306,7 +330,7 @@ public class CostumeServiceImpl implements CostumeService {
                 costume.getRentalOptions().add(opt);
             }
         } catch (IOException e) {
-            throw new RuntimeException("Invalid Rental Options JSON format.");
+            throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
         }
     }
 
@@ -339,17 +363,20 @@ public class CostumeServiceImpl implements CostumeService {
                 .build();
     }
 
-    private void validateCreateRequest(CostumeRequest request) {
+    private void validateCreateRequest(Integer currentUserId, CostumeRequest request) {
         if (request.getProviderId() == null || !providerRepository.existsById(request.getProviderId())) {
-            throw new RuntimeException("Valid Provider ID is required.");
+            throw new AppException(ErrorCode.PROVIDER_NOT_FOUND);
         }
-        if (!isValidString(request.getName())) throw new RuntimeException("Costume name is required.");
+
+        ensureCurrentUserOwnsProvider(currentUserId, request.getProviderId());
+
+        if (!isValidString(request.getName())) throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
         if (request.getPricePerDay() == null || request.getPricePerDay().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("Price must be greater than 0.");
+            throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
         }
         boolean hasImage = request.getImageFiles() != null &&
                 request.getImageFiles().stream().anyMatch(f -> f != null && !f.isEmpty());
-        if (!hasImage) throw new RuntimeException("At least one valid image is required.");
+        if (!hasImage) throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
         if (request.getRentDiscount() != null) {
             if (request.getRentDiscount() < 0 || request.getRentDiscount() > 100)
                 throw new RuntimeException("rentDiscount must be between 0 and 100");
@@ -358,6 +385,56 @@ public class CostumeServiceImpl implements CostumeService {
 
     private boolean isValidString(String input) {
         return input != null && !input.trim().isEmpty();
+    }
+
+    private Integer getCurrentUserIdFromContext() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getPrincipal() == null) return null;
+        Object principal = auth.getPrincipal();
+        try {
+            if (principal instanceof String) {
+                String s = (String) principal;
+                if (s.equalsIgnoreCase("anonymousUser")) return null;
+                return Integer.valueOf(s);
+            }
+            if (principal instanceof Integer) return (Integer) principal;
+            if (principal instanceof Long) return ((Long) principal).intValue();
+            return Integer.valueOf(principal.toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private boolean isPrivileged() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) return false;
+        return auth.getAuthorities().stream().anyMatch(a ->
+                "ROLE_ADMIN".equals(a.getAuthority())
+                        || "ROLE_STAFF".equals(a.getAuthority())
+                        || "ROLE_SUPERADMIN".equals(a.getAuthority()));
+    }
+
+    private void ensureCurrentUserOwnsProvider(Integer currentUserId, Integer providerId) {
+        if (isPrivileged()) return;
+        if (currentUserId == null) {
+            throw new RuntimeException("Unauthorized");
+        }
+        Provider provider = providerRepository.findById(providerId)
+                .orElseThrow(() -> new RuntimeException("Provider not found"));
+        if (!currentUserId.equals(provider.getUserId())) {
+            throw new AppException(ErrorCode.FORBIDDEN);
+        }
+    }
+
+    private void ensureCurrentUserOwnsCostume(Integer currentUserId, Costume costume) {
+        if (isPrivileged()) return;
+        if (currentUserId == null) {
+            currentUserId = getCurrentUserIdFromContext();
+        }
+        if (currentUserId == null) {
+            throw new RuntimeException("Unauthorized");
+        }
+        ensureCurrentUserOwnsProvider(currentUserId, costume.getProviderId());
     }
 
     // --- API SEARCH CHỦ ĐỘNG ---

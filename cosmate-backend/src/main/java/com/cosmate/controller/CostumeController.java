@@ -6,7 +6,8 @@ import com.cosmate.dto.response.CostumeResponse;
 import com.cosmate.service.CostumeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,6 +18,24 @@ import java.util.List;
 public class CostumeController {
 
     private final CostumeService costumeService;
+
+    private Integer getCurrentUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getPrincipal() == null) return null;
+        Object principal = auth.getPrincipal();
+        try {
+            if (principal instanceof String) {
+                String s = (String) principal;
+                if (s.equalsIgnoreCase("anonymousUser")) return null;
+                return Integer.valueOf(s);
+            }
+            if (principal instanceof Integer) return (Integer) principal;
+            if (principal instanceof Long) return ((Long) principal).intValue();
+            return Integer.valueOf(principal.toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
     @GetMapping("/provider/{providerId}")
     public ApiResponse<List<CostumeResponse>> getByProviderId(@PathVariable Integer providerId) {
@@ -43,7 +62,7 @@ public class CostumeController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<CostumeResponse> create(@ModelAttribute CostumeRequest request) {
         return ApiResponse.<CostumeResponse>builder()
-                .result(costumeService.createCostume(request))
+                .result(costumeService.createCostume(getCurrentUserId(), request))
                 .message("Tạo mới thành công!")
                 .build();
     }
@@ -51,7 +70,7 @@ public class CostumeController {
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<CostumeResponse> update(@PathVariable Integer id, @ModelAttribute CostumeRequest request) {
         return ApiResponse.<CostumeResponse>builder()
-                .result(costumeService.updateCostume(id, request))
+                .result(costumeService.updateCostume(getCurrentUserId(), id, request))
                 .message("Cập nhật xong!")
                 .build();
     }
@@ -63,7 +82,7 @@ public class CostumeController {
             @PathVariable Integer id,
             @RequestParam String status) { // Truyền status muốn đổi vào đây
 
-        costumeService.changeStatus(id, status);
+        costumeService.changeStatus(getCurrentUserId(), id, status);
         return ApiResponse.<Void>builder()
                 .message("Đã đổi trạng thái thành " + status + " thành công!")
                 .build();
@@ -72,7 +91,7 @@ public class CostumeController {
     // Thêm vào CostumeController.java
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable Integer id) {
-        costumeService.deleteCostume(id);
+        costumeService.deleteCostume(getCurrentUserId(), id);
         return ApiResponse.<Void>builder()
                 .message("Xóa bộ đồ thành công!")
                 .build();

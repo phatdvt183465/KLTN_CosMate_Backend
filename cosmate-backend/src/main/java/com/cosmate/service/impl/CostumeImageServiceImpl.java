@@ -58,15 +58,7 @@ public class CostumeImageServiceImpl implements CostumeImageService {
         // 1. Kiểm duyệt nội dung 18+ (Gom lô)
         aiService.validateMultipleImageContents(files);
 
-        // 2. Cập nhật lại vector nhúng (embedding) của bộ đồ khi có ảnh mới
-        String hiddenTags = aiService.extractFeaturesFromMultipleImages(files);
-        String textForVector = costume.getName() + " " + costume.getDescription() + " " + hiddenTags;
-        String costumeVector = aiService.generateVectorForText(textForVector);
-
-        costume.setCostumeVector(costumeVector);
-        costumeRepository.save(costume); // Save lại Costume để cập nhật Vector mới vào DB
-
-        // 3. Xử lý đa luồng tải ảnh lên Firebase
+        // 2. Xử lý đa luồng tải ảnh lên Firebase
         ExecutorService executor = Executors.newFixedThreadPool(Math.min(files.size(), 10));
         List<CompletableFuture<CostumeImage>> futures = new ArrayList<>();
 
@@ -95,7 +87,7 @@ public class CostumeImageServiceImpl implements CostumeImageService {
             futures.add(future);
         }
 
-        // 4. Lưu toàn bộ kết quả xuống Database
+        // 3. Lưu toàn bộ kết quả xuống Database
         List<CostumeImage> savedImages = new ArrayList<>();
         try {
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
@@ -110,6 +102,10 @@ public class CostumeImageServiceImpl implements CostumeImageService {
         } finally {
             executor.shutdown();
         }
+
+        // 4. [QUAN TRỌNG] GỌI AI CHẠY NGẦM CẬP NHẬT LẠI DUAL-VECTOR
+        // Chỉ kích hoạt luồng AI ngầm sau khi ảnh đã được lưu vào DB thành công
+        aiService.generateAndSaveVector(costumeId, false, true);
 
         // 5. Build danh sách DTO trả về cho Client
         return savedImages.stream()
@@ -129,11 +125,16 @@ public class CostumeImageServiceImpl implements CostumeImageService {
         CostumeImage image = imageRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Error: Image not found to delete."));
         ensureCurrentUserOwnsCostume(image.getCostume());
-        imageRepository.deleteById(id);
 
+        Integer costumeId = image.getCostume().getId(); // Lưu ID lại trước khi xóa
+
+        imageRepository.deleteById(id);
         if (image.getImageUrl() != null && !image.getImageUrl().isBlank()) {
             firebaseStorageService.deleteByUrl(image.getImageUrl());
         }
+
+        // [QUAN TRỌNG] GỌI AI CHẠY NGẦM CẬP NHẬT LẠI VECTOR
+        aiService.generateAndSaveVector(costumeId, false, true);
     }
 
     private Integer getCurrentUserIdFromContext() {

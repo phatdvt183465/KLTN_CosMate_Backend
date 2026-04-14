@@ -70,7 +70,13 @@ public class CostumeServiceImpl implements CostumeService {
         handleAccessories(costume, request.getAccessories());
         handleRentalOptions(costume, request.getRentalOptions());
 
-        return mapToResponse(costumeRepository.save(costume));
+        // Lưu bộ đồ để lấy ID và URL ảnh chính thức
+        Costume savedCostume = costumeRepository.save(costume);
+
+        // GỌI CHẠY NGẦM TẠI ĐÂY
+        aiService.generateAndSaveVector(savedCostume.getId(), true, true);
+
+        return mapToResponse(savedCostume);
     }
 
     @Override
@@ -84,6 +90,21 @@ public class CostumeServiceImpl implements CostumeService {
                 .orElseThrow(() -> new AppException(ErrorCode.COSTUME_NOT_FOUND));
 
         ensureCurrentUserOwnsCostume(currentUserId, costume);
+
+        // --- ĐẶT LÍNH GÁC: Kiểm tra xem Tên và Mô tả có bị đổi không? ---
+        boolean isTextChanged = false;
+        String oldName = costume.getName() != null ? costume.getName() : "";
+        String newName = request.getName() != null ? request.getName() : "";
+        String oldDesc = costume.getDescription() != null ? costume.getDescription() : "";
+        String newDesc = request.getDescription() != null ? request.getDescription() : "";
+
+        if (!oldName.equals(newName) || !oldDesc.equals(newDesc)) {
+            isTextChanged = true;
+        }
+
+        // Kiểm tra xem có up file ảnh mới nào không?
+        boolean isImageChanged = request.getImageFiles() != null &&
+                request.getImageFiles().stream().anyMatch(f -> f != null && !f.isEmpty());
 
         // 1. Không cho phép đổi quyền sở hữu costume qua API update
         if (request.getProviderId() != null && !request.getProviderId().equals(costume.getProviderId())) {
@@ -119,7 +140,12 @@ public class CostumeServiceImpl implements CostumeService {
             handleRentalOptions(costume, request.getRentalOptions());
         }
 
-        return mapToResponse(costumeRepository.save(costume));
+        // LƯU DB XONG THÌ GỌI AI CHẠY NGẦM ĐỂ CẬP NHẬT LẠI DUAL-VECTOR (Vì Tên, Mô tả hoặc Ảnh có thể đã đổi)
+        if (isTextChanged || isImageChanged) {
+            aiService.generateAndSaveVector(costume.getId(), isTextChanged, isImageChanged);
+        }
+
+        return mapToResponse(costume); // Thay cho costumeRepository.save(costume) nếu không cần thiết
     }
 
     @Override
@@ -246,18 +272,10 @@ public class CostumeServiceImpl implements CostumeService {
     private void handleImages(Costume costume, List<MultipartFile> files) {
         if (files == null || files.isEmpty()) return;
 
-        // [TỐI ƯU 1] Kiểm duyệt 18+ toàn bộ ảnh trong 1 lần gọi AI
+        // Giữ lại kiểm duyệt nội dung ảnh
         aiService.validateMultipleImageContents(files);
 
-        // [TỐI ƯU 2] Sinh Tag ngầm và Tạo vector cho toàn bộ Costume
-        String hiddenTags = aiService.extractFeaturesFromMultipleImages(files);
-        String textForVector = costume.getName() + " " + costume.getDescription() + " " + hiddenTags;
-        log.info("Chuỗi tổng hợp tạo vector: {}", textForVector);
-
-        String costumeVector = aiService.generateVectorForText(textForVector);
-        costume.setCostumeVector(costumeVector); // LƯU VECTOR VÀO COSTUME
-
-        // [TỐI ƯU 3] Upload ảnh lên Firebase đồng thời bằng ThreadPool
+        // Chỉ upload ảnh, không tạo vector lúc create/update để tránh timeout
         ExecutorService executor = Executors.newFixedThreadPool(Math.min(files.size(), 10));
         List<CompletableFuture<CostumeImage>> futures = new ArrayList<>();
         int index = 0;
@@ -281,8 +299,6 @@ public class CostumeServiceImpl implements CostumeService {
                     img.setImageUrl(imageUrl);
                     img.setType(isMainImage ? "MAIN" : "DETAIL");
                     img.setCostume(costume);
-                    // ĐÃ XÓA DÒNG img.setImageVector(costumeVector); ĐỂ TRÁNH LỖI
-
                     return img;
                 } catch (Exception e) {
                     throw new RuntimeException("Lỗi upload ảnh lên Cloud: " + e.getMessage(), e);

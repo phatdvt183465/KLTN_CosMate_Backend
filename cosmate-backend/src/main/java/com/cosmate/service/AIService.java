@@ -17,7 +17,8 @@ public interface AIService {
     List<SearchResponse> recommendCosplay(RecommendationRequest request);
 
     // --- XỬ LÝ VECTOR (TỐI ƯU API) ---
-    void generateAndSaveVector(Integer costumeImageId);
+    // Nâng cấp: Cho phép chọn cập nhật Text hay Image hay cả 2
+    void generateAndSaveVector(Integer costumeId, boolean updateText, boolean updateImage);
 
     /**
      * Tạo vector đại diện từ văn bản (Tên + Mô tả trang phục).
@@ -38,7 +39,7 @@ public interface AIService {
     void generateVectorsForMissingImages();
 
     // Tiện ích: AI tự động viết mô tả chi tiết cho trang phục dựa trên Tên và Ảnh
-    String generateCostumeDescription(String costumeName, List<MultipartFile> files);
+    String generateCostumeDescription(String costumeName, String customPrompt, List<MultipartFile> files);
 
     String extractFeaturesFromMultipleImages(List<MultipartFile> files);
 

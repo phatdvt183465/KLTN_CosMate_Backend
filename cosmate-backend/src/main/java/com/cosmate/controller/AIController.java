@@ -91,9 +91,10 @@ public class AIController {
     @PostMapping(value = "/generate-description", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<String> generateDescription(
             @RequestParam(value = "name", required = false) String name,
+            @RequestParam(value = "customPrompt", required = false) String customPrompt,
             @RequestParam("files") List<MultipartFile> files) {
 
-        String description = aiService.generateCostumeDescription(name, files);
+        String description = aiService.generateCostumeDescription(name, customPrompt, files);
         return ApiResponse.<String>builder()
                 .message("Tạo mô tả thành công!")
                 .result(description)

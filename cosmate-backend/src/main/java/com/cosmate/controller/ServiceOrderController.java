@@ -182,4 +182,29 @@ public class ServiceOrderController {
             return ApiResponse.<java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse>>builder().code(500).message("Failed to list provider service orders: " + ex.getMessage()).build();
         }
     }
+
+    // List service orders (RENT_SERVICE) by cosplayer id. Accessible by the cosplayer themself or admin/staff.
+    @GetMapping("/cosplayer/{userId}")
+    public ApiResponse<java.util.List<com.cosmate.dto.response.OrderFullResponse>> listServiceOrdersByCosplayerId(@PathVariable Integer userId) {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            Integer currentUserId = getCurrentUserId();
+            boolean allowed = false;
+            if (currentUserId != null && currentUserId.equals(userId)) allowed = true;
+            else if (auth != null && auth.isAuthenticated()) {
+                allowed = auth.getAuthorities().stream().anyMatch(a -> {
+                    String at = a.getAuthority();
+                    return "ROLE_ADMIN".equals(at) || "ROLE_STAFF".equals(at) || "ROLE_SUPERADMIN".equals(at)
+                            || "ADMIN".equals(at) || "STAFF".equals(at) || "SUPERADMIN".equals(at);
+                });
+            }
+            if (!allowed) return ApiResponse.<java.util.List<com.cosmate.dto.response.OrderFullResponse>>builder().code(403).message("Không có quyền truy cập danh sách đơn").build();
+
+            java.util.List<com.cosmate.dto.response.OrderFullResponse> all = orderService.listOrdersByUserId(userId);
+            java.util.List<com.cosmate.dto.response.OrderFullResponse> filtered = all == null ? java.util.Collections.emptyList() : all.stream().filter(o -> "RENT_SERVICE".equals(o.getOrderType())).toList();
+            return ApiResponse.<java.util.List<com.cosmate.dto.response.OrderFullResponse>>builder().result(filtered).build();
+        } catch (Exception ex) {
+            return ApiResponse.<java.util.List<com.cosmate.dto.response.OrderFullResponse>>builder().code(500).message("Failed to list cosplayer service orders: " + ex.getMessage()).build();
+        }
+    }
 }

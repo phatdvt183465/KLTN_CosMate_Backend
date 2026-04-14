@@ -20,6 +20,8 @@ public interface OrderService {
     OrderResponse providerCompleteService(Integer providerUserId, Integer orderId) throws Exception;
     OrderResponse cancelOrder(Integer userId, Integer orderId) throws Exception;
     java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse> listProviderServiceOrders(Integer providerUserId, String statuses) throws Exception;
+    // List service orders (RENT_SERVICE) belonging to a cosplayer, optional filter by comma-separated statuses
+    java.util.List<com.cosmate.dto.response.ServiceOrderItemResponse> listCosplayerServiceOrders(Integer cosplayerUserId, String statuses) throws Exception;
     // Full order operations moved from controller
     com.cosmate.dto.response.OrderFullResponse getFullOrderById(Integer id) throws Exception;
     java.util.List<com.cosmate.dto.response.OrderFullResponse> listAllOrders() throws Exception;

@@ -34,10 +34,11 @@ public class OrderTrackingServiceImpl implements OrderTrackingService {
     }
 
     @Override
-    public OrderTrackingResponse updateTrackingCode(Integer id, String trackingCode) {
+    public OrderTrackingResponse updateTrackingCode(Integer id, String trackingCode, String shippingCarrierName) {
         OrderTracking t = orderTrackingRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Tracking entry not found"));
         if (trackingCode == null || trackingCode.isBlank()) throw new IllegalArgumentException("trackingCode is required");
         t.setTrackingCode(trackingCode);
+        t.setShippingCarrierName(shippingCarrierName);
         OrderTracking saved = orderTrackingRepository.save(t);
         return toResponse(saved);
     }
@@ -49,6 +50,7 @@ public class OrderTrackingServiceImpl implements OrderTrackingService {
                 .trackingCode(t.getTrackingCode())
                 .trackingStatus(t.getTrackingStatus())
                 .stage(t.getStage())
+                .shippingCarrierName(t.getShippingCarrierName())
                 .createdAt(t.getCreatedAt())
                 .build();
     }

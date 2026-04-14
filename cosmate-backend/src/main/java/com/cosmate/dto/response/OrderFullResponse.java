@@ -7,6 +7,7 @@ import com.cosmate.entity.OrderDetailAccessory;
 import com.cosmate.entity.OrderRentalOption;
 import com.cosmate.entity.OrderImage;
 import com.cosmate.entity.OrderTracking;
+import com.cosmate.entity.OrderDetailExtend;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -33,5 +34,7 @@ public class OrderFullResponse {
     // New: include images and trackings related to this order
     private List<OrderImage> images;
     private List<OrderTracking> trackings;
+    // Extensions requested/paid for order details
+    private List<OrderDetailExtend> detailExtends;
     private java.util.List<com.cosmate.dto.response.TransactionResponse> transactions;
 }

@@ -75,10 +75,12 @@ public class SecurityConfig {
                                 "/swagger-resources/**",
                                 "/webjars/**",
                                 "/configuration/**",
-                                "/payment/**"
+                                "/api/payment/**"
                         ).permitAll()
                         // Allow public GET access to providers list and details
                         .requestMatchers(HttpMethod.GET, "/api/providers/**").permitAll()
+                        // Allow public GET access to costume reviews
+                        .requestMatchers(HttpMethod.GET, "/api/reviews/costume/**").permitAll()
                         // Allow public GET access to subscription plans
                         .requestMatchers(HttpMethod.GET, "/api/subscription-plans/**").permitAll()
                         // OPTIONS preflight

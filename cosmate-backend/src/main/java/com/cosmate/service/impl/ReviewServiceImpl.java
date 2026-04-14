@@ -28,6 +28,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final ReviewUrlRepository reviewUrlRepository;
     private final OrderRepository orderRepository;
     private final FirebaseStorageService firebaseStorageService;
+    private final com.cosmate.service.ProviderService providerService;
 
     @Override
     @Transactional
@@ -62,6 +63,14 @@ public class ReviewServiceImpl implements ReviewService {
                 .comment(request.getComment())
                 .build();
         r = reviewRepository.save(r);
+
+        // update provider totals (average rating and review count)
+        try {
+            if (order.getProviderId() != null) {
+                providerService.addReviewRating(order.getProviderId(), rating);
+            }
+        } catch (Exception ignored) {
+        }
 
         List<ReviewUrlResponse> images = new ArrayList<>();
         if (files != null && !files.isEmpty()) {
@@ -104,6 +113,18 @@ public class ReviewServiceImpl implements ReviewService {
     @Override
     public List<ReviewResponse> getByProviderId(Integer providerId) {
         List<Review> reviews = reviewRepository.findByOrderProviderId(providerId);
+        List<ReviewResponse> out = new ArrayList<>();
+        if (reviews == null || reviews.isEmpty()) return out;
+        for (Review r : reviews) {
+            ReviewResponse resp = mapToDto(r);
+            out.add(resp);
+        }
+        return out;
+    }
+
+    @Override
+    public List<ReviewResponse> getByCostumeId(Integer costumeId) {
+        List<Review> reviews = reviewRepository.findByCostumeId(costumeId);
         List<ReviewResponse> out = new ArrayList<>();
         if (reviews == null || reviews.isEmpty()) return out;
         for (Review r : reviews) {

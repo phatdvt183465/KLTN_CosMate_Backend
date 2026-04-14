@@ -23,6 +23,7 @@ public class CostumeResponse {
     private Integer rentDiscount;
     private String status;
     private Integer providerId;
+    private Integer completedRentCount;
     private List<String> imageUrls;
     private List<SurchargeResponse> surcharges;
     private List<AccessoryResponse> accessories;

@@ -44,6 +44,7 @@ public class OrderServiceImpl implements OrderService {
     private final VnPayService vnPayService;
     private final MomoService momoService;
     private final com.cosmate.service.NotificationService notificationService;
+    private final com.cosmate.repository.WishlistRepository wishlistRepository;
     private final AddressRepository addressRepository;
     private final OrderAddressRepository orderAddressRepository;
     private final ProviderService providerService;
@@ -667,7 +668,10 @@ public class OrderServiceImpl implements OrderService {
         Order order = opt.get();
 
         boolean isCosplayer = order.getCosplayerId() != null && order.getCosplayerId().equals(userId);
-        com.cosmate.entity.Provider prov = providerService.getByUserId(userId);
+        // providerService.getByUserId throws when the user is not a provider (AppException).
+        // Safely attempt to fetch provider record and treat missing provider as null so cosplayers can cancel.
+        com.cosmate.entity.Provider prov = null;
+        try { prov = providerService.getByUserId(userId); } catch (Exception ignored) { prov = null; }
         boolean isProviderOwner = prov != null && order.getProviderId() != null && order.getProviderId().equals(prov.getId());
         if (!isCosplayer && !isProviderOwner) throw new IllegalArgumentException("No permission to cancel this order");
 
@@ -688,6 +692,39 @@ public class OrderServiceImpl implements OrderService {
 
         order.setStatus("CANCELLED");
         orderRepository.save(order);
+
+        // If this order included costumes, set their status back to AVAILABLE when the order is cancelled
+        try {
+            java.util.List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
+            if (details != null && !details.isEmpty()) {
+                for (OrderDetail d : details) {
+                    if (d == null || d.getCostumeId() == null) continue;
+                    Costume cc = costumeRepository.findById(d.getCostumeId()).orElse(null);
+                    if (cc != null) {
+                        cc.setStatus("AVAILABLE");
+                        costumeRepository.save(cc);
+                        try {
+                            java.util.List<com.cosmate.entity.WishlistCostume> watchers = wishlistRepository.findAllByCostumeId(cc.getId());
+                            if (watchers != null && !watchers.isEmpty()) {
+                                for (com.cosmate.entity.WishlistCostume w : watchers) {
+                                    try {
+                                        com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                                                .user(com.cosmate.entity.User.builder().id(w.getUserId()).build())
+                                                .type("WISHLIST_NOTIFY")
+                                                .header("Bộ đồ bạn quan tâm đã có sẵn")
+                                                .content("Bộ đồ '" + cc.getName() + "' hiện đã có sẵn để thuê.")
+                                                .sendAt(java.time.LocalDateTime.now())
+                                                .isRead(false)
+                                                .build();
+                                        notificationService.create(n);
+                                    } catch (Exception ignored) {}
+                                }
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
         try {
             com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
                     .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
@@ -962,6 +999,18 @@ public class OrderServiceImpl implements OrderService {
         resp.setRentalOptions(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderRentalOptionRepository.findByOrderDetailIdIn(detailIds));
         resp.setImages(detailIds.isEmpty() ? java.util.Collections.emptyList() : orderImageRepository.findByOrderDetailIdIn(detailIds));
         resp.setTrackings(orderTrackingRepository.findByOrderId(o.getId()));
+
+        // include any OrderDetailExtend records related to each order detail
+        java.util.List<com.cosmate.entity.OrderDetailExtend> exts = new java.util.ArrayList<>();
+        if (detailIds != null && !detailIds.isEmpty()) {
+            for (Integer did : detailIds) {
+                try {
+                    java.util.List<com.cosmate.entity.OrderDetailExtend> found = orderDetailExtendRepository.findByOrderDetailId(did);
+                    if (found != null && !found.isEmpty()) exts.addAll(found);
+                } catch (Exception ignored) {}
+            }
+        }
+        resp.setDetailExtends(exts);
         java.util.List<com.cosmate.entity.Transaction> txs = transactionRepository.findByOrder_IdOrderByCreatedAtDesc(o.getId());
         java.util.List<com.cosmate.dto.response.TransactionResponse> txResp = txs.stream().map(t -> com.cosmate.dto.response.TransactionResponse.builder()
                 .id(t.getId())
@@ -1008,7 +1057,7 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public java.util.Map<String,Object> shipOrder(Integer currentUserId, Integer id, String trackingCode, org.springframework.web.multipart.MultipartFile[] images, java.util.List<String> notes, boolean isAdminStaff) throws Exception {
+    public java.util.Map<String,Object> shipOrder(Integer currentUserId, Integer id, String trackingCode, String shippingCarrierName, org.springframework.web.multipart.MultipartFile[] images, java.util.List<String> notes, boolean isAdminStaff) throws Exception {
         Order order = orderRepository.findById(id).orElse(null);
         if (order == null) throw new IllegalArgumentException("Order not found");
         if (!isAdminStaff) {
@@ -1024,6 +1073,7 @@ public class OrderServiceImpl implements OrderService {
                 .trackingCode(trackingCode)
                 .trackingStatus("CREATED")
                 .stage("SHIPPING_OUT")
+                .shippingCarrierName(shippingCarrierName)
                 .build();
         ot = orderTrackingRepository.save(ot);
 
@@ -1235,7 +1285,7 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public java.util.Map<String,Object> startReturn(Integer currentUserId, Integer id, String trackingCode, org.springframework.web.multipart.MultipartFile[] images, java.util.List<String> notes) throws Exception {
+    public java.util.Map<String,Object> startReturn(Integer currentUserId, Integer id, String trackingCode, String shippingCarrierName, org.springframework.web.multipart.MultipartFile[] images, java.util.List<String> notes) throws Exception {
         Order order = orderRepository.findById(id).orElse(null);
         if (order == null) throw new IllegalArgumentException("Order not found");
         if (!currentUserId.equals(order.getCosplayerId())) throw new IllegalArgumentException("Order does not belong to user");
@@ -1248,6 +1298,7 @@ public class OrderServiceImpl implements OrderService {
                 .trackingCode(trackingCode)
                 .trackingStatus("RETURN_CREATED")
                 .stage("SHIPPING_BACK")
+                .shippingCarrierName(shippingCarrierName)
                 .build();
         ot = orderTrackingRepository.save(ot);
 
@@ -1381,8 +1432,40 @@ public class OrderServiceImpl implements OrderService {
                 for (OrderDetail d : details) {
                     if (d.getCostumeId() == null) continue;
                     Costume c = costumeRepository.findById(d.getCostumeId()).orElse(null);
-                    if (c != null) { c.setStatus("AVAILABLE"); costumeRepository.save(c); }
+                    if (c != null) {
+                        // update completed rent count: if null or 0 -> set to 1, otherwise increment
+                        Integer crc = c.getCompletedRentCount();
+                        if (crc == null || crc == 0) c.setCompletedRentCount(1);
+                        else c.setCompletedRentCount(crc + 1);
+                        c.setStatus("AVAILABLE");
+                        costumeRepository.save(c);
+                        try {
+                            java.util.List<com.cosmate.entity.WishlistCostume> watchers = wishlistRepository.findAllByCostumeId(c.getId());
+                            if (watchers != null && !watchers.isEmpty()) {
+                                for (com.cosmate.entity.WishlistCostume w : watchers) {
+                                    try {
+                                        com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                                                .user(com.cosmate.entity.User.builder().id(w.getUserId()).build())
+                                                .type("WISHLIST_NOTIFY")
+                                                .header("Bộ đồ bạn quan tâm đã có sẵn")
+                                                .content("Bộ đồ '" + c.getName() + "' hiện đã có sẵn để thuê.")
+                                                .sendAt(java.time.LocalDateTime.now())
+                                                .isRead(false)
+                                                .build();
+                                        notificationService.create(n);
+                                    } catch (Exception ignored) {}
+                                }
+                            }
+                        } catch (Exception ignored) {}
+                    }
                 }
+            }
+        } catch (Exception ignored) {}
+
+        // increment provider completed orders count by 1
+        try {
+            if (order.getProviderId() != null) {
+                try { providerService.incrementCompletedOrders(order.getProviderId()); } catch (Exception ignored) {}
             }
         } catch (Exception ignored) {}
 

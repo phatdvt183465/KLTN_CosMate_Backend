@@ -19,7 +19,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @RestController
-@RequestMapping("/payment")
+@RequestMapping("/api/payment")
 @RequiredArgsConstructor
 public class PaymentController {
 

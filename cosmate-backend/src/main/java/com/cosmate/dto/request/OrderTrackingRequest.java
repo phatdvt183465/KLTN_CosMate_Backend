@@ -5,5 +5,6 @@ import lombok.Data;
 @Data
 public class OrderTrackingRequest {
     private String trackingCode;
+    private String shippingCarrierName;
 }
 

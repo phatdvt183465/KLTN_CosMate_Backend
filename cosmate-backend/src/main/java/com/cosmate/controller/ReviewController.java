@@ -79,4 +79,20 @@ public class ReviewController {
             return ResponseEntity.status(500).body(api);
         }
     }
+
+    @GetMapping("/costume/{costumeId}")
+    public ResponseEntity<ApiResponse<List<ReviewResponse>>> getByCostume(@PathVariable Integer costumeId) {
+        ApiResponse<List<ReviewResponse>> api = new ApiResponse<>();
+        try {
+            List<ReviewResponse> resp = reviewService.getByCostumeId(costumeId);
+            api.setCode(0);
+            api.setMessage("OK");
+            api.setResult(resp);
+            return ResponseEntity.ok(api);
+        } catch (Exception ex) {
+            api.setCode(500);
+            api.setMessage("Failed to fetch reviews: " + ex.getMessage());
+            return ResponseEntity.status(500).body(api);
+        }
+    }
 }

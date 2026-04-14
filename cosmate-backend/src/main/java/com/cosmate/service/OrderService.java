@@ -27,11 +27,11 @@ public interface OrderService {
     java.util.List<com.cosmate.dto.response.OrderFullResponse> filterOrdersByProviderAndStatuses(Integer providerId, java.util.List<String> statuses, Integer currentUserId, boolean isAdminStaff) throws Exception;
     java.util.List<com.cosmate.dto.response.OrderFullResponse> listOrdersByUserId(Integer userId) throws Exception;
     // ship/delivery/return flows
-    java.util.Map<String,Object> shipOrder(Integer currentUserId, Integer id, String trackingCode, org.springframework.web.multipart.MultipartFile[] images, java.util.List<String> notes, boolean isAdminStaff) throws Exception;
+    java.util.Map<String,Object> shipOrder(Integer currentUserId, Integer id, String trackingCode, String shippingCarrierName, org.springframework.web.multipart.MultipartFile[] images, java.util.List<String> notes, boolean isAdminStaff) throws Exception;
     java.util.Map<String,Object> markDeliveringOut(Integer currentUserId, Integer id, boolean isAdminStaff) throws Exception;
     java.util.Map<String,Object> confirmDelivery(Integer currentUserId, Integer id, org.springframework.web.multipart.MultipartFile[] images, java.util.List<String> notes) throws Exception;
     String prepareOrder(Integer currentUserId, Integer id, boolean isAdminStaff) throws Exception;
-    java.util.Map<String,Object> startReturn(Integer currentUserId, Integer id, String trackingCode, org.springframework.web.multipart.MultipartFile[] images, java.util.List<String> notes) throws Exception;
+    java.util.Map<String,Object> startReturn(Integer currentUserId, Integer id, String trackingCode, String shippingCarrierName, org.springframework.web.multipart.MultipartFile[] images, java.util.List<String> notes) throws Exception;
     java.util.Map<String,Object> completeOrder(Integer currentUserId, Integer id, boolean isAdminStaff) throws Exception;
     java.util.List<com.cosmate.dto.response.TransactionResponse> getTransactionsForOrder(Integer id) throws Exception;
 

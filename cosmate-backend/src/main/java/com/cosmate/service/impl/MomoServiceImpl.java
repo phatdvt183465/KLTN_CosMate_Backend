@@ -50,7 +50,7 @@ public class MomoServiceImpl implements MomoService {
     @Value("${momo.secretKey}")
     private String secretKey;
 
-    @Value("${momo.returnUrl:http://localhost:8080/payment/api/momo/return}")
+    @Value("${momo.returnUrl:http://localhost:8080/api/payments/momo-return}")
     private String defaultReturnUrl;
 
     @Override

@@ -109,9 +109,11 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
         String payUrl;
         if (pm == PaymentMethod.VNPAY) {
-            payUrl = vnPayService.createPaymentUrlForTransaction(wallet.getUser().getId(), plan.getPrice(), returnUrl, t.getId());
+            String r = (returnUrl == null || returnUrl.isEmpty()) ? "/api/payments/vnpay-return" : returnUrl;
+            payUrl = vnPayService.createPaymentUrlForTransaction(wallet.getUser().getId(), plan.getPrice(), r, t.getId());
         } else if (pm == PaymentMethod.MOMO) {
-            payUrl = momoService.createPaymentUrlForTransaction(wallet.getUser().getId(), plan.getPrice(), returnUrl, t.getId());
+            String r = (returnUrl == null || returnUrl.isEmpty()) ? "/api/payments/momo-return" : returnUrl;
+            payUrl = momoService.createPaymentUrlForTransaction(wallet.getUser().getId(), plan.getPrice(), r, t.getId());
         } else {
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION);
         }

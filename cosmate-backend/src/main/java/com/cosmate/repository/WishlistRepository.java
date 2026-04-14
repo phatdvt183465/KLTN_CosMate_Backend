@@ -11,5 +11,6 @@ import java.util.Optional;
 public interface WishlistRepository extends JpaRepository<WishlistCostume, Integer> {
     List<WishlistCostume> findAllByUserId(Integer userId);
     Optional<WishlistCostume> findByUserIdAndCostumeId(Integer userId, Integer costumeId);
+    List<WishlistCostume> findAllByCostumeId(Integer costumeId);
 }
 

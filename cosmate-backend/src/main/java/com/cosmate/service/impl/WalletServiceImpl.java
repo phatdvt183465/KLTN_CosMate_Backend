@@ -77,13 +77,13 @@ public class WalletServiceImpl implements WalletService {
             if (reference != null && reference.contains(":")) txType = reference.split(":", 2)[0];
         } catch (Exception ignored) {}
 
-        // compute Vietnamese label and store into txType (replace English with Vietnamese)
-        String vietnamese = computeTypeVi(txType, reference);
+        // store the canonical txType token into Transaction.type (keep English token for programmatic checks)
+        String storedType = txType;
 
         Transaction t = Transaction.builder()
                 .wallet(wallet)
                 .amount(amount)
-                .type(vietnamese)
+                .type(storedType)
                 .paymentMethod(paymentMethod)
                 .order(order)
                 .status("COMPLETED")
@@ -118,12 +118,12 @@ public class WalletServiceImpl implements WalletService {
             if (reference != null && reference.contains(":")) txType = reference.split(":", 2)[0];
         } catch (Exception ignored) {}
 
-        String vietnamese = computeTypeVi(txType, reference);
+        String storedType = txType;
 
         Transaction t = Transaction.builder()
                 .wallet(wallet)
                 .amount(amount)
-                .type(vietnamese)
+                .type(storedType)
                 .paymentMethod(paymentMethod)
                 .order(order)
                 .status("COMPLETED")
@@ -132,7 +132,8 @@ public class WalletServiceImpl implements WalletService {
         Transaction saved = transactionRepository.save(t);
         // Tạo notification cho người dùng khi rút tiền hoặc trừ tiền
         try {
-            String hdr = vietnamese != null && vietnamese.contains("Rút") ? "Rút tiền thành công" : "Giao dịch ví";
+            // Decide header based on token (detect withdraw by token name)
+            String hdr = (storedType != null && storedType.toUpperCase().contains("WITHDRAW")) ? "Rút tiền thành công" : "Giao dịch ví";
             com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
                     .user(wallet.getUser())
                     .type("WALLET_DEBIT")
@@ -145,21 +146,5 @@ public class WalletServiceImpl implements WalletService {
         } catch (Exception ignored) {}
         return saved;
     }
-
-    private String computeTypeVi(String txType, String reference) {
-        if (txType == null) txType = "";
-        txType = txType.toUpperCase();
-        if (txType.startsWith("ORDER")) {
-            if (reference != null && reference.toUpperCase().contains("REFUND")) return "Hoàn tiền đơn hàng";
-            return "Thanh toán đơn hàng";
-        }
-        if (txType.contains("PROVIDER_PAYOUT") || txType.contains("ORDER_PAYOUT")) return "Thanh toán nhà cung cấp";
-        if (txType.contains("DEPOSIT_RETURN") || txType.contains("DEPOSIT")) return "Hoàn cọc";
-        if (txType.contains("REFUND")) return "Hoàn tiền";
-        if (txType.contains("DISPUTE_PAYOUT") || txType.contains("DISPUTE")) return "Thanh toán tranh chấp";
-        if (txType.contains("WITHDRAW")) return "Rút tiền";
-        if (txType.equals("CREDIT")) return "Nạp tiền";
-        if (txType.equals("DEBIT")) return "Trừ tiền";
-        return txType; // fallback to original
-    }
+    
 }

@@ -56,5 +56,8 @@ public interface AIService {
     void deletePoseScore(Integer scoreId, Integer userId);
 
     // Phân tích câu trả lời tự nhập của người dùng (Style Quiz)
-    com.cosmate.dto.response.CustomAnswerResponse analyzeCustomAnswer(com.cosmate.dto.request.CustomAnswerRequest request);
+    // Thay thế hàm cũ bằng hàm này
+    List<com.cosmate.dto.response.CustomAnswerResponse> analyzeCustomAnswersBatch(List<com.cosmate.dto.request.CustomAnswerRequest> requests);
+
+    void refreshArchetypeCache();
 }

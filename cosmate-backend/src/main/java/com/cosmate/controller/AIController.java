@@ -57,8 +57,8 @@ public class AIController {
     // Đổi URL và param từ costumeImageId sang costumeId
     @PostMapping("/generate-vector/{costumeId}")
     public ApiResponse<Void> generateVector(@PathVariable Integer costumeId) {
-        aiService.generateAndSaveVector(costumeId);
-        return ApiResponse.<Void>builder().message("Đã tạo vector thành công!").build();
+        aiService.generateAndSaveVector(costumeId, true, true);
+        return ApiResponse.<Void>builder().message("Đã ép tạo lại Dual-Vector thủ công thành công!").build();
     }
 
     @PostMapping("/recommend")
@@ -157,11 +157,11 @@ public class AIController {
                 .build();
     }
 
-    @PostMapping("/analyze-custom-answer")
-    public ApiResponse<CustomAnswerResponse> analyzeCustomAnswer(@RequestBody CustomAnswerRequest request) {
-        return ApiResponse.<CustomAnswerResponse>builder()
-                .result(aiService.analyzeCustomAnswer(request))
-                .message("Phân tích câu trả lời thành công!")
+    @PostMapping("/analyze-custom-answers")
+    public ApiResponse<List<CustomAnswerResponse>> analyzeCustomAnswersBatch(@RequestBody List<CustomAnswerRequest> requests) {
+        return ApiResponse.<List<CustomAnswerResponse>>builder()
+                .result(aiService.analyzeCustomAnswersBatch(requests))
+                .message("Phân tích hàng loạt câu trả lời thành công!")
                 .build();
     }
 

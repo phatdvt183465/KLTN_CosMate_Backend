@@ -790,18 +790,33 @@ public class AIServiceImpl implements AIService {
     }
 
     @Override
-    public CustomAnswerResponse analyzeCustomAnswer(CustomAnswerRequest request) {
+    public List<CustomAnswerResponse> analyzeCustomAnswersBatch(List<CustomAnswerRequest> requests) {
+        if (requests == null || requests.isEmpty()) return Collections.emptyList();
+
         try {
             String url = GENERATION_MODEL_URL + "?key=" + apiKey;
 
-            String promptText = "Bạn là một chuyên gia tâm lý học phân tích hành vi của giới Cosplay.\n"
-                    + "Câu hỏi trắc nghiệm hiện tại là: '" + request.getQuestionContext() + "'.\n"
-                    + "Người dùng đã từ chối các đáp án có sẵn và nhập câu trả lời riêng của họ là: '" + request.getUserAnswer() + "'.\n"
-                    + "Hãy thực hiện 2 nhiệm vụ:\n"
-                    + "1. Kiểm tra tính hợp lệ: Câu trả lời này có ý nghĩa và trả lời đúng trọng tâm câu hỏi không? Nếu người dùng nhập linh tinh, chửi thề, hoặc không liên quan (ví dụ: đồ ăn, thời tiết), đánh giá là KHÔNG HỢP LỆ.\n"
-                    + "2. Nếu HỢP LỆ, hãy phân tích tâm lý của câu trả lời này dựa trên 3 hệ trục E, A, O và cho điểm từ -2 đến +2 cho mỗi trục.\n"
-                    + "BẮT BUỘC chỉ trả về định dạng JSON sau, không kèm giải thích hay định dạng markdown:\n"
-                    + "{\"isValid\": true, \"reason\": \"Lý do ngắn gọn\", \"scores\": {\"E\": 0, \"A\": 0, \"O\": 0}}";
+            // 1. CHUẨN BỊ DATA ĐẦU VÀO DƯỚI DẠNG MẢNG JSON
+            ArrayNode inputJsonArray = objectMapper.createArrayNode();
+            for (int i = 0; i < requests.size(); i++) {
+                ObjectNode item = objectMapper.createObjectNode();
+                item.put("id", i); // GẮN ID ĐỂ ÉP AI KHÔNG ĐƯỢC BỎ SÓT
+                item.put("question", requests.get(i).getQuestionContext());
+                item.put("answer", requests.get(i).getUserAnswer());
+                inputJsonArray.add(item);
+            }
+
+            // 2. PROMPT THẦN CHÚ CHỐNG LƯỜI (ANTI-LAZY PROMPT)
+            String promptText = "You are an expert psychological evaluator trained on Pennebaker LIWC and Big Five trait analysis.\n"
+                    + "Tôi sẽ cung cấp một mảng JSON chứa các câu trả lời tự luận của người dùng.\n"
+                    + "ĐẦU VÀO:\n" + inputJsonArray.toString() + "\n\n"
+                    + "NHIỆM VỤ BẮT BUỘC:\n"
+                    + "1. Bạn PHẢI đánh giá TẤT CẢ các phần tử trong mảng. Đầu vào có bao nhiêu ID, đầu ra BẮT BUỘC phải có bấy nhiêu ID tương ứng.\n"
+                    + "2. Với mỗi câu trả lời, kiểm tra tính hợp lệ. Nếu vô nghĩa, chửi thề, đánh giá isValid = false.\n"
+                    + "3. Nếu hợp lệ, chấm điểm E, A, O từ -2 đến 2 dựa trên Linguistic markers.\n\n"
+                    + "ĐỊNH DẠNG ĐẦU RA BẮT BUỘC:\n"
+                    + "Chỉ trả về MỘT MẢNG JSON duy nhất, không kèm giải thích, không dùng markdown. Cấu trúc mỗi phần tử:\n"
+                    + "{\"id\": [id tương ứng], \"isValid\": true, \"reason\": \"Lý do ngắn\", \"scores\": {\"E\": 0, \"A\": 0, \"O\": 0}}";
 
             Map<String, Object> textPart = Map.of("text", promptText);
             Map<String, Object> content = Map.of("parts", List.of(textPart));
@@ -818,33 +833,54 @@ public class AIServiceImpl implements AIService {
                         .path("content").path("parts").get(0)
                         .path("text").asText().trim();
 
-                // Gọt bỏ markdown rác nếu AI trả về lỗi định dạng
+                // Gọt bỏ markdown rác
                 if (resultJson.startsWith("```json")) {
                     resultJson = resultJson.substring(7, resultJson.length() - 3).trim();
                 } else if (resultJson.startsWith("```")) {
                     resultJson = resultJson.substring(3, resultJson.length() - 3).trim();
                 }
 
-                JsonNode resultNode = objectMapper.readTree(resultJson);
+                // 3. MAP KẾT QUẢ VÀO DANH SÁCH TRẢ VỀ THEO ĐÚNG THỨ TỰ
+                JsonNode resultNodeArray = objectMapper.readTree(resultJson);
+                List<CustomAnswerResponse> finalResponses = new ArrayList<>(Collections.nCopies(requests.size(), null));
 
-                boolean isValid = resultNode.path("isValid").asBoolean();
-                String reason = resultNode.path("reason").asText();
+                if (resultNodeArray.isArray()) {
+                    for (JsonNode node : resultNodeArray) {
+                        int id = node.path("id").asInt(-1);
+                        if (id >= 0 && id < requests.size()) {
+                            boolean isValid = node.path("isValid").asBoolean();
+                            String reason = node.path("reason").asText();
+                            Map<String, Integer> scores = null;
 
-                Map<String, Integer> scores = null;
-                if (isValid && resultNode.has("scores")) {
-                    scores = objectMapper.convertValue(resultNode.path("scores"), new TypeReference<Map<String, Integer>>() {});
+                            if (isValid && node.has("scores")) {
+                                scores = objectMapper.convertValue(node.path("scores"), new TypeReference<Map<String, Integer>>() {});
+                            }
+
+                            finalResponses.set(id, CustomAnswerResponse.builder()
+                                    .isValid(isValid)
+                                    .reason(reason)
+                                    .scores(scores)
+                                    .build());
+                        }
+                    }
                 }
 
-                return CustomAnswerResponse.builder()
-                        .isValid(isValid)
-                        .reason(reason)
-                        .scores(scores)
-                        .build();
+                // Xử lý Fallback nếu AI vô tình bỏ sót 1 vài câu (rất hiếm khi xảy ra với prompt trên)
+                for (int i = 0; i < finalResponses.size(); i++) {
+                    if (finalResponses.get(i) == null) {
+                        finalResponses.set(i, CustomAnswerResponse.builder()
+                                .isValid(false)
+                                .reason("AI từ chối phân tích hoặc xảy ra lỗi bỏ sót.")
+                                .build());
+                    }
+                }
+
+                return finalResponses;
             }
             throw new RuntimeException("AI không trả về kết quả hợp lệ.");
 
         } catch (Exception e) {
-            log.error("Lỗi khi phân tích câu trả lời Custom: {}", e.getMessage(), e);
+            log.error("Lỗi khi phân tích câu trả lời Custom Batch: {}", e.getMessage(), e);
             throw new RuntimeException("Lỗi phân tích AI: " + e.getMessage());
         }
     }

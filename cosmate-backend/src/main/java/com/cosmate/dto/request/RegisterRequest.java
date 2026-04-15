@@ -1,5 +1,6 @@
 package com.cosmate.dto.request;
 
+import com.cosmate.validation.RequestValidation;
 import com.cosmate.validator.ValidPassword;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;

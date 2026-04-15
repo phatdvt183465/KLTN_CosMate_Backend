@@ -98,7 +98,10 @@ public class ReviewServiceImpl implements ReviewService {
         resp.setImages(images);
         // set username of reviewer (cosplayer)
         if (order.getCosplayerId() != null) {
-            userRepository.findById(order.getCosplayerId()).ifPresent(u -> resp.setUsername(u.getUsername()));
+            userRepository.findById(order.getCosplayerId()).ifPresent(u -> {
+                resp.setUsername(u.getUsername());
+                resp.setAvatarUrl(u.getAvatarUrl());
+            });
         }
 
         return resp;
@@ -162,7 +165,10 @@ public class ReviewServiceImpl implements ReviewService {
         // populate username from order->cosplayerId
         Integer cosplayerId = r.getOrder() != null ? r.getOrder().getCosplayerId() : null;
         if (cosplayerId != null) {
-            userRepository.findById(cosplayerId).ifPresent(u -> resp.setUsername(u.getUsername()));
+            userRepository.findById(cosplayerId).ifPresent(u -> {
+                resp.setUsername(u.getUsername());
+                resp.setAvatarUrl(u.getAvatarUrl());
+            });
         }
         return resp;
     }

@@ -299,8 +299,15 @@ public class MomoServiceImpl implements MomoService {
             return result;
         }
 
-        // mark completed and update wallet if not subscription
-        if (!orderId.startsWith("SUB")) {
+        // Determine whether this transaction represents an ORDER payment (in which case we should NOT credit the wallet here)
+        boolean isOrderTransaction = false;
+        try {
+            String txType = t.getType();
+            if (txType != null && txType.toUpperCase().startsWith("ORDER#")) isOrderTransaction = true;
+        } catch (Exception ignored) {}
+
+        // mark completed and update wallet if not subscription and not an ORDER payment
+        if (!orderId.startsWith("SUB") && !isOrderTransaction) {
             Wallet wallet = t.getWallet();
             wallet.setBalance(wallet.getBalance().add(amount));
             walletRepository.save(wallet);

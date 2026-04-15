@@ -11,6 +11,7 @@ import com.cosmate.repository.ReviewRepository;
 import com.cosmate.repository.ReviewUrlRepository;
 import com.cosmate.service.FirebaseStorageService;
 import com.cosmate.service.ReviewService;
+import com.cosmate.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +30,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final OrderRepository orderRepository;
     private final FirebaseStorageService firebaseStorageService;
     private final com.cosmate.service.ProviderService providerService;
+    private final UserRepository userRepository;
 
     @Override
     @Transactional
@@ -94,6 +96,10 @@ public class ReviewServiceImpl implements ReviewService {
         resp.setComment(r.getComment());
         resp.setCreatedAt(r.getCreatedAt());
         resp.setImages(images);
+        // set username of reviewer (cosplayer)
+        if (order.getCosplayerId() != null) {
+            userRepository.findById(order.getCosplayerId()).ifPresent(u -> resp.setUsername(u.getUsername()));
+        }
 
         return resp;
     }
@@ -153,6 +159,11 @@ public class ReviewServiceImpl implements ReviewService {
             }
         }
         resp.setImages(images);
+        // populate username from order->cosplayerId
+        Integer cosplayerId = r.getOrder() != null ? r.getOrder().getCosplayerId() : null;
+        if (cosplayerId != null) {
+            userRepository.findById(cosplayerId).ifPresent(u -> resp.setUsername(u.getUsername()));
+        }
         return resp;
     }
 }

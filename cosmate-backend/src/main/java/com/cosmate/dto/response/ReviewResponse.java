@@ -9,6 +9,7 @@ import java.util.List;
 public class ReviewResponse {
     private Integer id;
     private Integer orderId;
+    private String username;
     private Integer rating;
     private String comment;
     private LocalDateTime createdAt;

@@ -1,8 +1,9 @@
 package com.cosmate.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.*;
 import org.hibernate.annotations.Nationalized;
+
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -10,6 +11,9 @@ import java.util.List;
 @Entity
 @Table(name = "Costumes")
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Costume {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -43,21 +47,38 @@ public class Costume {
 
     private String status;
 
+    @Column(name = "text_vector", columnDefinition = "NVARCHAR(MAX)")
+    private String textVector;
+
+    @Column(name = "image_vector", columnDefinition = "NVARCHAR(MAX)")
+    private String imageVector;
+
+    @Column(name = "completed_rent_count", nullable = false)
+    @Builder.Default
+    private Integer completedRentCount = 0;
+
     @OneToMany(mappedBy = "costume", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private List<CostumeImage> images = new ArrayList<>();
 
     @OneToMany(mappedBy = "costume", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private List<CostumeSurcharge> surcharges = new ArrayList<>();
 
     @OneToMany(mappedBy = "costume", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private List<CostumeAccessory> accessories = new ArrayList<>();
 
     @OneToMany(mappedBy = "costume", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private List<CostumeRentalOption> rentalOptions = new ArrayList<>();
 
-    @Column(name = "costume_vector", columnDefinition = "NVARCHAR(MAX)")
-    private String costumeVector;
-
-    @Column(name = "completed_rent_count", nullable = false)
-    private Integer completedRentCount = 0;
+    @ManyToMany
+    @JoinTable(
+            name = "Costume_Character_Tags",
+            joinColumns = @JoinColumn(name = "costume_id"),
+            inverseJoinColumns = @JoinColumn(name = "character_id")
+    )
+    @Builder.Default
+    private List<Character> characters = new ArrayList<>();
 }

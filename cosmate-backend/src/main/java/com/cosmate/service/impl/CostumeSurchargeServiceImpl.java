@@ -4,10 +4,14 @@ import com.cosmate.dto.request.SurchargeRequest;
 import com.cosmate.dto.response.SurchargeResponse;
 import com.cosmate.entity.Costume;
 import com.cosmate.entity.CostumeSurcharge;
+import com.cosmate.entity.Provider;
 import com.cosmate.repository.CostumeRepository;
 import com.cosmate.repository.CostumeSurchargeRepository;
+import com.cosmate.repository.ProviderRepository;
 import com.cosmate.service.CostumeSurchargeService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +25,7 @@ public class CostumeSurchargeServiceImpl implements CostumeSurchargeService {
 
     private final CostumeSurchargeRepository surchargeRepository;
     private final CostumeRepository costumeRepository;
+    private final ProviderRepository providerRepository;
 
     @Override
     public List<SurchargeResponse> getByCostumeId(Integer costumeId) {
@@ -37,6 +42,7 @@ public class CostumeSurchargeServiceImpl implements CostumeSurchargeService {
     public SurchargeResponse create(Integer costumeId, SurchargeRequest request) {
         Costume costume = costumeRepository.findById(costumeId)
                 .orElseThrow(() -> new RuntimeException("Error: Costume ID " + costumeId + " not found."));
+        ensureCurrentUserOwnsCostume(costume);
 
         validateRequest(request);
 
@@ -54,6 +60,7 @@ public class CostumeSurchargeServiceImpl implements CostumeSurchargeService {
     public SurchargeResponse update(Integer id, SurchargeRequest request) {
         CostumeSurcharge surcharge = surchargeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Error: Surcharge ID " + id + " not found."));
+        ensureCurrentUserOwnsCostume(surcharge.getCostume());
 
         // Logic Partial Update (Chỉ update trường khác null/rỗng)
         if (isValidString(request.getName())) {
@@ -83,9 +90,9 @@ public class CostumeSurchargeServiceImpl implements CostumeSurchargeService {
     @Override
     @Transactional
     public void deleteSurcharge(Integer id) {
-        if (!surchargeRepository.existsById(id)) {
-            throw new RuntimeException("Error: Surcharge not found to delete.");
-        }
+        CostumeSurcharge surcharge = surchargeRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Error: Surcharge not found to delete."));
+        ensureCurrentUserOwnsCostume(surcharge.getCostume());
         surchargeRepository.deleteById(id);
     }
 
@@ -102,6 +109,44 @@ public class CostumeSurchargeServiceImpl implements CostumeSurchargeService {
 
     private boolean isValidString(String input) {
         return input != null && !input.trim().isEmpty();
+    }
+
+    private Integer getCurrentUserIdFromContext() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getPrincipal() == null) return null;
+        Object principal = auth.getPrincipal();
+        try {
+            if (principal instanceof String) {
+                String s = (String) principal;
+                if (s.equalsIgnoreCase("anonymousUser")) return null;
+                return Integer.valueOf(s);
+            }
+            if (principal instanceof Integer) return (Integer) principal;
+            if (principal instanceof Long) return ((Long) principal).intValue();
+            return Integer.valueOf(principal.toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private boolean isPrivileged() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) return false;
+        return auth.getAuthorities().stream().anyMatch(a ->
+                "ROLE_ADMIN".equals(a.getAuthority())
+                        || "ROLE_STAFF".equals(a.getAuthority())
+                        || "ROLE_SUPERADMIN".equals(a.getAuthority()));
+    }
+
+    private void ensureCurrentUserOwnsCostume(Costume costume) {
+        if (isPrivileged()) return;
+        Integer currentUserId = getCurrentUserIdFromContext();
+        if (currentUserId == null) throw new RuntimeException("Unauthorized");
+        Provider provider = providerRepository.findById(costume.getProviderId())
+                .orElseThrow(() -> new RuntimeException("Provider not found"));
+        if (!currentUserId.equals(provider.getUserId())) {
+            throw new RuntimeException("Forbidden: You do not own this costume");
+        }
     }
 
     private SurchargeResponse mapToResponse(CostumeSurcharge entity) {

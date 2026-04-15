@@ -1,72 +1,60 @@
 package com.cosmate.exception;
 
 import com.cosmate.dto.response.ApiResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-@ControllerAdvice
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+@RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
-
-    @ExceptionHandler(value = AppException.class)
-    ResponseEntity<ApiResponse> handlingAppException(AppException exception){
-        ErrorCode errorCode = exception.getErrorCode();
-        ApiResponse apiResponse = new ApiResponse();
-
-        apiResponse.setCode(errorCode.getCode());
-        apiResponse.setMessage(errorCode.getMessage());
-
-        logger.debug("AppException handled: {}", errorCode, exception);
-
-        if (errorCode == ErrorCode.FORBIDDEN || errorCode == ErrorCode.ACCOUNT_BANNED) {
-            // return proper 403 for forbidden or banned operations
-            return ResponseEntity.status(403).body(apiResponse);
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationException(MethodArgumentNotValidException ex) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        for (FieldError fieldError : ex.getBindingResult().getFieldErrors()) {
+            errors.put(fieldError.getField(), fieldError.getDefaultMessage());
         }
 
-        return ResponseEntity.badRequest().body(apiResponse);
+        ApiResponse<Map<String, String>> response = ApiResponse.<Map<String, String>>builder()
+                .code(400)
+                .message("Validation failed")
+                .result(errors)
+                .build();
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
-    @ExceptionHandler(value = MethodArgumentNotValidException.class)
-    ResponseEntity<ApiResponse> handlingValidation(MethodArgumentNotValidException exception){
-        logger.debug("Validation exception: {}", exception.getMessage(), exception);
-        String enumKey = exception.getFieldError().getDefaultMessage();
+    @ExceptionHandler(AppException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAppException(AppException ex) {
+        ErrorCode errorCode = ex.getErrorCode();
+        ApiResponse<Void> response = ApiResponse.<Void>builder()
+                .code(errorCode.getCode())
+                .message(errorCode.getMessage())
+                .build();
 
-        ErrorCode errorCode = ErrorCode.INVALID_KEY;
+        HttpStatus status = switch (errorCode) {
+            case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
+            case FORBIDDEN, ACCOUNT_BANNED -> HttpStatus.FORBIDDEN;
+            case COSTUME_NOT_FOUND, COSTUME_DELETED, PROVIDER_NOT_FOUND, ACCESSORY_NOT_FOUND, RENTAL_OPTION_NOT_FOUND, SURCHARGE_NOT_FOUND, IMAGE_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            default -> HttpStatus.BAD_REQUEST;
+        };
 
-        try {
-            switch (enumKey) {
-                case "USERNAME_INVALID": errorCode = ErrorCode.INVALID_USERNAME; break;
-                case "EMAIL_INVALID": errorCode = ErrorCode.INVALID_EMAIL; break;
-                case "INVALID_PHONE": errorCode = ErrorCode.INVALID_PHONE; break;
-                case "INVALID_PASSWORD": errorCode = ErrorCode.INVALID_PASSWORD; break;
-                default:
-                    try { errorCode = ErrorCode.valueOf(enumKey); } catch (IllegalArgumentException ignored) {}
-            }
-        } catch (IllegalArgumentException e){
-
-        }
-
-        ApiResponse apiResponse = new ApiResponse();
-
-        apiResponse.setCode(errorCode.getCode());
-        apiResponse.setMessage(errorCode.getMessage());
-
-        logger.debug("Mapped validation error {} -> {}", enumKey, errorCode);
-
-        return ResponseEntity.badRequest().body(apiResponse);
+        return ResponseEntity.status(status).body(response);
     }
 
-    @ExceptionHandler(value = Exception.class)
-    ResponseEntity<ApiResponse> handlingAll(Exception exception) {
-        logger.error("Unhandled exception: {}", exception.getMessage(), exception);
-        ApiResponse apiResponse = new ApiResponse();
-        apiResponse.setCode(99998);
-        apiResponse.setMessage("Internal server error: " + exception.getMessage());
-        return ResponseEntity.status(500).body(apiResponse);
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnknownException(Exception ex, HttpServletRequest request) {
+        ApiResponse<Void> response = ApiResponse.<Void>builder()
+                .code(ErrorCode.UNCATEGORIZED_EXCEPTION.getCode())
+                .message(ex.getMessage() != null ? ex.getMessage() : ErrorCode.UNCATEGORIZED_EXCEPTION.getMessage())
+                .build();
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }
 }

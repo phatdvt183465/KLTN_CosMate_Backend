@@ -3,11 +3,15 @@ package com.cosmate.service.impl;
 import com.cosmate.dto.response.ImageResponse;
 import com.cosmate.entity.Costume;
 import com.cosmate.entity.CostumeImage;
+import com.cosmate.entity.Provider;
 import com.cosmate.repository.CostumeImageRepository;
 import com.cosmate.repository.CostumeRepository;
+import com.cosmate.repository.ProviderRepository;
 import com.cosmate.service.AIService;
 import com.cosmate.service.CostumeImageService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -26,6 +30,7 @@ public class CostumeImageServiceImpl implements CostumeImageService {
 
     private final CostumeImageRepository imageRepository;
     private final CostumeRepository costumeRepository;
+    private final ProviderRepository providerRepository;
     private final AIService aiService;
     private final com.cosmate.service.FirebaseStorageService firebaseStorageService;
 
@@ -44,6 +49,7 @@ public class CostumeImageServiceImpl implements CostumeImageService {
     public List<ImageResponse> uploadImages(Integer costumeId, List<MultipartFile> files, String type) {
         Costume costume = costumeRepository.findById(costumeId)
                 .orElseThrow(() -> new RuntimeException("Lỗi: Không tìm thấy trang phục ID " + costumeId));
+        ensureCurrentUserOwnsCostume(costume);
 
         if (files == null || files.isEmpty()) {
             return Collections.emptyList();
@@ -52,15 +58,7 @@ public class CostumeImageServiceImpl implements CostumeImageService {
         // 1. Kiểm duyệt nội dung 18+ (Gom lô)
         aiService.validateMultipleImageContents(files);
 
-        // 2. Cập nhật lại vector nhúng (embedding) của bộ đồ khi có ảnh mới
-        String hiddenTags = aiService.extractFeaturesFromMultipleImages(files);
-        String textForVector = costume.getName() + " " + costume.getDescription() + " " + hiddenTags;
-        String costumeVector = aiService.generateVectorForText(textForVector);
-
-        costume.setCostumeVector(costumeVector);
-        costumeRepository.save(costume); // Save lại Costume để cập nhật Vector mới vào DB
-
-        // 3. Xử lý đa luồng tải ảnh lên Firebase
+        // 2. Xử lý đa luồng tải ảnh lên Firebase
         ExecutorService executor = Executors.newFixedThreadPool(Math.min(files.size(), 10));
         List<CompletableFuture<CostumeImage>> futures = new ArrayList<>();
 
@@ -89,7 +87,7 @@ public class CostumeImageServiceImpl implements CostumeImageService {
             futures.add(future);
         }
 
-        // 4. Lưu toàn bộ kết quả xuống Database
+        // 3. Lưu toàn bộ kết quả xuống Database
         List<CostumeImage> savedImages = new ArrayList<>();
         try {
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
@@ -104,6 +102,10 @@ public class CostumeImageServiceImpl implements CostumeImageService {
         } finally {
             executor.shutdown();
         }
+
+        // 4. [QUAN TRỌNG] GỌI AI CHẠY NGẦM CẬP NHẬT LẠI DUAL-VECTOR
+        // Chỉ kích hoạt luồng AI ngầm sau khi ảnh đã được lưu vào DB thành công
+        aiService.generateAndSaveVector(costumeId, false, true);
 
         // 5. Build danh sách DTO trả về cho Client
         return savedImages.stream()
@@ -120,10 +122,57 @@ public class CostumeImageServiceImpl implements CostumeImageService {
     @Override
     @Transactional
     public void deleteImage(Integer id) {
-        if (!imageRepository.existsById(id)) {
-            throw new RuntimeException("Error: Image not found to delete.");
-        }
+        CostumeImage image = imageRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Error: Image not found to delete."));
+        ensureCurrentUserOwnsCostume(image.getCostume());
+
+        Integer costumeId = image.getCostume().getId(); // Lưu ID lại trước khi xóa
+
         imageRepository.deleteById(id);
+        if (image.getImageUrl() != null && !image.getImageUrl().isBlank()) {
+            firebaseStorageService.deleteByUrl(image.getImageUrl());
+        }
+
+        // [QUAN TRỌNG] GỌI AI CHẠY NGẦM CẬP NHẬT LẠI VECTOR
+        aiService.generateAndSaveVector(costumeId, false, true);
+    }
+
+    private Integer getCurrentUserIdFromContext() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getPrincipal() == null) return null;
+        Object principal = auth.getPrincipal();
+        try {
+            if (principal instanceof String) {
+                String s = (String) principal;
+                if (s.equalsIgnoreCase("anonymousUser")) return null;
+                return Integer.valueOf(s);
+            }
+            if (principal instanceof Integer) return (Integer) principal;
+            if (principal instanceof Long) return ((Long) principal).intValue();
+            return Integer.valueOf(principal.toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private boolean isPrivileged() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) return false;
+        return auth.getAuthorities().stream().anyMatch(a ->
+                "ROLE_ADMIN".equals(a.getAuthority())
+                        || "ROLE_STAFF".equals(a.getAuthority())
+                        || "ROLE_SUPERADMIN".equals(a.getAuthority()));
+    }
+
+    private void ensureCurrentUserOwnsCostume(Costume costume) {
+        if (isPrivileged()) return;
+        Integer currentUserId = getCurrentUserIdFromContext();
+        if (currentUserId == null) throw new RuntimeException("Unauthorized");
+        Provider provider = providerRepository.findById(costume.getProviderId())
+                .orElseThrow(() -> new RuntimeException("Provider not found"));
+        if (!currentUserId.equals(provider.getUserId())) {
+            throw new RuntimeException("Forbidden: You do not own this costume");
+        }
     }
 
     private ImageResponse mapToResponse(CostumeImage entity) {

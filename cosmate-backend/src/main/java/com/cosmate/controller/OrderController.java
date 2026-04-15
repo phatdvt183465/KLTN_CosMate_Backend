@@ -13,6 +13,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.validation.Valid;
 import java.util.List;
 
 @RestController
@@ -54,7 +55,7 @@ public class OrderController {
 
     @PostMapping
     public ApiResponse<OrderResponse> createOrder(@RequestParam Integer cosplayerId,
-                                                  @RequestBody CreateOrderRequest request) {
+                                                  @Valid @RequestBody CreateOrderRequest request) {
         try {
             OrderResponse resp = orderService.createOrder(cosplayerId, request);
             return ApiResponse.<OrderResponse>builder().result(resp).message("Order created").build();

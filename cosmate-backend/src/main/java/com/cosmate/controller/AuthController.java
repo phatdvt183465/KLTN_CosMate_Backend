@@ -37,7 +37,7 @@ public class AuthController {
 
     // Only accept JSON register requests (no avatar upload through this API)
     @PostMapping(value = "/register", consumes = { MediaType.APPLICATION_JSON_VALUE })
-    public ResponseEntity<ApiResponse<UserResponse>> registerJson(@RequestBody RegisterRequest request){
+    public ResponseEntity<ApiResponse<UserResponse>> registerJson(@Valid @RequestBody RegisterRequest request){
         // avatar not provided -> null
         User user = userService.register(request, false, null);
         UserResponse resp = UserResponse.builder()
@@ -58,7 +58,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<AuthResponse>> login(@RequestBody LoginRequest request){
+    public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request){
         String token = userService.authenticate(request.getUsernameOrEmail(), request.getPassword());
         AuthResponse auth = new AuthResponse();
         auth.setToken(token);
@@ -71,7 +71,7 @@ public class AuthController {
     }
 
     @PostMapping("/register/google")
-    public ResponseEntity<ApiResponse<AuthResponse>> registerGoogle(@RequestBody GoogleRegisterRequest request){
+    public ResponseEntity<ApiResponse<AuthResponse>> registerGoogle(@Valid @RequestBody GoogleRegisterRequest request){
         RegisterRequest r = new RegisterRequest();
         r.setEmail(request.getEmail());
         r.setFullName(request.getFullName());
@@ -101,7 +101,7 @@ public class AuthController {
     }
 
     @PostMapping("/google/login")
-    public ResponseEntity<ApiResponse<AuthResponse>> googleLogin(@RequestBody GoogleTokenRequest request) {
+    public ResponseEntity<ApiResponse<AuthResponse>> googleLogin(@Valid @RequestBody GoogleTokenRequest request) {
         String token = userService.loginWithGoogleToken(request);
         AuthResponse auth = new AuthResponse();
         auth.setToken(token);
@@ -113,7 +113,7 @@ public class AuthController {
     }
 
     @PostMapping("/google/register")
-    public ResponseEntity<ApiResponse<AuthResponse>> googleRegister(@RequestBody GoogleTokenRequest request) {
+    public ResponseEntity<ApiResponse<AuthResponse>> googleRegister(@Valid @RequestBody GoogleTokenRequest request) {
         String token = userService.registerWithGoogleToken(request);
         AuthResponse auth = new AuthResponse();
         auth.setToken(token);

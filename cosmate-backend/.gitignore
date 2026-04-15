@@ -39,3 +39,9 @@ cosmate-firebase.json
 .env
 
 src/main/resources/application-dev.properties
+
+# Ignore all folders named `test` (do not track or update files inside any `test/` directory)
+# - `/test/` ignores a top-level `test` directory
+# - `**/test/**` ignores any `test` directory at any depth
+/test/
+**/test/**

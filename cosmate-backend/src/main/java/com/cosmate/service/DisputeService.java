@@ -2,12 +2,14 @@ package com.cosmate.service;
 
 import com.cosmate.entity.Dispute;
 import com.cosmate.entity.DisputeResult;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Optional;
 
 public interface DisputeService {
-    Dispute createDispute(Integer openerUserId, Integer orderId, String reason) throws Exception;
+    Dispute createDispute(Integer openerUserId, Integer orderId, String reason, java.util.List<String> imageUrls) throws Exception;
+    java.util.List<String> uploadFilesForDispute(Integer orderId, MultipartFile[] files) throws Exception;
     Optional<Dispute> getById(Integer id);
     List<Dispute> listByOrder(Integer orderId);
     List<Dispute> listByUser(Integer userId);

@@ -12,6 +12,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.util.List;
 import java.util.Optional;
 import com.cosmate.dto.request.ResolveDisputeRequest;
+import com.cosmate.service.FirebaseStorageService;
 import jakarta.validation.Valid;
 
 @RestController
@@ -51,13 +52,21 @@ public class DisputeController {
     // Provider or cosplayer opens dispute on an order
     @PostMapping
     public ApiResponse<Dispute> openDispute(@RequestParam Integer orderId,
-                                            @RequestBody(required = false) String reason) {
+                                            @RequestPart(required = false) String reason,
+                                            @RequestPart(name = "files", required = false) org.springframework.web.multipart.MultipartFile[] files) {
         try {
             Integer currentUserId = getCurrentUserId();
             if (currentUserId == null) return ApiResponse.<Dispute>builder().code(401).message("Chưa xác thực - Vui lòng đăng nhập").build();
+            // upload files via service layer (if any) and collect urls
+            java.util.List<String> images = null;
+            try {
+                images = disputeService.uploadFilesForDispute(orderId, files);
+            } catch (Exception ex) {
+                images = null;
+            }
 
             // Delegate validation and creation to the service layer
-            Dispute d = disputeService.createDispute(currentUserId, orderId, reason);
+            Dispute d = disputeService.createDispute(currentUserId, orderId, reason, images);
             return ApiResponse.<Dispute>builder().result(d).message("Dispute created").build();
         } catch (IllegalArgumentException ex) {
             return ApiResponse.<Dispute>builder().code(400).message(ex.getMessage()).build();

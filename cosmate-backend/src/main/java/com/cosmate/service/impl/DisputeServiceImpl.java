@@ -17,6 +17,8 @@ public class DisputeServiceImpl implements DisputeService {
     private final DisputeRepository disputeRepository;
     private final DisputeResultRepository disputeResultRepository;
     private final OrderRepository orderRepository;
+    private final com.cosmate.repository.DisputeImageRepository disputeImageRepository;
+    private final com.cosmate.service.FirebaseStorageService firebaseStorageService;
     private final WalletService walletService;
     private final OrderDetailRepository orderDetailRepository;
     private final com.cosmate.repository.ProviderRepository providerRepository;
@@ -28,7 +30,9 @@ public class DisputeServiceImpl implements DisputeService {
                               WalletService walletService,
                               OrderDetailRepository orderDetailRepository,
                               com.cosmate.repository.ProviderRepository providerRepository,
-                              com.cosmate.service.NotificationService notificationService) {
+                              com.cosmate.service.NotificationService notificationService,
+                              com.cosmate.repository.DisputeImageRepository disputeImageRepository,
+                              com.cosmate.service.FirebaseStorageService firebaseStorageService) {
         this.disputeRepository = disputeRepository;
         this.disputeResultRepository = disputeResultRepository;
         this.orderRepository = orderRepository;
@@ -36,6 +40,36 @@ public class DisputeServiceImpl implements DisputeService {
         this.orderDetailRepository = orderDetailRepository;
         this.providerRepository = providerRepository;
         this.notificationService = notificationService;
+        this.disputeImageRepository = disputeImageRepository;
+        this.firebaseStorageService = firebaseStorageService;
+    }
+
+    @Override
+    public java.util.List<String> uploadFilesForDispute(Integer orderId, org.springframework.web.multipart.MultipartFile[] files) throws Exception {
+        java.util.List<String> uploaded = new java.util.ArrayList<>();
+        if (files == null || files.length == 0) return uploaded;
+
+        for (org.springframework.web.multipart.MultipartFile f : files) {
+            try {
+                if (f == null || f.isEmpty()) continue;
+
+                // basic content-type filter: allow image and video
+                String ct = f.getContentType();
+                if (ct == null) continue;
+                if (!ct.startsWith("image/") && !ct.startsWith("video/")) continue;
+
+                // optional size limit: 50MB
+                long maxSize = 50L * 1024L * 1024L;
+                if (f.getSize() > maxSize) continue;
+
+                String destination = "disputes/" + orderId + "/" + System.currentTimeMillis() + "_" + f.getOriginalFilename();
+                String url = firebaseStorageService.uploadFile(f, destination);
+                if (url != null) uploaded.add(url);
+            } catch (Exception ex) {
+                // skip failed file but continue with others
+            }
+        }
+        return uploaded;
     }
 
     @Override
@@ -114,7 +148,8 @@ public class DisputeServiceImpl implements DisputeService {
     }
 
     @Override
-    public Dispute createDispute(Integer openerUserId, Integer orderId, String reason) throws Exception {
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
+    public Dispute createDispute(Integer openerUserId, Integer orderId, String reason, java.util.List<String> imageUrls) throws Exception {
         Order order = orderRepository.findById(orderId).orElse(null);
         if (order == null) throw new IllegalArgumentException("Order not found");
 
@@ -150,6 +185,20 @@ public class DisputeServiceImpl implements DisputeService {
                 .status("OPEN")
                 .build();
         d = disputeRepository.save(d);
+
+        // persist any provided images
+        try {
+            if (imageUrls != null) {
+                for (String url : imageUrls) {
+                    if (url == null || url.trim().isEmpty()) continue;
+                    com.cosmate.entity.DisputeImage di = com.cosmate.entity.DisputeImage.builder()
+                            .dispute(d)
+                            .disputeImageUrl(url.trim())
+                            .build();
+                    disputeImageRepository.save(di);
+                }
+            }
+        } catch (Exception ignored) {}
 
         // set order status to DISPUTE
         order.setStatus("DISPUTE");

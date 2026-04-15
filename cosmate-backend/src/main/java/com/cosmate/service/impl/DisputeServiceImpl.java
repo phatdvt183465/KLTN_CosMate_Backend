@@ -148,6 +148,35 @@ public class DisputeServiceImpl implements DisputeService {
     }
 
     @Override
+    public boolean canViewOrderDisputes(Integer orderId, Integer userId) {
+        try {
+            if (orderId == null) return false;
+            Order order = orderRepository.findById(orderId).orElse(null);
+            if (order == null) return false;
+
+            // cosplayer owns the order
+            if (userId != null && userId.equals(order.getCosplayerId())) return true;
+
+            // provider owner: if order.providerId directly stores the user id
+            if (order.getProviderId() != null && order.getProviderId().equals(userId)) return true;
+
+            // try resolving via Provider table
+            try {
+                java.util.Optional<com.cosmate.entity.Provider> provOpt = providerRepository.findByUserId(userId);
+                if (provOpt.isPresent()) {
+                    com.cosmate.entity.Provider prov = provOpt.get();
+                    if (prov.getId() != null && prov.getId().equals(order.getProviderId())) return true;
+                    if (prov.getUserId() != null && prov.getUserId().equals(order.getProviderId())) return true;
+                }
+            } catch (Exception ignored) {}
+
+            return false;
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
+    @Override
     @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public Dispute createDispute(Integer openerUserId, Integer orderId, String reason, java.util.List<String> imageUrls) throws Exception {
         Order order = orderRepository.findById(orderId).orElse(null);

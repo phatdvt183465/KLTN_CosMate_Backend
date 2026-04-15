@@ -152,6 +152,28 @@ public class DisputeController {
         }
     }
 
+    // list disputes by order id (order owner or provider owner or staff)
+    @GetMapping("/order/{orderId}")
+    public ApiResponse<List<Dispute>> getDisputesByOrder(@PathVariable Integer orderId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Integer currentUserId = getCurrentUserId();
+        boolean isAdminStaff = hasAdminStaffRole(auth);
+
+        try {
+            if (!isAdminStaff) {
+                if (currentUserId == null || !disputeService.canViewOrderDisputes(orderId, currentUserId)) {
+                    return ApiResponse.<List<Dispute>>builder().code(403).message("Không có quyền xem khiếu nại cho đơn này").build();
+                }
+            }
+            java.util.List<Dispute> disputes = disputeService.listByOrder(orderId);
+            return ApiResponse.<List<Dispute>>builder().result(disputes).build();
+        } catch (IllegalArgumentException ex) {
+            return ApiResponse.<List<Dispute>>builder().code(404).message(ex.getMessage()).build();
+        } catch (Exception ex) {
+            return ApiResponse.<List<Dispute>>builder().code(500).message("Failed to get disputes by order: " + ex.getMessage()).build();
+        }
+    }
+
     // Debug endpoint for staff: returns order, deposit total, wallet balances and recent transactions for cosplayer/provider
     @GetMapping("/{id}/debug")
     public ApiResponse<java.util.Map<String, Object>> debugDispute(@PathVariable Integer id) {

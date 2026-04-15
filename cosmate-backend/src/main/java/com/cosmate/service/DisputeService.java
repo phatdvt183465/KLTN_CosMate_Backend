@@ -17,6 +17,8 @@ public interface DisputeService {
     DisputeResult resolveDispute(Integer resolverUserId, Integer disputeId, DisputeResult result) throws Exception;
     // whether a given userId may view the dispute (opener or provider owner)
     boolean canViewDispute(Integer disputeId, Integer userId);
+    // whether a given userId may view disputes for a given order (order owner or provider owner)
+    boolean canViewOrderDisputes(Integer orderId, Integer userId);
     // debug helper that aggregates dispute/order/wallet/transactions info for staff
     java.util.Map<String,Object> debugDispute(Integer disputeId) throws Exception;
 }

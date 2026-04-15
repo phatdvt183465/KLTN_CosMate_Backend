@@ -98,9 +98,9 @@ public class OrderServiceImpl implements OrderService {
         BigDecimal pricePerDay = c.getPricePerDay() == null ? BigDecimal.ZERO : c.getPricePerDay();
         BigDecimal deposit = c.getDepositAmount() == null ? BigDecimal.ZERO : c.getDepositAmount();
 
-        // rentDiscount is a percentage (0..100) representing how much to charge for each day from day 2 onward
-        // default to 100% (no discount) when costume record has null rentDiscount
-        Integer rentDiscountInt = c.getRentDiscount() == null ? 100 : c.getRentDiscount();
+        // rentDiscount is a percentage (0..100) representing the DISCOUNT to apply to subsequent days
+        // e.g., 20 means subsequent days charge 80% of pricePerDay. Default to 0 (no discount) when null.
+        Integer rentDiscountInt = c.getRentDiscount() == null ? 0 : c.getRentDiscount();
         BigDecimal rentDiscountPct = new BigDecimal(rentDiscountInt);
 
         BigDecimal rentAmount;
@@ -109,8 +109,8 @@ public class OrderServiceImpl implements OrderService {
         } else {
             // first day full price
             BigDecimal firstDay = pricePerDay;
-            // subsequent days use rentDiscount percent of pricePerDay
-            BigDecimal subsequentRate = pricePerDay.multiply(rentDiscountPct).divide(new BigDecimal(100), 2, RoundingMode.HALF_UP);
+            // subsequent days use (1 - rentDiscountPct/100) * pricePerDay
+            BigDecimal subsequentRate = pricePerDay.multiply(BigDecimal.ONE.subtract(rentDiscountPct.divide(new BigDecimal(100), 8, RoundingMode.HALF_UP))).setScale(2, RoundingMode.HALF_UP);
             BigDecimal subsequentTotal = subsequentRate.multiply(new BigDecimal(rentDay - 1));
             rentAmount = firstDay.add(subsequentTotal);
         }

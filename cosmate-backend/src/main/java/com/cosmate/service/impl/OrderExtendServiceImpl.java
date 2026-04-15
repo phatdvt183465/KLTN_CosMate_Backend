@@ -287,27 +287,30 @@ public class OrderExtendServiceImpl implements OrderExtendService {
         if (detail.getRentAmount() == null || detail.getRentDay() == null || detail.getRentDay() <= 0) return BigDecimal.ZERO;
         BigDecimal rentAmount = detail.getRentAmount();
         int originalDays = detail.getRentDay();
-        // rentDiscount is a percentage (e.g., 50 means subsequent days charged at 50% of pricePerDay)
-        int rentDiscountInt = detail.getRentDiscount() == null ? 100 : detail.getRentDiscount();
+        // rentDiscount is a percentage DISCOUNT (e.g., 20 means subsequent days charged at 80% of pricePerDay)
+        int rentDiscountInt = detail.getRentDiscount() == null ? 0 : detail.getRentDiscount();
         BigDecimal rentDiscountPct = new BigDecimal(rentDiscountInt);
 
         // Reverse the order's rent calculation to obtain the original pricePerDay.
         // For original order when days > 1:
+        // subsequentRate = pricePerDay * (1 - rentDiscountPct/100)
         // rentAmount = pricePerDay + subsequentRate * (originalDays - 1)
-        // where subsequentRate = pricePerDay * (rentDiscountPct / 100)
-        // => rentAmount = pricePerDay * (1 + (originalDays - 1) * rentDiscountPct / 100)
+        // => rentAmount = pricePerDay * (1 + (originalDays - 1) * (1 - rentDiscountPct/100))
         BigDecimal pricePerDay;
         if (originalDays <= 1) {
             pricePerDay = rentAmount;
         } else {
-            BigDecimal multiplier = BigDecimal.ONE.add(new BigDecimal(originalDays - 1).multiply(rentDiscountPct).divide(new BigDecimal(100), 8, RoundingMode.HALF_UP));
+            BigDecimal one = BigDecimal.ONE;
+            BigDecimal discountFrac = rentDiscountPct.divide(new BigDecimal(100), 8, RoundingMode.HALF_UP);
+            BigDecimal subsequentFrac = one.subtract(discountFrac);
+            BigDecimal multiplier = one.add(new BigDecimal(originalDays - 1).multiply(subsequentFrac));
             // protect against division by zero
             if (multiplier.compareTo(BigDecimal.ZERO) == 0) return BigDecimal.ZERO;
             pricePerDay = rentAmount.divide(multiplier, 8, RoundingMode.HALF_UP);
         }
 
         // subsequent-day rate used for extension (same as in original order)
-        BigDecimal subsequentRate = pricePerDay.multiply(rentDiscountPct).divide(new BigDecimal(100), 8, RoundingMode.HALF_UP);
+        BigDecimal subsequentRate = pricePerDay.multiply(BigDecimal.ONE.subtract(rentDiscountPct.divide(new BigDecimal(100), 8, RoundingMode.HALF_UP)));
         BigDecimal total = subsequentRate.multiply(new BigDecimal(extendDays));
         return total.setScale(2, RoundingMode.HALF_UP);
     }

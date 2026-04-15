@@ -1,6 +1,6 @@
 package com.cosmate.dto.request;
 
-import jakarta.validation.constraints.Pattern;
+import com.cosmate.validator.ValidPhoneNumber;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -9,6 +9,6 @@ public class UpdateProfileRequest {
     @Size(max = 255)
     private String fullName;
 
-    @Pattern(regexp = "^(?:\\+84|0)[0-9]{9,10}$", message = "INVALID_PHONE")
+    @ValidPhoneNumber
     private String phone;
 }

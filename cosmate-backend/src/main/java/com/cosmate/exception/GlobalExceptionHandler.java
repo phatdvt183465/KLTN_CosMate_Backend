@@ -1,13 +1,35 @@
 package com.cosmate.exception;
 
 import com.cosmate.dto.response.ApiResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationException(MethodArgumentNotValidException ex) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        for (FieldError fieldError : ex.getBindingResult().getFieldErrors()) {
+            errors.put(fieldError.getField(), fieldError.getDefaultMessage());
+        }
+
+        ApiResponse<Map<String, String>> response = ApiResponse.<Map<String, String>>builder()
+                .code(400)
+                .message("Validation failed")
+                .result(errors)
+                .build();
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
 
     @ExceptionHandler(AppException.class)
     public ResponseEntity<ApiResponse<Void>> handleAppException(AppException ex) {
@@ -28,7 +50,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Void>> handleUnknownException(Exception ex) {
+    public ResponseEntity<ApiResponse<Void>> handleUnknownException(Exception ex, HttpServletRequest request) {
         ApiResponse<Void> response = ApiResponse.<Void>builder()
                 .code(ErrorCode.UNCATEGORIZED_EXCEPTION.getCode())
                 .message(ex.getMessage() != null ? ex.getMessage() : ErrorCode.UNCATEGORIZED_EXCEPTION.getMessage())

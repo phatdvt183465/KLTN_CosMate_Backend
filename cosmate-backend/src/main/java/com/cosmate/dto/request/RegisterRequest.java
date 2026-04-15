@@ -1,5 +1,6 @@
 package com.cosmate.dto.request;
 
+import com.cosmate.validator.ValidPassword;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -11,6 +12,7 @@ public class RegisterRequest {
 
     @NotBlank(message = "USERNAME_INVALID")
     @Size(min = 3, max = 100)
+    @Pattern(regexp = RequestValidation.USERNAME_REGEX, message = "USERNAME_INVALID")
     private String username;
 
     @NotBlank(message = "EMAIL_INVALID")
@@ -19,10 +21,11 @@ public class RegisterRequest {
 
     // Make password optional here; service will validate when needed
     @Size(min = 6, max = 128)
+    @ValidPassword
     private String password;
 
     // optional phone; basic Vietnam phone pattern: starts with +84 or 0 then 9-10 digits
-    @Pattern(regexp = "^(?:\\+84|0)[0-9]{9,10}$", message = "INVALID_PHONE")
+    @Pattern(regexp = RequestValidation.PHONE_REGEX, message = "INVALID_PHONE")
     private String phone;
 
     // optional

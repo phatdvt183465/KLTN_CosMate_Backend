@@ -6,6 +6,7 @@ import com.cosmate.dto.request.PoseScoringRequest;
 import com.cosmate.dto.request.RecommendationRequest;
 import com.cosmate.dto.request.SearchByImageRequest;
 import com.cosmate.dto.response.ApiResponse;
+import jakarta.validation.Valid;
 import com.cosmate.dto.response.CustomAnswerResponse;
 import com.cosmate.dto.response.PoseScoringResponse;
 import com.cosmate.dto.response.SearchResponse;
@@ -32,7 +33,7 @@ public class AIController {
 
     // API tìm kiếm: POST /api/search/ai
     @PostMapping(value = "/ai", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<List<SearchResponse>> searchByAI(@ModelAttribute SearchByImageRequest request) {
+    public ApiResponse<List<SearchResponse>> searchByAI(@Valid @ModelAttribute SearchByImageRequest request) {
         try {
             // Cố gắng gọi AI trước
             List<SearchResponse> results = aiService.searchSimilarCostumes(request);
@@ -62,7 +63,7 @@ public class AIController {
     }
 
     @PostMapping("/recommend")
-    public ApiResponse<List<SearchResponse>> recommend(@RequestBody RecommendationRequest request) {
+    public ApiResponse<List<SearchResponse>> recommend(@Valid @RequestBody RecommendationRequest request) {
         return ApiResponse.<List<SearchResponse>>builder()
                 .result(aiService.recommendCosplay(request))
                 .message("Đây là các bộ đồ phù hợp với cá tính của bạn!")
@@ -71,7 +72,7 @@ public class AIController {
 
     // API Chấm điểm Pose: POST /api/search/pose-score
     @PostMapping(value = "/pose-score", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<PoseScoringResponse> scorePose(@ModelAttribute PoseScoringRequest request) {
+    public ApiResponse<PoseScoringResponse> scorePose(@Valid @ModelAttribute PoseScoringRequest request) {
         return ApiResponse.<PoseScoringResponse>builder()
                 .result(aiService.scorePose(request))
                 .message("Chấm điểm thành công!")
@@ -158,7 +159,7 @@ public class AIController {
     }
 
     @PostMapping("/analyze-custom-answers")
-    public ApiResponse<List<CustomAnswerResponse>> analyzeCustomAnswersBatch(@RequestBody List<CustomAnswerRequest> requests) {
+    public ApiResponse<List<CustomAnswerResponse>> analyzeCustomAnswersBatch(@Valid @RequestBody List<@Valid CustomAnswerRequest> requests) {
         return ApiResponse.<List<CustomAnswerResponse>>builder()
                 .result(aiService.analyzeCustomAnswersBatch(requests))
                 .message("Phân tích hàng loạt câu trả lời thành công!")

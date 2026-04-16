@@ -82,8 +82,10 @@ public class MenuItemServiceImpl implements MenuItemService {
         menuItem.setDescription(request.getDescription());
         menuItem.setDisplayOrder(request.getDisplayOrder() != null ? request.getDisplayOrder() : 0);
         menuItem.setIsActive(true);
-        menuItem.setRequiredPermission(request.getRequiredPermission());
-        menuItem.setVisibleForRoles(request.getVisibleForRoles());
+
+        if (request.getRequiredPermission() != null) {
+            menuItem.setRequiredPermission(request.getRequiredPermission());
+        }
 
         if (request.getParentId() != null) {
             MenuItem parent = menuItemRepository.findById(request.getParentId())
@@ -102,16 +104,28 @@ public class MenuItemServiceImpl implements MenuItemService {
         MenuItem menuItem = menuItemRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("MenuItem", "id", id));
 
-        if (request.getTitle() != null) menuItem.setTitle(request.getTitle());
-        if (request.getUrl() != null) menuItem.setUrl(request.getUrl());
-        if (request.getIcon() != null) menuItem.setIcon(request.getIcon());
-        if (request.getDescription() != null) menuItem.setDescription(request.getDescription());
-        if (request.getDisplayOrder() != null) menuItem.setDisplayOrder(request.getDisplayOrder());
-        if (request.getRequiredPermission() != null) menuItem.setRequiredPermission(request.getRequiredPermission());
-        if (request.getVisibleForRoles() != null) menuItem.setVisibleForRoles(request.getVisibleForRoles());
-
+        if (request.getTitle() != null) {
+            menuItem.setTitle(request.getTitle());
+        }
+        if (request.getUrl() != null) {
+            menuItem.setUrl(request.getUrl());
+        }
+        if (request.getIcon() != null) {
+            menuItem.setIcon(request.getIcon());
+        }
+        if (request.getDescription() != null) {
+            menuItem.setDescription(request.getDescription());
+        }
+        if (request.getDisplayOrder() != null) {
+            menuItem.setDisplayOrder(request.getDisplayOrder());
+        }
+        if (request.getRequiredPermission() != null) {
+            menuItem.setRequiredPermission(request.getRequiredPermission());
+        }
         if (request.getParentId() != null) {
-            if (request.getParentId().equals(id)) throw new BadRequestException("MenuItem cannot be its own parent");
+            if (request.getParentId().equals(id)) {
+                throw new BadRequestException("MenuItem cannot be its own parent");
+            }
             MenuItem parent = menuItemRepository.findById(request.getParentId())
                     .orElseThrow(() -> new ResourceNotFoundException("MenuItem", "id", request.getParentId()));
             menuItem.setParent(parent);
@@ -151,15 +165,17 @@ public class MenuItemServiceImpl implements MenuItemService {
         response.setDisplayOrder(menuItem.getDisplayOrder());
         response.setIsActive(menuItem.getIsActive());
         response.setRequiredPermission(menuItem.getRequiredPermission());
-        response.setVisibleForRoles(menuItem.getVisibleForRoles());
         response.setCreatedAt(menuItem.getCreatedAt());
         response.setUpdatedAt(menuItem.getUpdatedAt());
 
-        if (menuItem.getMenu() != null) response.setMenuId(menuItem.getMenu().getId());
-        if (menuItem.getParent() != null) response.setParentId(menuItem.getParent().getId());
-        if (menuItem.getChildren() != null && !menuItem.getChildren().isEmpty()) {
-            response.setChildren(menuItem.getChildren().stream().map(this::convertToResponse).collect(Collectors.toList()));
+        if (menuItem.getMenu() != null) {
+            response.setMenuId(menuItem.getMenu().getId());
         }
+
+        if (menuItem.getParent() != null) {
+            response.setParentId(menuItem.getParent().getId());
+        }
+
         return response;
     }
 }

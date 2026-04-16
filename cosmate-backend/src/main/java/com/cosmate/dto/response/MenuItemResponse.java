@@ -17,7 +17,6 @@ public class MenuItemResponse {
     private Integer displayOrder;
     private Boolean isActive;
     private String requiredPermission;
-    private List<String> visibleForRoles;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<MenuItemResponse> children;

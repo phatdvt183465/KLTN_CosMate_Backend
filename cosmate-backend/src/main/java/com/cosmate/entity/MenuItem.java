@@ -48,19 +48,14 @@ public class MenuItem {
     @Column(length = 50)
     private String icon;
 
-    @Column(name = "display_order")
+    @Column(name = "display_order", updatable = false)
     private Integer displayOrder;
 
-    @Column(name = "is_active")
+    @Column(name = "is_active", updatable = false)
     private Boolean isActive = true;
 
     @Column(name = "required_permission", length = 100)
     private String requiredPermission;
-
-    @ElementCollection
-    @CollectionTable(name = "menu_item_visible_roles", joinColumns = @JoinColumn(name = "menu_item_id"))
-    @Column(name = "role_name")
-    private List<String> visibleForRoles = new ArrayList<>();
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

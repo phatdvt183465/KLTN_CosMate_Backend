@@ -31,16 +31,11 @@ public class Menu {
     @Column(length = 500)
     private String description;
 
-    @Column(name = "display_order")
+    @Column(name = "display_order", updatable = false)
     private Integer displayOrder;
 
-    @Column(name = "is_active")
+    @Column(name = "is_active", updatable = false)
     private Boolean isActive = true;
-
-    @ElementCollection
-    @CollectionTable(name = "menu_visible_roles", joinColumns = @JoinColumn(name = "menu_id"))
-    @Column(name = "role_name")
-    private List<String> visibleForRoles = new ArrayList<>();
 
     @OneToMany(mappedBy = "menu", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<MenuItem> menuItems = new ArrayList<>();

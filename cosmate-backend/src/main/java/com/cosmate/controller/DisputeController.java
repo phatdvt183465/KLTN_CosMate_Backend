@@ -6,6 +6,7 @@ import com.cosmate.service.DisputeService;
 import com.cosmate.service.ProviderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -50,7 +51,7 @@ public class DisputeController {
     }
 
     // Provider or cosplayer opens dispute on an order
-    @PostMapping
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<Dispute> openDispute(@RequestParam Integer orderId,
                                             @RequestPart(required = false) String reason,
                                             @RequestPart(name = "files", required = false) org.springframework.web.multipart.MultipartFile[] files) {

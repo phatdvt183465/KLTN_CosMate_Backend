@@ -1,6 +1,5 @@
 package com.cosmate.controller;
 
-import com.cosmate.dto.response.AdminAuditLogResponse;
 import com.cosmate.dto.response.AdminDashboardSummaryResponse;
 import com.cosmate.dto.response.AdminReportSeriesPointResponse;
 import com.cosmate.dto.response.ApiResponse;
@@ -73,12 +72,4 @@ public class AdminDashboardController {
                 .build();
     }
 
-    @GetMapping("/audit-logs")
-    public ApiResponse<List<AdminAuditLogResponse>> auditLogs() {
-        return ApiResponse.<List<AdminAuditLogResponse>>builder()
-                .code(0)
-                .message("OK")
-                .result(adminDashboardService.getAuditLogs())
-                .build();
-    }
 }

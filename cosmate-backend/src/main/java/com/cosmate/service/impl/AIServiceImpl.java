@@ -12,7 +12,13 @@ import com.cosmate.entity.Costume;
 import com.cosmate.entity.CostumeImage;
 import com.cosmate.entity.PoseScore;
 import com.cosmate.entity.User;
-import com.cosmate.repository.*;
+import com.cosmate.configuration.AiKnowledgeBase;
+import com.cosmate.repository.CharacterRepository;
+import com.cosmate.repository.CostumeImageRepository;
+import com.cosmate.repository.CostumeRepository;
+import com.cosmate.repository.OrderDetailRepository;
+import com.cosmate.repository.PoseScoreRepository;
+import com.cosmate.repository.UserRepository;
 import com.cosmate.service.AIService;
 import com.cosmate.service.FirebaseStorageService;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -30,12 +36,24 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -45,7 +63,7 @@ public class AIServiceImpl implements AIService {
 
     private final CostumeImageRepository costumeImageRepository;
     private final ObjectMapper objectMapper;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final CostumeRepository costumeRepository;
     private final AiKnowledgeBase aiKnowledgeBase;
     private final PoseScoreRepository poseScoreRepository;
@@ -387,10 +405,10 @@ public class AIServiceImpl implements AIService {
                     .path("content").path("parts").get(0)
                     .path("text").asText().trim();
 
-            if (resultJson.startsWith("```json")) {
-                resultJson = resultJson.substring(7, resultJson.length() - 3).trim();
-            } else if (resultJson.startsWith("```")) {
-                resultJson = resultJson.substring(3, resultJson.length() - 3).trim();
+            int startIndex = resultJson.indexOf('{');
+            int endIndex = resultJson.lastIndexOf('}');
+            if (startIndex >= 0 && endIndex > startIndex) {
+                resultJson = resultJson.substring(startIndex, endIndex + 1).trim();
             }
 
             JsonNode resultNode = objectMapper.readTree(resultJson);
@@ -451,6 +469,21 @@ public class AIServiceImpl implements AIService {
     }
 
     // --- Các hàm tiện ích (Utility Methods) ---
+
+    private String extractJsonArray(String rawText) {
+        if (rawText == null) return "[]";
+        String text = rawText.trim();
+        int start = text.indexOf('[');
+        int end = text.lastIndexOf(']');
+        if (start >= 0 && end > start) {
+            return text.substring(start, end + 1);
+        }
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\[[\\s\\S]*\\]").matcher(text);
+        if (matcher.find()) {
+            return matcher.group();
+        }
+        return text;
+    }
 
     private List<Double> callGeminiGetVector(String text) {
         try {
@@ -582,6 +615,7 @@ public class AIServiceImpl implements AIService {
             if (customPrompt != null && !customPrompt.trim().isEmpty()) {
                 promptStr += "ĐẶC BIỆT LƯU Ý YÊU CẦU SAU TỪ NGƯỜI DÙNG: " + customPrompt + ". ";
             }
+            promptStr += " QUAN TRỌNG: TUYỆT ĐỐI KHÔNG chào hỏi, KHÔNG xưng hô (không dùng từ bạn hay tôi). KHÔNG có câu mở bài hay kết luận. CHỈ TRẢ VỀ trực tiếp nội dung mô tả sản phẩm để gắn thẳng lên website.";
 
             ObjectNode textPart = objectMapper.createObjectNode();
             textPart.put("text", promptStr);
@@ -833,12 +867,8 @@ public class AIServiceImpl implements AIService {
                         .path("content").path("parts").get(0)
                         .path("text").asText().trim();
 
-                // Gọt bỏ markdown rác
-                if (resultJson.startsWith("```json")) {
-                    resultJson = resultJson.substring(7, resultJson.length() - 3).trim();
-                } else if (resultJson.startsWith("```")) {
-                    resultJson = resultJson.substring(3, resultJson.length() - 3).trim();
-                }
+                // Bóc tách mảng JSON an toàn hơn khi AI sinh thêm text rác
+                resultJson = extractJsonArray(resultJson);
 
                 // 3. MAP KẾT QUẢ VÀO DANH SÁCH TRẢ VỀ THEO ĐÚNG THỨ TỰ
                 JsonNode resultNodeArray = objectMapper.readTree(resultJson);

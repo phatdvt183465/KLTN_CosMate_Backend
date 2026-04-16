@@ -6,20 +6,21 @@ import com.cosmate.dto.request.PoseScoringRequest;
 import com.cosmate.dto.request.RecommendationRequest;
 import com.cosmate.dto.request.SearchByImageRequest;
 import com.cosmate.dto.response.ApiResponse;
-import jakarta.validation.Valid;
 import com.cosmate.dto.response.CustomAnswerResponse;
 import com.cosmate.dto.response.PoseScoringResponse;
 import com.cosmate.dto.response.SearchResponse;
-import com.cosmate.repository.PoseScoreRepository;
+import com.cosmate.entity.PoseScore;
 import com.cosmate.service.AIService;
 import com.fasterxml.jackson.databind.JsonNode;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import com.cosmate.entity.PoseScore;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -73,6 +74,10 @@ public class AIController {
     // API Chấm điểm Pose: POST /api/search/pose-score
     @PostMapping(value = "/pose-score", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<PoseScoringResponse> scorePose(@Valid @ModelAttribute PoseScoringRequest request) {
+        Authentication authentication = SecurityContextHolder.getContext() != null ? SecurityContextHolder.getContext().getAuthentication() : null;
+        if (authentication == null || authentication.getPrincipal() == null || "anonymousUser".equals(authentication.getPrincipal())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Vui lòng đăng nhập để thực hiện chức năng này!");
+        }
         return ApiResponse.<PoseScoringResponse>builder()
                 .result(aiService.scorePose(request))
                 .message("Chấm điểm thành công!")

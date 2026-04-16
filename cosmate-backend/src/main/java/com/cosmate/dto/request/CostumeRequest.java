@@ -20,23 +20,18 @@ public class CostumeRequest {
     @Size(max = 4000)
     private String description;
 
-    @NotBlank(message = "COSTUME_SIZE_INVALID")
-    @Size(max = 100)
     private String size;
 
-    @NotBlank(message = "RENT_PURPOSE_INVALID")
     @Size(max = 255)
     private String rentPurpose;
 
-    @NotNull(message = "NUMBER_OF_ITEMS_INVALID")
     @Min(value = 1, message = "NUMBER_OF_ITEMS_INVALID")
     private Integer numberOfItems;
 
     @NotNull(message = "PRICE_PER_DAY_INVALID")
     @DecimalMin(value = "0.0", inclusive = true, message = "PRICE_PER_DAY_INVALID")
     private BigDecimal pricePerDay;
-
-    @NotNull(message = "DEPOSIT_AMOUNT_INVALID")
+    
     @DecimalMin(value = "0.0", inclusive = true, message = "DEPOSIT_AMOUNT_INVALID")
     private BigDecimal depositAmount;
 

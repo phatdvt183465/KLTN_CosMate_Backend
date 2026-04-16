@@ -2,7 +2,14 @@ package com.cosmate.service.impl;
 
 import com.cosmate.dto.request.CostumeRequest;
 import com.cosmate.dto.response.CostumeResponse;
-import com.cosmate.entity.*;
+import com.cosmate.entity.Costume;
+import com.cosmate.entity.CostumeAccessory;
+import com.cosmate.entity.CostumeImage;
+import com.cosmate.entity.CostumeRentalOption;
+import com.cosmate.entity.CostumeSurcharge;
+import com.cosmate.entity.Notification;
+import com.cosmate.entity.Provider;
+import com.cosmate.entity.WishlistCostume;
 import com.cosmate.exception.AppException;
 import com.cosmate.exception.ErrorCode;
 import com.cosmate.repository.CostumeRepository;
@@ -17,14 +24,19 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -73,8 +85,7 @@ public class CostumeServiceImpl implements CostumeService {
         // Lưu bộ đồ để lấy ID và URL ảnh chính thức
         Costume savedCostume = costumeRepository.save(costume);
 
-        // GỌI CHẠY NGẦM TẠI ĐÂY
-        aiService.generateAndSaveVector(savedCostume.getId(), true, true);
+        registerVectorGenerationAfterCommit(savedCostume.getId(), true, true);
 
         return mapToResponse(savedCostume);
     }
@@ -140,9 +151,8 @@ public class CostumeServiceImpl implements CostumeService {
             handleRentalOptions(costume, request.getRentalOptions());
         }
 
-        // LƯU DB XONG THÌ GỌI AI CHẠY NGẦM ĐỂ CẬP NHẬT LẠI DUAL-VECTOR (Vì Tên, Mô tả hoặc Ảnh có thể đã đổi)
         if (isTextChanged || isImageChanged) {
-            aiService.generateAndSaveVector(costume.getId(), isTextChanged, isImageChanged);
+            registerVectorGenerationAfterCommit(costume.getId(), isTextChanged, isImageChanged);
         }
 
         return mapToResponse(costume); // Thay cho costumeRepository.save(costume) nếu không cần thiết
@@ -226,6 +236,20 @@ public class CostumeServiceImpl implements CostumeService {
     }
 
     // --- Private Business Logic Helpers ---
+
+    private void registerVectorGenerationAfterCommit(Integer costumeId, boolean updateText, boolean updateImage) {
+        if (!updateText && !updateImage) return;
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    aiService.generateAndSaveVector(costumeId, updateText, updateImage);
+                }
+            });
+        } else {
+            aiService.generateAndSaveVector(costumeId, updateText, updateImage);
+        }
+    }
 
     private void mapBaseInfo(Costume costume, CostumeRequest request) {
         costume.setName(request.getName());

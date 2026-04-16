@@ -1,19 +1,23 @@
 package com.cosmate.dto.response;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
-import java.time.LocalDateTime;
+import lombok.NoArgsConstructor;
+
 import java.util.List;
 import java.util.UUID;
 
 @Data
-public class MenuResponse {
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class AdminMenuPermissionResponse {
     private UUID id;
     private String name;
     private String description;
     private Integer displayOrder;
     private Boolean isActive;
     private List<String> visibleForRoles;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
-    private List<MenuItemResponse> menuItems;
+    private List<MenuItemPermissionResponse> menuItems;
 }

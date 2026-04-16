@@ -127,6 +127,7 @@ public class MenuServiceImpl implements MenuService {
         response.setDescription(menu.getDescription());
         response.setDisplayOrder(menu.getDisplayOrder());
         response.setIsActive(menu.getIsActive());
+        response.setVisibleForRoles(menu.getVisibleForRoles());
         response.setCreatedAt(menu.getCreatedAt());
         response.setUpdatedAt(menu.getUpdatedAt());
 
@@ -150,6 +151,7 @@ public class MenuServiceImpl implements MenuService {
         response.setDisplayOrder(menuItem.getDisplayOrder());
         response.setIsActive(menuItem.getIsActive());
         response.setRequiredPermission(menuItem.getRequiredPermission());
+        response.setVisibleForRoles(menuItem.getVisibleForRoles());
         response.setCreatedAt(menuItem.getCreatedAt());
         response.setUpdatedAt(menuItem.getUpdatedAt());
 

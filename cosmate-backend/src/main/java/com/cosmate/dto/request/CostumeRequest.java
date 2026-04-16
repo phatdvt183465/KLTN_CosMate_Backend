@@ -31,7 +31,7 @@ public class CostumeRequest {
     @NotNull(message = "PRICE_PER_DAY_INVALID")
     @DecimalMin(value = "0.0", inclusive = true, message = "PRICE_PER_DAY_INVALID")
     private BigDecimal pricePerDay;
-    
+
     @DecimalMin(value = "0.0", inclusive = true, message = "DEPOSIT_AMOUNT_INVALID")
     private BigDecimal depositAmount;
 

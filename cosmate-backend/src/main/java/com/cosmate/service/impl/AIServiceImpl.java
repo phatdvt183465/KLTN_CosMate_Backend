@@ -265,7 +265,7 @@ public class AIServiceImpl implements AIService {
     }
 
     // JOB CHẠY NGẦM MỖI 12 TIẾNG TÍNH TOÁN LỌC CỘNG TÁC
-    @org.springframework.scheduling.annotation.Scheduled(fixedRate = 12 * 60 * 60 * 1000L)
+    @org.springframework.scheduling.annotation.Scheduled(cron = "0 0 4 * * ?")
     public void refreshArchetypeCache() {
         try {
             log.info("Bắt đầu Refresh Archetype Cache...");
@@ -550,7 +550,7 @@ public class AIServiceImpl implements AIService {
         }
     }
 
-    @org.springframework.scheduling.annotation.Scheduled(fixedRate = 14400000L)
+    @org.springframework.scheduling.annotation.Scheduled(cron = "0 0 3 * * ?")
     @Override
     public void generateVectorsForMissingImages() {
         List<Costume> allCostumes = costumeRepository.findCostumesMissingVector();

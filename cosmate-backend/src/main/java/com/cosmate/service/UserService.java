@@ -29,6 +29,7 @@ public interface UserService {
     void unbanUser(Integer targetUserId);
 
     List<UserListItem> listUsers();
+    List<UserListItem> searchUsers(String keyword);
 
     // New methods for Google token flows
     String loginWithGoogleToken(GoogleTokenRequest request);

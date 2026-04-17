@@ -333,6 +333,23 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    public List<UserListItem> searchUsers(String keyword) {
+        String normalizedKeyword = keyword == null ? "" : keyword.trim();
+        if (normalizedKeyword.isEmpty()) {
+            return List.of();
+        }
+
+        return userRepository.findByFullNameContainingIgnoreCaseAndStatus(normalizedKeyword, "ACTIVE")
+                .stream()
+                .map(u -> UserListItem.builder()
+                        .id(u.getId())
+                        .fullName(u.getFullName())
+                        .avatarUrl(u.getAvatarUrl())
+                        .build())
+                .toList();
+    }
+
+    @Override
     public String loginWithGoogleToken(GoogleTokenRequest request) {
         Map<String, Object> payload = verifyGoogleIdToken(request.getIdToken());
         if (payload == null) throw new AppException(ErrorCode.INVALID_CREDENTIALS);

@@ -294,6 +294,16 @@ public class UserController {
         return ResponseEntity.ok(api);
     }
 
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponse<List<UserListItem>>> searchUsers(@RequestParam String keyword) {
+        List<UserListItem> list = userService.searchUsers(keyword);
+        ApiResponse<List<UserListItem>> api = new ApiResponse<>();
+        api.setCode(0);
+        api.setMessage("OK");
+        api.setResult(list);
+        return ResponseEntity.ok(api);
+    }
+
     @PostMapping(value = "/debug/echo-multipart", consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
     public ResponseEntity<ApiResponse<Map<String, Object>>> debugEchoMultipart(MultipartHttpServletRequest req) {
         Map<String, Object> result = new java.util.HashMap<>();

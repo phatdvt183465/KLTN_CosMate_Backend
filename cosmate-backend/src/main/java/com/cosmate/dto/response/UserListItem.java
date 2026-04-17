@@ -12,6 +12,7 @@ public class UserListItem {
     private String username;
     private String email;
     private String fullName;
+    private String avatarUrl;
     private String phone;
     private String status;
     private String role;

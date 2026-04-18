@@ -64,7 +64,24 @@ public class ChatServiceImpl implements ChatService {
     @Override
     @Transactional
     public ChatMessage saveMessageAndBroadcast(ChatMessageRequest request) {
-        // 1. Lưu tin nhắn
+        ChatMessage savedMessage = persistAndBroadcast(request);
+        return savedMessage;
+    }
+
+    @Override
+    @Transactional
+    public ChatMessageResponse sendMessage(ChatMessageRequest request) {
+        ChatMessage savedMessage = persistAndBroadcast(request);
+        return mapToResponse(savedMessage);
+    }
+
+    private ChatMessage persistAndBroadcast(ChatMessageRequest request) {
+        if (request.getRoomId() == null || request.getSenderId() == null) {
+            throw new IllegalArgumentException("roomId và senderId không được để trống");
+        }
+
+        ChatRoom room = chatRoomRepository.findById(request.getRoomId()).orElseThrow();
+
         ChatMessage newMessage = new ChatMessage();
         newMessage.setRoomId(request.getRoomId());
         newMessage.setSenderId(request.getSenderId());
@@ -73,18 +90,14 @@ public class ChatServiceImpl implements ChatService {
         newMessage.setIsRead(false);
         ChatMessage savedMessage = chatMessageRepository.save(newMessage);
 
-        // 2. Cập nhật lastMessageAt
-        ChatRoom room = chatRoomRepository.findById(request.getRoomId()).orElseThrow();
         room.setLastMessageAt(LocalDateTime.now());
         chatRoomRepository.save(room);
 
-        // 3. Bắn WebSocket qua phòng chat
         ChatMessageResponse responseDto = mapToResponse(savedMessage);
         messagingTemplate.convertAndSend("/topic/room/" + request.getRoomId(), responseDto);
 
-        // 4. BẮN NOTIFICATION BẰNG CÁCH GỌI SERVICE CŨ
         Integer receiverId = room.getUser1Id().equals(request.getSenderId()) ? room.getUser2Id() : room.getUser1Id();
-        String senderName = getDisplayName(request.getSenderId()); // Dùng tên Shop nếu có
+        String senderName = getDisplayName(request.getSenderId());
 
         Notification noti = Notification.builder()
                 .user(User.builder().id(receiverId).build())
@@ -94,7 +107,7 @@ public class ChatServiceImpl implements ChatService {
                 .sendAt(LocalDateTime.now())
                 .isRead(false)
                 .build();
-        notificationService.create(noti); // Tự động chạy logic cũ của ông (lưu DB, gửi Email, v.v.)
+        notificationService.create(noti);
 
         return savedMessage;
     }

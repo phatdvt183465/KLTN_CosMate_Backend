@@ -17,6 +17,8 @@ public interface ChatService {
 
     ChatMessage saveMessageAndBroadcast(ChatMessageRequest request);
 
+    ChatMessageResponse sendMessage(ChatMessageRequest request);
+
     Page<ChatMessageResponse> getMessageHistory(Integer roomId, Pageable pageable);
 
     ChatPartnerProfileResponse getPartnerProfile(Integer roomId, Integer currentUserId);

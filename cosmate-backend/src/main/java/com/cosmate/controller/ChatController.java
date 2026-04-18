@@ -80,6 +80,14 @@ public class ChatController {
         chatService.saveMessageAndBroadcast(request);
     }
 
+    @PostMapping("/messages")
+    public ApiResponse<ChatMessageResponse> sendMessage(@RequestBody ChatMessageRequest request) {
+        return ApiResponse.<ChatMessageResponse>builder()
+                .result(chatService.sendMessage(request))
+                .message("Gửi tin nhắn thành công")
+                .build();
+    }
+
     // API Lấy danh sách phòng chat của 1 user (Làm giao diện Inbox)
     @GetMapping("/rooms/user/{userId}")
     public ApiResponse<List<ChatRoomResponse>> getUserChatRooms(@PathVariable Integer userId) {

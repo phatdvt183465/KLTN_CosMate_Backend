@@ -1,6 +1,7 @@
 package com.cosmate.service.impl;
 
 import com.cosmate.configuration.AiKnowledgeBase;
+import com.cosmate.configuration.AiModelRouter;
 import com.cosmate.dto.request.CustomAnswerRequest;
 import com.cosmate.dto.request.PoseScoringRequest;
 import com.cosmate.dto.request.RecommendationRequest;
@@ -32,14 +33,24 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
+import org.springframework.retry.annotation.Retryable;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -72,13 +83,11 @@ public class AIServiceImpl implements AIService {
     private final CharacterRepository characterRepository;
     private final ConcurrentHashMap<String, List<Integer>> archetypeTopCache = new ConcurrentHashMap<>();
     private final UserRepository userRepository;
+    private final AiModelRouter aiModelRouter; // Thêm vào danh sách inject của Lombok @RequiredArgsConstructor
 
     @Value("${gemini.api.key}")
     private String apiKey;
 
-    // Các hằng số cho Model AI của Google
-    private static final String EMBEDDING_MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent";
-    private static final String GENERATION_MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent";
     /**
      * Tìm kiếm các trang phục có độ tương đồng cao bằng thuật toán Cosine Similarity.
      */
@@ -296,48 +305,29 @@ public class AIServiceImpl implements AIService {
         if (files == null || files.isEmpty()) return;
 
         try {
-            // [FIXED] Nối đúng URL và API Key
-            String url = GENERATION_MODEL_URL + "?key=" + apiKey;
-
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
 
-            // 1. Tạo Prompt dùng chung cho toàn bộ danh sách ảnh
             ObjectNode textPart = objectMapper.createObjectNode();
             textPart.put("text", "Bạn là một AI kiểm duyệt nội dung. Hãy kiểm tra toàn bộ các bức ảnh được đính kèm này. Nếu CÓ BẤT KỲ bức ảnh nào chứa nội dung 18+, bạo lực, máu me, hoặc vi phạm tiêu chuẩn cộng đồng, hãy trả về CHÍNH XÁC một chữ: 'UNSAFE'. Nếu TẤT CẢ đều an toàn, trả về 'SAFE'.");
             partsNode.add(textPart);
 
-            // 2. Mã hóa toàn bộ ảnh sang Base64 và gộp chung vào 1 Request
             for (MultipartFile file : files) {
                 if (file == null || file.isEmpty()) continue;
-
                 String base64Image = java.util.Base64.getEncoder().encodeToString(file.getBytes());
                 String mimeType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
 
                 ObjectNode inlineData = objectMapper.createObjectNode();
                 inlineData.put("mime_type", mimeType);
                 inlineData.put("data", base64Image);
-
-                ObjectNode imagePart = objectMapper.createObjectNode();
-                imagePart.set("inline_data", inlineData);
-                partsNode.add(imagePart);
+                partsNode.add(objectMapper.createObjectNode().set("inline_data", inlineData));
             }
 
-            // 3. Xây dựng payload JSON
-            ObjectNode contentNode = objectMapper.createObjectNode();
-            contentNode.set("parts", partsNode);
-            ArrayNode contentsArray = objectMapper.createArrayNode();
-            contentsArray.add(contentNode);
-            body.set("contents", contentsArray);
+            body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
+            // === GỌI MODEL MỚI (isComplex = false) ===
+            JsonNode response = callGeminiGenerateContent(body, false);
 
-            // 4. Bắn request sang Gemini và LƯU LẠI RESPONSE ĐỂ KIỂM TRA
-            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
-
-            // 5. Kiểm tra xem nó có chửi thề không
             if (response != null && response.has("candidates")) {
                 String resultText = response.path("candidates").get(0)
                         .path("content").path("parts").get(0)
@@ -359,11 +349,9 @@ public class AIServiceImpl implements AIService {
     @Override
     public PoseScoringResponse scorePose(PoseScoringRequest request) {
         try {
-            String url = GENERATION_MODEL_URL + "?key=" + apiKey;
+            ObjectNode body = objectMapper.createObjectNode();
+            ArrayNode partsNode = objectMapper.createArrayNode();
 
-            List<Object> partsList = new ArrayList<>();
-
-            // 1. Nhồi Prompt text vào
             String promptText = "Bạn là một giám khảo Cosplay. Dưới đây là bộ tiêu chuẩn WCS chính thức:\n"
                     + aiKnowledgeBase.getWcsRules() + "\n"
                     + "Hãy so sánh ảnh user chụp với nhân vật '" + request.getCharacterName() + "'. ";
@@ -373,34 +361,31 @@ public class AIServiceImpl implements AIService {
             } else {
                 promptText += "Hãy dựa vào cơ sở dữ liệu của bạn về nhân vật này để chấm điểm. ";
             }
-
             promptText += "Chỉ trả về JSON định dạng: {\"score\": [Điểm tổng 1-100], \"pose_score\": [1-40], \"expression_score\": [1-40], \"costume_score\": [1-20], \"comment\": \"[Nhận xét kỹ thuật...]\"}";
-            partsList.add(Map.of("text", promptText));
 
-            // 2. Nhồi ảnh User (Bắt buộc)
+            partsNode.add(objectMapper.createObjectNode().put("text", promptText));
+
+            // Gắn ảnh User
             String base64Image = java.util.Base64.getEncoder().encodeToString(request.getImage().getBytes());
-            partsList.add(Map.of("inline_data", Map.of(
-                    "mime_type", request.getImage().getContentType() != null ? request.getImage().getContentType() : "image/jpeg",
-                    "data", base64Image
-            )));
+            ObjectNode userImageInline = objectMapper.createObjectNode();
+            userImageInline.put("mime_type", request.getImage().getContentType() != null ? request.getImage().getContentType() : "image/jpeg");
+            userImageInline.put("data", base64Image);
+            partsNode.add(objectMapper.createObjectNode().set("inline_data", userImageInline));
 
-            // 3. Nhồi ảnh Mẫu (Nếu có)
+            // Gắn ảnh mẫu (nếu có)
             if (request.getReferenceImage() != null && !request.getReferenceImage().isEmpty()) {
-                String base64RefImage = java.util.Base64.getEncoder().encodeToString(request.getReferenceImage().getBytes());
-                partsList.add(Map.of("inline_data", Map.of(
-                        "mime_type", request.getReferenceImage().getContentType() != null ? request.getReferenceImage().getContentType() : "image/jpeg",
-                        "data", base64RefImage
-                )));
+                String base64Ref = java.util.Base64.getEncoder().encodeToString(request.getReferenceImage().getBytes());
+                ObjectNode refImageInline = objectMapper.createObjectNode();
+                refImageInline.put("mime_type", request.getReferenceImage().getContentType() != null ? request.getReferenceImage().getContentType() : "image/jpeg");
+                refImageInline.put("data", base64Ref);
+                partsNode.add(objectMapper.createObjectNode().set("inline_data", refImageInline));
             }
 
-            Map<String, Object> content = Map.of("parts", partsList);
-            Map<String, Object> body = Map.of("contents", List.of(content));
+            body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+            // === GỌI MODEL MỚI (isComplex = true) ===
+            JsonNode response = callGeminiGenerateContent(body, true);
 
-            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
             String resultJson = response.path("candidates").get(0)
                     .path("content").path("parts").get(0)
                     .path("text").asText().trim();
@@ -415,33 +400,22 @@ public class AIServiceImpl implements AIService {
             int finalScore = resultNode.path("score").asInt();
             String aiComment = resultNode.path("comment").asText();
 
-            // -------------------------------------------------------------
-            // 1. UPLOAD ẢNH LÊN FIREBASE
-            // -------------------------------------------------------------
+            // Lưu Firebase và DB (giữ nguyên logic gốc)
             String originalName = request.getImage().getOriginalFilename();
             String safeName = originalName == null ? String.valueOf(System.currentTimeMillis()) : originalName.replaceAll("[^a-zA-Z0-9._-]", "_");
             String path = String.format("pose_battles/%d_%s", System.currentTimeMillis(), safeName);
-
             String uploadedImageUrl = firebaseStorageService.uploadFile(request.getImage(), path);
 
-            // -------------------------------------------------------------
-            // 2. LẤY USER ID TỪ JWT (SECURITY CONTEXT)
-            // -------------------------------------------------------------
             Integer currentUserId = null;
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-            // Kiểm tra xem user đã đăng nhập chưa (có Authentication và Principal là String userId)
             if (authentication != null && authentication.getPrincipal() instanceof String && !authentication.getPrincipal().equals("anonymousUser")) {
                 try {
                     currentUserId = Integer.parseInt((String) authentication.getPrincipal());
                 } catch (NumberFormatException e) {
-                    log.warn("Không thể parse userId từ JWT Principal: {}", authentication.getPrincipal());
+                    log.warn("Không thể parse userId từ JWT: {}", authentication.getPrincipal());
                 }
             }
 
-            // -------------------------------------------------------------
-            // 3. LƯU KẾT QUẢ VÀO DATABASE
-            // -------------------------------------------------------------
             PoseScore newScoreRecord = PoseScore.builder()
                     .cosplayerId(currentUserId)
                     .imageUrl(uploadedImageUrl)
@@ -450,10 +424,8 @@ public class AIServiceImpl implements AIService {
                     .characterName(request.getCharacterName())
                     .build();
 
-            // QUAN TRỌNG: Gán lại biến để lấy ID do Database tự động sinh ra
             newScoreRecord = poseScoreRepository.save(newScoreRecord);
 
-            // Trả về DTO đầy đủ thông tin
             return PoseScoringResponse.builder()
                     .id(newScoreRecord.getId())
                     .score(finalScore)
@@ -485,44 +457,58 @@ public class AIServiceImpl implements AIService {
         return text;
     }
 
-    private List<Double> callGeminiGetVector(String text) {
-        try {
-            // Gọi đúng tên con AI mới nhất của Google: gemini-embedding-001
-            String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=" + apiKey;
+    // 1. HÀM CHÍNH SẼ ĐƯỢC GỌI
+    // Nếu gặp lỗi 429 (TooManyRequests) hoặc 503 (Server Quá Tải), nó sẽ thử lại tối đa 3 lần.
+    // Độ trễ lần lượt: 1s -> 2s -> 4s.
+    @Retryable(
+            retryFor = {HttpClientErrorException.TooManyRequests.class, HttpServerErrorException.class},
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 1000, multiplier = 2)
+    )
+    public List<Double> callGeminiGetVector(String text) {
+        log.info("Đang gọi AI tạo Vector (Model Chính)...");
+        return executeVectorCall(text, false);
+    }
 
-            // Xây dựng JSON Body đơn giản, không màu mè
-            ObjectNode body = objectMapper.createObjectNode();
-            body.put("model", "models/gemini-embedding-001");
+    // 2. HÀM FALLBACK (RECOVER)
+    // Nếu hàm trên đã cố gắng 3 lần mà vẫn lỗi (hết Quota), Spring sẽ tự động nhảy vào đây.
+    @Recover
+    public List<Double> recoverVectorCall(Exception e, String text) {
+        log.warn("Model chính thất bại sau 3 lần thử (Lỗi: {}). Kích hoạt Model Backup...", e.getMessage());
+        return executeVectorCall(text, true); // Gọi lại với cờ isBackup = true
+    }
 
-            ObjectNode content = objectMapper.createObjectNode();
-            ArrayNode parts = objectMapper.createArrayNode();
-            ObjectNode textPart = objectMapper.createObjectNode();
+    // 3. HÀM THỰC THI CHUNG
+    private List<Double> executeVectorCall(String text, boolean isBackup) {
+        String modelName = aiModelRouter.getEmbeddingModelName(isBackup);
+        String url = aiModelRouter.buildUrl(modelName, "embedContent") + "?key=" + apiKey;
 
-            textPart.put("text", text);
-            parts.add(textPart);
-            content.set("parts", parts);
+        ObjectNode body = objectMapper.createObjectNode();
+        body.put("model", modelName);
 
-            body.set("content", content);
+        ObjectNode content = objectMapper.createObjectNode();
+        ArrayNode parts = objectMapper.createArrayNode();
+        ObjectNode textPart = objectMapper.createObjectNode();
 
-            // Gửi request
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
+        textPart.put("text", text);
+        parts.add(textPart);
+        content.set("parts", parts);
 
-            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
+        body.set("content", content);
 
-            // Bóc kết quả
-            JsonNode valuesNode = response.path("embedding").path("values");
-            List<Double> vector = new ArrayList<>();
-            if (valuesNode != null && valuesNode.isArray()) {
-                valuesNode.forEach(val -> vector.add(val.asDouble()));
-            }
-            return vector;
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
 
-        } catch (Exception e) {
-            log.error("Lỗi chi tiết khi gọi Gemini Vector: ", e);
-            throw new RuntimeException("Gọi API Gemini Embedding thất bại: " + e.getMessage());
+        // Dùng exchange hoặc postForEntity thay vì postForObject để Spring văng đúng Exception 4xx, 5xx
+        ResponseEntity<JsonNode> response = restTemplate.postForEntity(url, entity, JsonNode.class);
+
+        JsonNode valuesNode = response.getBody().path("embedding").path("values");
+        List<Double> vector = new ArrayList<>();
+        if (valuesNode != null && valuesNode.isArray()) {
+            valuesNode.forEach(val -> vector.add(val.asDouble()));
         }
+        return vector;
     }
 
     private double calculateCosineSimilarity(List<Double> vectorA, List<Double> vectorB) {
@@ -585,9 +571,6 @@ public class AIServiceImpl implements AIService {
 
                 costumeRepository.save(costume);
                 successCount++;
-
-                // Nghỉ 1 giây để Google khỏi chửi Spam API
-                Thread.sleep(1000);
             } catch (Exception e) {
                 log.error("Lỗi tạo vector cho Costume {}: {}", costume.getId(), e.getMessage());
             }
@@ -600,55 +583,36 @@ public class AIServiceImpl implements AIService {
         if (files == null || files.isEmpty()) return null;
 
         try {
-            String url = GENERATION_MODEL_URL + "?key=" + apiKey;
-
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
 
-            // [NÂNG CẤP PROMPT] Linh hoạt ghép thêm tên bộ đồ nếu có
             String promptStr = "Bạn là một chuyên gia về trang phục cosplay. ";
             if (costumeName != null && !costumeName.trim().isEmpty()) {
                 promptStr += "Tên nhân vật/bộ trang phục này là: '" + costumeName + "'. ";
             }
             promptStr += "Hãy nhìn vào những hình ảnh đính kèm và tạo ra một đoạn mô tả. ";
-            // NẾU USER CÓ TRUYỀN YÊU CẦU RIÊNG THÌ ÉP AI LÀM THEO
             if (customPrompt != null && !customPrompt.trim().isEmpty()) {
                 promptStr += "ĐẶC BIỆT LƯU Ý YÊU CẦU SAU TỪ NGƯỜI DÙNG: " + customPrompt + ". ";
             }
             promptStr += " QUAN TRỌNG: TUYỆT ĐỐI KHÔNG chào hỏi, KHÔNG xưng hô (không dùng từ bạn hay tôi). KHÔNG có câu mở bài hay kết luận. CHỈ TRẢ VỀ trực tiếp nội dung mô tả sản phẩm để gắn thẳng lên website.";
 
-            ObjectNode textPart = objectMapper.createObjectNode();
-            textPart.put("text", promptStr);
-            partsNode.add(textPart);
+            partsNode.add(objectMapper.createObjectNode().put("text", promptStr));
 
-            // Mã hóa ảnh sang Base64
             for (MultipartFile file : files) {
                 if (file == null || file.isEmpty()) continue;
-
                 String base64Image = java.util.Base64.getEncoder().encodeToString(file.getBytes());
                 String mimeType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
 
                 ObjectNode inlineData = objectMapper.createObjectNode();
                 inlineData.put("mime_type", mimeType);
                 inlineData.put("data", base64Image);
-
-                ObjectNode imagePart = objectMapper.createObjectNode();
-                imagePart.set("inline_data", inlineData);
-                partsNode.add(imagePart);
+                partsNode.add(objectMapper.createObjectNode().set("inline_data", inlineData));
             }
 
-            ObjectNode contentNode = objectMapper.createObjectNode();
-            contentNode.set("parts", partsNode);
-            ArrayNode contentsArray = objectMapper.createArrayNode();
-            contentsArray.add(contentNode);
-            body.set("contents", contentsArray);
+            body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("x-goog-api-key", apiKey); // An toàn nhét Key vào Header
-            HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
-
-            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
+            // === GỌI MODEL MỚI (isComplex = false) ===
+            JsonNode response = callGeminiGenerateContent(body, false);
 
             if (response != null && response.has("candidates")) {
                 String resultText = response.path("candidates").get(0)
@@ -666,15 +630,12 @@ public class AIServiceImpl implements AIService {
     public String extractFeaturesFromMultipleImages(List<MultipartFile> files) {
         if (files == null || files.isEmpty()) return "";
         try {
-            String url = GENERATION_MODEL_URL + "?key=" + apiKey;
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
 
-            // Prompt chung cho toàn bộ ảnh
             String promptText = "Trích xuất các từ khóa đặc trưng nhất của bộ trang phục xuất hiện trong TẤT CẢ các bức ảnh đính kèm. Tập trung vào: loại trang phục, màu sắc, họa tiết, và tên nhân vật. Chỉ trả về một chuỗi các từ khóa ngăn cách bằng dấu phẩy.";
             partsNode.add(objectMapper.createObjectNode().put("text", promptText));
 
-            // Vòng lặp add tất cả ảnh vào chung 1 Request
             for (MultipartFile file : files) {
                 if (file == null || file.isEmpty()) continue;
                 String base64Image = java.util.Base64.getEncoder().encodeToString(file.getBytes());
@@ -688,11 +649,8 @@ public class AIServiceImpl implements AIService {
 
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
-
-            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
+            // === GỌI MODEL MỚI (isComplex = false) ===
+            JsonNode response = callGeminiGenerateContent(body, false);
 
             if (response != null && response.has("candidates")) {
                 return response.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText().trim();
@@ -717,35 +675,26 @@ public class AIServiceImpl implements AIService {
     private String extractTagsFromBytes(byte[] imageBytes) {
         if (imageBytes == null || imageBytes.length == 0) return "";
         try {
-            String url = GENERATION_MODEL_URL + "?key=" + apiKey;
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
 
-            // 1. Prompt để AI nhìn ảnh và bóc tag
             String promptText = "Hãy phân tích hình ảnh bộ trang phục này và liệt kê các từ khóa (tags) đặc trưng nhất. " +
                     "Tập trung vào: loại trang phục, màu sắc, họa tiết, chất liệu, phong cách, và tên nhân vật nếu nhận diện được. " +
                     "Chỉ trả về chuỗi các từ khóa ngăn cách bằng dấu phẩy, không giải thích dài dòng.";
             partsNode.add(objectMapper.createObjectNode().put("text", promptText));
 
-            // 2. Chuyển byte[] sang Base64
             String base64Image = Base64.getEncoder().encodeToString(imageBytes);
-
             ObjectNode inlineData = objectMapper.createObjectNode();
-            inlineData.put("mime_type", "image/jpeg"); // Mặc định là jpeg vì tải từ Firebase
+            inlineData.put("mime_type", "image/jpeg");
             inlineData.put("data", base64Image);
+            partsNode.add(objectMapper.createObjectNode().set("inline_data", inlineData));
 
-            ObjectNode imagePart = objectMapper.createObjectNode();
-            imagePart.set("inline_data", inlineData);
-            partsNode.add(imagePart);
-
-            // 3. Xây dựng payload và gửi request
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
-
-            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
+            // ==========================================
+            // CODE MỚI: Gọi qua trạm phân luồng, gán False vì đây là tác vụ dễ
+            JsonNode response = callGeminiGenerateContent(body, false);
+            // ==========================================
 
             if (response != null && response.has("candidates")) {
                 return response.path("candidates").get(0)
@@ -828,19 +777,15 @@ public class AIServiceImpl implements AIService {
         if (requests == null || requests.isEmpty()) return Collections.emptyList();
 
         try {
-            String url = GENERATION_MODEL_URL + "?key=" + apiKey;
-
-            // 1. CHUẨN BỊ DATA ĐẦU VÀO DƯỚI DẠNG MẢNG JSON
             ArrayNode inputJsonArray = objectMapper.createArrayNode();
             for (int i = 0; i < requests.size(); i++) {
                 ObjectNode item = objectMapper.createObjectNode();
-                item.put("id", i); // GẮN ID ĐỂ ÉP AI KHÔNG ĐƯỢC BỎ SÓT
+                item.put("id", i);
                 item.put("question", requests.get(i).getQuestionContext());
                 item.put("answer", requests.get(i).getUserAnswer());
                 inputJsonArray.add(item);
             }
 
-            // 2. PROMPT THẦN CHÚ CHỐNG LƯỜI (ANTI-LAZY PROMPT)
             String promptText = "You are an expert psychological evaluator trained on Pennebaker LIWC and Big Five trait analysis.\n"
                     + "Tôi sẽ cung cấp một mảng JSON chứa các câu trả lời tự luận của người dùng.\n"
                     + "ĐẦU VÀO:\n" + inputJsonArray.toString() + "\n\n"
@@ -852,25 +797,21 @@ public class AIServiceImpl implements AIService {
                     + "Chỉ trả về MỘT MẢNG JSON duy nhất, không kèm giải thích, không dùng markdown. Cấu trúc mỗi phần tử:\n"
                     + "{\"id\": [id tương ứng], \"isValid\": true, \"reason\": \"Lý do ngắn\", \"scores\": {\"E\": 0, \"A\": 0, \"O\": 0}}";
 
-            Map<String, Object> textPart = Map.of("text", promptText);
-            Map<String, Object> content = Map.of("parts", List.of(textPart));
-            Map<String, Object> body = Map.of("contents", List.of(content));
+            ObjectNode body = objectMapper.createObjectNode();
+            ArrayNode partsNode = objectMapper.createArrayNode();
+            partsNode.add(objectMapper.createObjectNode().put("text", promptText));
+            body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
-
-            JsonNode response = restTemplate.postForObject(url, entity, JsonNode.class);
+            // === GỌI MODEL MỚI (isComplex = true) ===
+            JsonNode response = callGeminiGenerateContent(body, true);
 
             if (response != null && response.has("candidates")) {
                 String resultJson = response.path("candidates").get(0)
                         .path("content").path("parts").get(0)
                         .path("text").asText().trim();
 
-                // Bóc tách mảng JSON an toàn hơn khi AI sinh thêm text rác
                 resultJson = extractJsonArray(resultJson);
 
-                // 3. MAP KẾT QUẢ VÀO DANH SÁCH TRẢ VỀ THEO ĐÚNG THỨ TỰ
                 JsonNode resultNodeArray = objectMapper.readTree(resultJson);
                 List<CustomAnswerResponse> finalResponses = new ArrayList<>(Collections.nCopies(requests.size(), null));
 
@@ -895,7 +836,6 @@ public class AIServiceImpl implements AIService {
                     }
                 }
 
-                // Xử lý Fallback nếu AI vô tình bỏ sót 1 vài câu (rất hiếm khi xảy ra với prompt trên)
                 for (int i = 0; i < finalResponses.size(); i++) {
                     if (finalResponses.get(i) == null) {
                         finalResponses.set(i, CustomAnswerResponse.builder()
@@ -904,14 +844,45 @@ public class AIServiceImpl implements AIService {
                                 .build());
                     }
                 }
-
                 return finalResponses;
             }
             throw new RuntimeException("AI không trả về kết quả hợp lệ.");
-
         } catch (Exception e) {
             log.error("Lỗi khi phân tích câu trả lời Custom Batch: {}", e.getMessage(), e);
             throw new RuntimeException("Lỗi phân tích AI: " + e.getMessage());
         }
+    }
+
+    // =========================================================================
+    // CỤM HÀM GENERATE CONTENT (CHO TEXT, JSON, CHẤM ĐIỂM CÓ HỖ TRỢ RETRY)
+    // =========================================================================
+
+    @Retryable(
+            retryFor = {HttpClientErrorException.TooManyRequests.class, HttpServerErrorException.class},
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 1000, multiplier = 2)
+    )
+    public JsonNode callGeminiGenerateContent(ObjectNode body, boolean isComplexTask) {
+        log.info("Đang gọi AI Generate Content (isComplexTask: {})...", isComplexTask);
+        return executeGenerateCall(body, isComplexTask, false);
+    }
+
+    @Recover
+    public JsonNode recoverGenerateCall(Exception e, ObjectNode body, boolean isComplexTask) {
+        log.warn("Model AI text chính thất bại (Lỗi: {}). Chuyển sang Model Dự phòng...", e.getMessage());
+        return executeGenerateCall(body, isComplexTask, true);
+    }
+
+    private JsonNode executeGenerateCall(ObjectNode body, boolean isComplexTask, boolean isBackup) {
+        // Tự động điều hướng: Tác vụ khó (Pose, Quiz) thì gọi model xịn, tác vụ dễ (Tag, Mô tả) thì gọi model nhanh
+        String modelName = isComplexTask ? aiModelRouter.getReasoningModelName(isBackup) : aiModelRouter.getFastModelName(isBackup);
+        String url = aiModelRouter.buildUrl(modelName, "generateContent") + "?key=" + apiKey;
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
+
+        ResponseEntity<JsonNode> response = restTemplate.postForEntity(url, entity, JsonNode.class);
+        return response.getBody();
     }
 }

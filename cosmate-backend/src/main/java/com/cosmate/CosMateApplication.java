@@ -14,6 +14,7 @@ import java.util.concurrent.Executor;
 @SpringBootApplication(exclude = {FlywayAutoConfiguration.class})
 @EnableScheduling
 @EnableAsync
+@EnableRetry
 public class CosMateApplication {
 
 	public static void main(String[] args) {

@@ -10,29 +10,30 @@ public class AiModelRouter {
 
     /**
      * Dành cho tính năng Tạo Vector (Dual-Vector Search)
-     * Model Chính: text-embedding-004 (Chuẩn mới)
-     * Model Backup: gemini-embedding-001
+     * Model Chính: Gemini Embedding 2 (Bản mới nhất, vector mượt hơn)
+     * Model Backup: Gemini Embedding 1 (Bản cũ, an toàn)
      */
     public String getEmbeddingModelName(boolean isBackup) {
-        return isBackup ? "models/gemini-embedding-001" : "models/text-embedding-004";
+        // text-embedding-004 đã bị khai tử, dùng gemini-embedding-2-preview theo list của ông
+        return isBackup ? "models/gemini-embedding-001" : "models/gemini-embedding-2-preview";
     }
 
     /**
      * Dành cho Tác vụ Nhanh: Bóc Tags, Moderation, Mô tả
-     * Model Chính: gemini-3.1-flash-lite (Rất nhẹ, nhanh, rẻ)
-     * Model Backup: gemini-3-flash
+     * Model Chính: Gemini 3.1 Flash Lite (Rất nhẹ, nhanh, rẻ, vượt trội 2.5)
+     * Model Backup: Gemini 3 Flash
      */
     public String getFastModelName(boolean isBackup) {
-        return isBackup ? "models/gemini-3-flash" : "models/gemini-3.1-flash-lite";
+        return isBackup ? "models/gemini-3-flash-preview" : "models/gemini-3.1-flash-lite-preview";
     }
 
     /**
      * Dành cho Tác vụ Phức tạp: Pose Battle, Quiz Logic
-     * Model Chính: gemini-3-flash
-     * Model Backup: gemini-2.5-flash
+     * Model Chính: Gemini 3 Flash (Suy luận sâu)
+     * Model Backup: Gemini 2.5 Flash
      */
     public String getReasoningModelName(boolean isBackup) {
-        return isBackup ? "models/gemini-2.5-flash" : "models/gemini-3-flash";
+        return isBackup ? "models/gemini-2.5-flash" : "models/gemini-3-flash-preview";
     }
 
     // Tiện ích lấy Full URL

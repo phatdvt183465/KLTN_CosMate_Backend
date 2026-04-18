@@ -308,34 +308,24 @@ public class AIServiceImpl implements AIService {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
 
-            ObjectNode textPart = objectMapper.createObjectNode();
-            textPart.put("text", "Bạn là một AI kiểm duyệt nội dung. Hãy kiểm tra toàn bộ các bức ảnh được đính kèm này. Nếu CÓ BẤT KỲ bức ảnh nào chứa nội dung 18+, bạo lực, máu me, hoặc vi phạm tiêu chuẩn cộng đồng, hãy trả về CHÍNH XÁC một chữ: 'UNSAFE'. Nếu TẤT CẢ đều an toàn, trả về 'SAFE'.");
-            partsNode.add(textPart);
+            // 1. Dùng Helper thêm Text siêu gọn
+            partsNode.add(buildTextPart("Bạn là một AI kiểm duyệt nội dung. Hãy kiểm tra... Trả về SAFE hoặc UNSAFE."));
 
+            // 2. Dùng Helper thêm mảng Ảnh siêu gọn
             for (MultipartFile file : files) {
-                if (file == null || file.isEmpty()) continue;
-                String base64Image = java.util.Base64.getEncoder().encodeToString(file.getBytes());
-                String mimeType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
-
-                ObjectNode inlineData = objectMapper.createObjectNode();
-                inlineData.put("mime_type", mimeType);
-                inlineData.put("data", base64Image);
-                partsNode.add(objectMapper.createObjectNode().set("inline_data", inlineData));
+                ObjectNode imagePart = buildImagePart(file);
+                if (imagePart != null) partsNode.add(imagePart);
             }
 
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            // === GỌI MODEL MỚI (isComplex = false) ===
             JsonNode response = callGeminiGenerateContent(body, false);
 
-            if (response != null && response.has("candidates")) {
-                String resultText = response.path("candidates").get(0)
-                        .path("content").path("parts").get(0)
-                        .path("text").asText().trim();
+            // 3. Dùng Helper lấy kết quả trả về siêu gọn
+            String resultText = extractGeminiResponseText(response);
 
-                if (resultText.toUpperCase().contains("UNSAFE")) {
-                    throw new RuntimeException("Hệ thống phát hiện hình ảnh vi phạm tiêu chuẩn cộng đồng!");
-                }
+            if (resultText.toUpperCase().contains("UNSAFE")) {
+                throw new RuntimeException("Hệ thống phát hiện hình ảnh vi phạm tiêu chuẩn cộng đồng!");
             }
         } catch (Exception e) {
             log.error("Lỗi khi kiểm duyệt AI hàng loạt: {}", e.getMessage());
@@ -363,33 +353,26 @@ public class AIServiceImpl implements AIService {
             }
             promptText += "Chỉ trả về JSON định dạng: {\"score\": [Điểm tổng 1-100], \"pose_score\": [1-40], \"expression_score\": [1-40], \"costume_score\": [1-20], \"comment\": \"[Nhận xét kỹ thuật...]\"}";
 
-            partsNode.add(objectMapper.createObjectNode().put("text", promptText));
+            partsNode.add(buildTextPart(promptText));
 
             // Gắn ảnh User
-            String base64Image = java.util.Base64.getEncoder().encodeToString(request.getImage().getBytes());
-            ObjectNode userImageInline = objectMapper.createObjectNode();
-            userImageInline.put("mime_type", request.getImage().getContentType() != null ? request.getImage().getContentType() : "image/jpeg");
-            userImageInline.put("data", base64Image);
-            partsNode.add(objectMapper.createObjectNode().set("inline_data", userImageInline));
+            ObjectNode userImagePart = buildImagePart(request.getImage());
+            if (userImagePart != null) partsNode.add(userImagePart);
 
             // Gắn ảnh mẫu (nếu có)
             if (request.getReferenceImage() != null && !request.getReferenceImage().isEmpty()) {
-                String base64Ref = java.util.Base64.getEncoder().encodeToString(request.getReferenceImage().getBytes());
-                ObjectNode refImageInline = objectMapper.createObjectNode();
-                refImageInline.put("mime_type", request.getReferenceImage().getContentType() != null ? request.getReferenceImage().getContentType() : "image/jpeg");
-                refImageInline.put("data", base64Ref);
-                partsNode.add(objectMapper.createObjectNode().set("inline_data", refImageInline));
+                ObjectNode refImagePart = buildImagePart(request.getReferenceImage());
+                if (refImagePart != null) partsNode.add(refImagePart);
             }
 
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            // === GỌI MODEL MỚI (isComplex = true) ===
             JsonNode response = callGeminiGenerateContent(body, true);
+            String resultJson = extractGeminiResponseText(response);
 
-            String resultJson = response.path("candidates").get(0)
-                    .path("content").path("parts").get(0)
-                    .path("text").asText().trim();
-
+            // ==========================================
+            // XỬ LÝ JSON KẾT QUẢ
+            // ==========================================
             int startIndex = resultJson.indexOf('{');
             int endIndex = resultJson.lastIndexOf('}');
             if (startIndex >= 0 && endIndex > startIndex) {
@@ -400,7 +383,9 @@ public class AIServiceImpl implements AIService {
             int finalScore = resultNode.path("score").asInt();
             String aiComment = resultNode.path("comment").asText();
 
-            // Lưu Firebase và DB (giữ nguyên logic gốc)
+            // ==========================================
+            // PHẦN LƯU FIREBASE VÀ DB GIỮ NGUYÊN
+            // ==========================================
             String originalName = request.getImage().getOriginalFilename();
             String safeName = originalName == null ? String.valueOf(System.currentTimeMillis()) : originalName.replaceAll("[^a-zA-Z0-9._-]", "_");
             String path = String.format("pose_battles/%d_%s", System.currentTimeMillis(), safeName);
@@ -546,31 +531,49 @@ public class AIServiceImpl implements AIService {
 
         for (Costume costume : allCostumes) {
             try {
-                // TẠO IMAGE VECTOR (Từ 3 ảnh đầu)
-                StringBuilder imageTags = new StringBuilder();
-                if (costume.getImages() != null && !costume.getImages().isEmpty()) {
-                    costume.getImages().stream().limit(3).forEach(img -> {
-                        byte[] imageBytes = downloadImageFromUrl(img.getImageUrl());
-                        if (imageBytes != null) {
-                            String hiddenTags = extractTagsFromBytes(imageBytes);
-                            if (!hiddenTags.isEmpty()) {
-                                if (!imageTags.isEmpty()) imageTags.append(", ");
-                                imageTags.append(hiddenTags);
+                boolean isChanged = false;
+
+                // 1. CHỈ TẠO IMAGE VECTOR NẾU NÓ THỰC SỰ TRỐNG (TIẾT KIỆM REQUEST)
+                if (costume.getImageVector() == null || costume.getImageVector().trim().isEmpty()) {
+                    StringBuilder imageTags = new StringBuilder();
+                    if (costume.getImages() != null && !costume.getImages().isEmpty()) {
+                        costume.getImages().stream().limit(3).forEach(img -> {
+                            byte[] imageBytes = downloadImageFromUrl(img.getImageUrl());
+                            if (imageBytes != null) {
+                                String hiddenTags = extractTagsFromBytes(imageBytes);
+                                if (!hiddenTags.isEmpty()) {
+                                    if (!imageTags.isEmpty()) imageTags.append(", ");
+                                    imageTags.append(hiddenTags);
+                                }
                             }
+                        });
+                    }
+                    if (!imageTags.isEmpty()) {
+                        String imageVector = generateVectorForText(imageTags.toString());
+                        if (imageVector != null) {
+                            costume.setImageVector(imageVector);
+                            isChanged = true;
                         }
-                    });
+                    }
                 }
-                String imageVector = generateVectorForText(imageTags.toString());
 
-                // TẠO TEXT VECTOR (Từ Tên + Mô tả)
-                String textInput = ((costume.getName() != null ? costume.getName() : "") + " " + (costume.getDescription() != null ? costume.getDescription() : "")).trim();
-                String textVector = generateVectorForText(textInput);
+                // 2. CHỈ TẠO TEXT VECTOR NẾU NÓ THỰC SỰ TRỐNG (TIẾT KIỆM REQUEST)
+                if (costume.getTextVector() == null || costume.getTextVector().trim().isEmpty()) {
+                    String textInput = ((costume.getName() != null ? costume.getName() : "") + " " + (costume.getDescription() != null ? costume.getDescription() : "")).trim();
+                    if (!textInput.isEmpty()) {
+                        String textVector = generateVectorForText(textInput);
+                        if (textVector != null) {
+                            costume.setTextVector(textVector);
+                            isChanged = true;
+                        }
+                    }
+                }
 
-                if (imageVector != null) costume.setImageVector(imageVector);
-                if (textVector != null) costume.setTextVector(textVector);
-
-                costumeRepository.save(costume);
-                successCount++;
+                // 3. CHỈ GỌI LỆNH SAVE VÀO DB NẾU THỰC SỰ CÓ CẬP NHẬT MỚI
+                if (isChanged) {
+                    costumeRepository.save(costume);
+                    successCount++;
+                }
             } catch (Exception e) {
                 log.error("Lỗi tạo vector cho Costume {}: {}", costume.getId(), e.getMessage());
             }
@@ -580,8 +583,7 @@ public class AIServiceImpl implements AIService {
 
     @Override
     public String generateCostumeDescription(String costumeName, String customPrompt, List<MultipartFile> files) {
-        if (files == null || files.isEmpty()) return null;
-
+        if (files == null || files.isEmpty()) return "Không thể generate được description, vui lòng tả thủ công.";
         try {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
@@ -596,31 +598,19 @@ public class AIServiceImpl implements AIService {
             }
             promptStr += " QUAN TRỌNG: TUYỆT ĐỐI KHÔNG chào hỏi, KHÔNG xưng hô (không dùng từ bạn hay tôi). KHÔNG có câu mở bài hay kết luận. CHỈ TRẢ VỀ trực tiếp nội dung mô tả sản phẩm để gắn thẳng lên website.";
 
-            partsNode.add(objectMapper.createObjectNode().put("text", promptStr));
+            partsNode.add(buildTextPart(promptStr));
 
             for (MultipartFile file : files) {
-                if (file == null || file.isEmpty()) continue;
-                String base64Image = java.util.Base64.getEncoder().encodeToString(file.getBytes());
-                String mimeType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
-
-                ObjectNode inlineData = objectMapper.createObjectNode();
-                inlineData.put("mime_type", mimeType);
-                inlineData.put("data", base64Image);
-                partsNode.add(objectMapper.createObjectNode().set("inline_data", inlineData));
+                ObjectNode imagePart = buildImagePart(file);
+                if (imagePart != null) partsNode.add(imagePart);
             }
 
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            // === GỌI MODEL MỚI (isComplex = false) ===
             JsonNode response = callGeminiGenerateContent(body, false);
+            String resultText = extractGeminiResponseText(response);
 
-            if (response != null && response.has("candidates")) {
-                String resultText = response.path("candidates").get(0)
-                        .path("content").path("parts").get(0)
-                        .path("text").asText().trim();
-                return resultText.replaceAll("[*#_]", "");
-            }
-            return "Không thể generate được description, vui lòng tả thủ công.";
+            return resultText.isEmpty() ? "Không thể generate được description, vui lòng tả thủ công." : resultText.replaceAll("[*#_]", "");
         } catch (Exception e) {
             log.error("Lỗi khi AI generate description: {}", e.getMessage());
             throw new RuntimeException("Hệ thống AI của Google đang quá tải (503). Bạn vui lòng đợi vài phút rồi thử bấm lại nha!");
@@ -633,29 +623,17 @@ public class AIServiceImpl implements AIService {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
 
-            String promptText = "Trích xuất các từ khóa đặc trưng nhất của bộ trang phục xuất hiện trong TẤT CẢ các bức ảnh đính kèm. Tập trung vào: loại trang phục, màu sắc, họa tiết, và tên nhân vật. Chỉ trả về một chuỗi các từ khóa ngăn cách bằng dấu phẩy.";
-            partsNode.add(objectMapper.createObjectNode().put("text", promptText));
+            partsNode.add(buildTextPart("Trích xuất các từ khóa đặc trưng nhất của bộ trang phục xuất hiện trong TẤT CẢ các bức ảnh đính kèm. Tập trung vào: loại trang phục, màu sắc, họa tiết, và tên nhân vật. Chỉ trả về một chuỗi các từ khóa ngăn cách bằng dấu phẩy."));
 
             for (MultipartFile file : files) {
-                if (file == null || file.isEmpty()) continue;
-                String base64Image = java.util.Base64.getEncoder().encodeToString(file.getBytes());
-                String mimeType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
-
-                ObjectNode inlineData = objectMapper.createObjectNode();
-                inlineData.put("mime_type", mimeType);
-                inlineData.put("data", base64Image);
-                partsNode.add(objectMapper.createObjectNode().set("inline_data", inlineData));
+                ObjectNode imagePart = buildImagePart(file);
+                if (imagePart != null) partsNode.add(imagePart);
             }
 
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            // === GỌI MODEL MỚI (isComplex = false) ===
             JsonNode response = callGeminiGenerateContent(body, false);
-
-            if (response != null && response.has("candidates")) {
-                return response.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText().trim();
-            }
-            return "";
+            return extractGeminiResponseText(response);
         } catch (Exception e) {
             log.error("Lỗi khi trích xuất đặc điểm từ nhiều ảnh: {}", e.getMessage());
             return "";
@@ -678,30 +656,15 @@ public class AIServiceImpl implements AIService {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
 
-            String promptText = "Hãy phân tích hình ảnh bộ trang phục này và liệt kê các từ khóa (tags) đặc trưng nhất. " +
-                    "Tập trung vào: loại trang phục, màu sắc, họa tiết, chất liệu, phong cách, và tên nhân vật nếu nhận diện được. " +
-                    "Chỉ trả về chuỗi các từ khóa ngăn cách bằng dấu phẩy, không giải thích dài dòng.";
-            partsNode.add(objectMapper.createObjectNode().put("text", promptText));
+            partsNode.add(buildTextPart("Hãy phân tích hình ảnh bộ trang phục này và liệt kê các từ khóa (tags) đặc trưng nhất. Tập trung vào: loại trang phục, màu sắc, họa tiết, chất liệu, phong cách, và tên nhân vật nếu nhận diện được. Chỉ trả về chuỗi các từ khóa ngăn cách bằng dấu phẩy, không giải thích dài dòng."));
 
-            String base64Image = Base64.getEncoder().encodeToString(imageBytes);
-            ObjectNode inlineData = objectMapper.createObjectNode();
-            inlineData.put("mime_type", "image/jpeg");
-            inlineData.put("data", base64Image);
-            partsNode.add(objectMapper.createObjectNode().set("inline_data", inlineData));
+            ObjectNode imagePart = buildImagePart(imageBytes, "image/jpeg");
+            if (imagePart != null) partsNode.add(imagePart);
 
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            // ==========================================
-            // CODE MỚI: Gọi qua trạm phân luồng, gán False vì đây là tác vụ dễ
             JsonNode response = callGeminiGenerateContent(body, false);
-            // ==========================================
-
-            if (response != null && response.has("candidates")) {
-                return response.path("candidates").get(0)
-                        .path("content").path("parts").get(0)
-                        .path("text").asText().trim();
-            }
-            return "";
+            return extractGeminiResponseText(response);
         } catch (Exception e) {
             log.error("Lỗi AI khi bóc tag từ mảng byte: {}", e.getMessage());
             return "";
@@ -799,54 +762,51 @@ public class AIServiceImpl implements AIService {
 
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
-            partsNode.add(objectMapper.createObjectNode().put("text", promptText));
+
+            partsNode.add(buildTextPart(promptText));
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            // === GỌI MODEL MỚI (isComplex = true) ===
             JsonNode response = callGeminiGenerateContent(body, true);
+            String resultJson = extractGeminiResponseText(response);
 
-            if (response != null && response.has("candidates")) {
-                String resultJson = response.path("candidates").get(0)
-                        .path("content").path("parts").get(0)
-                        .path("text").asText().trim();
+            resultJson = extractJsonArray(resultJson);
 
-                resultJson = extractJsonArray(resultJson);
+            // ==========================================
+            // LOGIC MAPPING JSON SANG ĐỐI TƯỢNG GIỮ NGUYÊN
+            // ==========================================
+            JsonNode resultNodeArray = objectMapper.readTree(resultJson);
+            List<CustomAnswerResponse> finalResponses = new ArrayList<>(Collections.nCopies(requests.size(), null));
 
-                JsonNode resultNodeArray = objectMapper.readTree(resultJson);
-                List<CustomAnswerResponse> finalResponses = new ArrayList<>(Collections.nCopies(requests.size(), null));
+            if (resultNodeArray.isArray()) {
+                for (JsonNode node : resultNodeArray) {
+                    int id = node.path("id").asInt(-1);
+                    if (id >= 0 && id < requests.size()) {
+                        boolean isValid = node.path("isValid").asBoolean();
+                        String reason = node.path("reason").asText();
+                        Map<String, Integer> scores = null;
 
-                if (resultNodeArray.isArray()) {
-                    for (JsonNode node : resultNodeArray) {
-                        int id = node.path("id").asInt(-1);
-                        if (id >= 0 && id < requests.size()) {
-                            boolean isValid = node.path("isValid").asBoolean();
-                            String reason = node.path("reason").asText();
-                            Map<String, Integer> scores = null;
-
-                            if (isValid && node.has("scores")) {
-                                scores = objectMapper.convertValue(node.path("scores"), new TypeReference<Map<String, Integer>>() {});
-                            }
-
-                            finalResponses.set(id, CustomAnswerResponse.builder()
-                                    .isValid(isValid)
-                                    .reason(reason)
-                                    .scores(scores)
-                                    .build());
+                        if (isValid && node.has("scores")) {
+                            scores = objectMapper.convertValue(node.path("scores"), new TypeReference<Map<String, Integer>>() {});
                         }
-                    }
-                }
 
-                for (int i = 0; i < finalResponses.size(); i++) {
-                    if (finalResponses.get(i) == null) {
-                        finalResponses.set(i, CustomAnswerResponse.builder()
-                                .isValid(false)
-                                .reason("AI từ chối phân tích hoặc xảy ra lỗi bỏ sót.")
+                        finalResponses.set(id, CustomAnswerResponse.builder()
+                                .isValid(isValid)
+                                .reason(reason)
+                                .scores(scores)
                                 .build());
                     }
                 }
-                return finalResponses;
             }
-            throw new RuntimeException("AI không trả về kết quả hợp lệ.");
+
+            for (int i = 0; i < finalResponses.size(); i++) {
+                if (finalResponses.get(i) == null) {
+                    finalResponses.set(i, CustomAnswerResponse.builder()
+                            .isValid(false)
+                            .reason("AI từ chối phân tích hoặc xảy ra lỗi bỏ sót.")
+                            .build());
+                }
+            }
+            return finalResponses;
         } catch (Exception e) {
             log.error("Lỗi khi phân tích câu trả lời Custom Batch: {}", e.getMessage(), e);
             throw new RuntimeException("Lỗi phân tích AI: " + e.getMessage());
@@ -884,5 +844,72 @@ public class AIServiceImpl implements AIService {
 
         ResponseEntity<JsonNode> response = restTemplate.postForEntity(url, entity, JsonNode.class);
         return response.getBody();
+    }
+
+    // =========================================================================
+    // CÁC HÀM TIỆN ÍCH (HELPER METHODS) ĐỂ TRÁNH LẶP CODE
+    // =========================================================================
+
+    /**
+     * Helper: Đóng gói text thành JSON Part chuẩn của Gemini
+     */
+    private ObjectNode buildTextPart(String text) {
+        ObjectNode textPart = objectMapper.createObjectNode();
+        textPart.put("text", text);
+        return textPart;
+    }
+
+    /**
+     * Helper: Chuyển MultipartFile thành Base64 JSON Part chuẩn của Gemini
+     */
+    private ObjectNode buildImagePart(MultipartFile file) {
+        try {
+            if (file == null || file.isEmpty()) return null;
+            String base64Image = java.util.Base64.getEncoder().encodeToString(file.getBytes());
+            String mimeType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
+
+            ObjectNode inlineData = objectMapper.createObjectNode();
+            inlineData.put("mime_type", mimeType);
+            inlineData.put("data", base64Image);
+
+            ObjectNode imagePart = objectMapper.createObjectNode();
+            imagePart.set("inline_data", inlineData);
+            return imagePart;
+        } catch (Exception e) {
+            log.error("Lỗi khi convert ảnh sang Base64: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Helper: Bóc tách chuỗi kết quả từ JSON Response của Gemini
+     */
+    private String extractGeminiResponseText(JsonNode response) {
+        if (response != null && response.has("candidates") && !response.path("candidates").isEmpty()) {
+            return response.path("candidates").get(0)
+                    .path("content").path("parts").get(0)
+                    .path("text").asText().trim();
+        }
+        return "";
+    }
+
+    /**
+     * Helper: Chuyển mảng byte (byte[]) thành Base64 JSON Part chuẩn của Gemini
+     */
+    private ObjectNode buildImagePart(byte[] imageBytes, String mimeType) {
+        try {
+            if (imageBytes == null || imageBytes.length == 0) return null;
+            String base64Image = java.util.Base64.getEncoder().encodeToString(imageBytes);
+            ObjectNode inlineData = objectMapper.createObjectNode();
+            inlineData.put("mime_type", mimeType != null ? mimeType : "image/jpeg");
+            inlineData.put("data", base64Image);
+
+            ObjectNode imagePart = objectMapper.createObjectNode();
+            imagePart.set("inline_data", inlineData);
+            return imagePart;
+        } catch (Exception e) {
+            log.error("Lỗi khi convert mảng byte sang Base64: {}", e.getMessage());
+            return null;
+        }
     }
 }

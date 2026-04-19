@@ -438,6 +438,13 @@ public class CostumeServiceImpl implements CostumeService {
                         .map(o -> CostumeResponse.RentalOptionResponse.builder()
                                 .id(o.getId()).name(o.getName()).description(o.getDescription()).price(o.getPrice()).build())
                         .collect(Collectors.toList()))
+                .characters(costume.getCharacters() != null ?
+                        costume.getCharacters().stream().map(c -> CostumeResponse.CharacterDto.builder()
+                                .id(c.getId())
+                                .name(c.getName())
+                                .anime(c.getAnime())
+                                .build()).collect(Collectors.toList())
+                        : new java.util.ArrayList<>())
                 .build();
     }
 

@@ -28,6 +28,7 @@ public class CostumeResponse {
     private List<SurchargeResponse> surcharges;
     private List<AccessoryResponse> accessories;
     private List<RentalOptionResponse> rentalOptions;
+    private List<CharacterDto> characters;
 
     @Data
     @Builder
@@ -55,5 +56,13 @@ public class CostumeResponse {
         private String name;
         private BigDecimal price;
         private String description;
+    }
+
+    @Data
+    @Builder
+    public static class CharacterDto {
+        private Integer id;
+        private String name;
+        private String anime;
     }
 }

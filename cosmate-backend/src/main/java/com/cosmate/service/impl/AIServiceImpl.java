@@ -813,6 +813,73 @@ public class AIServiceImpl implements AIService {
         }
     }
 
+    // Inject thêm cái này ở đầu file
+    private final com.cosmate.repository.StyleSurveyRepository styleSurveyRepository;
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public String submitStyleQuiz(Integer userId, com.cosmate.dto.request.QuizSubmitRequest request) {
+        int totalE = 0, totalA = 0, totalO = 0;
+
+        // 1. Cộng điểm trắc nghiệm tĩnh
+        for (com.cosmate.dto.request.QuizSubmitRequest.StaticAnswer ans : request.getStaticAnswers()) {
+            totalE += ans.getScoreE();
+            totalA += ans.getScoreA();
+            totalO += ans.getScoreO();
+        }
+
+        // 2. Chấm điểm tự luận bằng AI
+        if (request.getCustomAnswers() != null && !request.getCustomAnswers().isEmpty()) {
+            List<CustomAnswerResponse> aiResults = analyzeCustomAnswersBatch(request.getCustomAnswers());
+            for (CustomAnswerResponse res : aiResults) {
+                if (res.isValid() && res.getScores() != null) {
+                    totalE += res.getScores().getOrDefault("E", 0);
+                    totalA += res.getScores().getOrDefault("A", 0);
+                    totalO += res.getScores().getOrDefault("O", 0);
+                }
+            }
+        }
+
+        // 3. Tính toán Archetype bằng Euclid
+        String finalArchetypeId = calculateClosestArchetype(totalE, totalA, totalO);
+
+        // 4. CẬP NHẬT DATABASE: Cột current_archetype trong bảng Users
+        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng!"));
+        user.setCurrentArchetype(finalArchetypeId);
+        userRepository.save(user);
+
+        // 5. LƯU DATABASE: Bảng Style_Surveys
+        try {
+            String jsonAnswers = objectMapper.writeValueAsString(request);
+            com.cosmate.entity.StyleSurvey survey = com.cosmate.entity.StyleSurvey.builder()
+                    .cosplayerId(user)
+                    .answersJson(jsonAnswers)
+                    .recommendedTags(finalArchetypeId)
+                    .build();
+            styleSurveyRepository.save(survey);
+        } catch (Exception e) {
+            log.error("Lỗi lưu kết quả khảo sát: {}", e.getMessage());
+        }
+
+        return finalArchetypeId;
+    }
+
+    private String calculateClosestArchetype(int userE, int userA, int userO) {
+        String bestArchetype = "ARCH_12";
+        double minDistance = Double.MAX_VALUE;
+
+        for (java.util.Map.Entry<String, int[]> entry : aiKnowledgeBase.getArchetypeCoordinates().entrySet()) {
+            int[] coord = entry.getValue();
+            // Công thức Euclid: sqrt((E2-E1)^2 + (A2-A1)^2 + (O2-O1)^2)
+            double distance = Math.sqrt(Math.pow(userE - coord[0], 2) + Math.pow(userA - coord[1], 2) + Math.pow(userO - coord[2], 2));
+            if (distance < minDistance) {
+                minDistance = distance;
+                bestArchetype = entry.getKey();
+            }
+        }
+        return bestArchetype;
+    }
+
     // =========================================================================
     // CỤM HÀM GENERATE CONTENT (CHO TEXT, JSON, CHẤM ĐIỂM CÓ HỖ TRỢ RETRY)
     // =========================================================================

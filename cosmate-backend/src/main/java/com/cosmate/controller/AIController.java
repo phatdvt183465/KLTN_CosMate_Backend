@@ -171,6 +171,16 @@ public class AIController {
                 .build();
     }
 
+    @PostMapping("/submit-quiz")
+    public ApiResponse<String> submitQuiz(@RequestBody com.cosmate.dto.request.QuizSubmitRequest request) {
+        Integer userId = getCurrentUserId();
+        String archetypeId = aiService.submitStyleQuiz(userId, request);
+        return ApiResponse.<String>builder()
+                .result(archetypeId)
+                .message("Phân tích cá tính thành công! Bạn là: " + archetypeId)
+                .build();
+    }
+
     // --- Hàm Helper ---
     private Integer getCurrentUserId() {
         org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();

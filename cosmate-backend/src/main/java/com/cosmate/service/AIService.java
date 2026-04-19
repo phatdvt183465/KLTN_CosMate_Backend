@@ -60,4 +60,6 @@ public interface AIService {
     List<com.cosmate.dto.response.CustomAnswerResponse> analyzeCustomAnswersBatch(List<com.cosmate.dto.request.CustomAnswerRequest> requests);
 
     void refreshArchetypeCache();
+
+    String submitStyleQuiz(Integer userId, com.cosmate.dto.request.QuizSubmitRequest request);
 }

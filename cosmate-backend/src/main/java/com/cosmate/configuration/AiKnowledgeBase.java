@@ -47,4 +47,20 @@ public class AiKnowledgeBase {
             return objectMapper.readTree(is);
         }
     }
+
+    @Getter
+    private final java.util.Map<String, int[]> archetypeCoordinates = java.util.Map.ofEntries(
+            java.util.Map.entry("ARCH_01", new int[]{15, 5, 5}),   // The Hero
+            java.util.Map.entry("ARCH_02", new int[]{10, -15, 15}), // The Rebel
+            java.util.Map.entry("ARCH_03", new int[]{-10, 0, 20}),  // The Sage
+            java.util.Map.entry("ARCH_04", new int[]{0, 15, -10}),  // The Innocent
+            java.util.Map.entry("ARCH_05", new int[]{20, 5, 15}),   // The Jester
+            java.util.Map.entry("ARCH_06", new int[]{-5, 20, 0}),   // The Caregiver
+            java.util.Map.entry("ARCH_07", new int[]{5, 0, 20}),    // The Explorer
+            java.util.Map.entry("ARCH_08", new int[]{10, 15, 10}),  // The Lover
+            java.util.Map.entry("ARCH_09", new int[]{0, -5, 20}),   // The Creator
+            java.util.Map.entry("ARCH_10", new int[]{15, -10, 0}),  // The Ruler
+            java.util.Map.entry("ARCH_11", new int[]{0, -10, 15}),  // The Magician
+            java.util.Map.entry("ARCH_12", new int[]{0, 10, -10})   // The Everyman
+    );
 }

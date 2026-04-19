@@ -4,8 +4,10 @@ import com.cosmate.dto.response.AdminDashboardSummaryResponse;
 import com.cosmate.dto.response.AdminReportSeriesPointResponse;
 import com.cosmate.dto.response.ApiResponse;
 import com.cosmate.service.AdminDashboardService;
+import com.cosmate.service.CharacterSyncService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -17,6 +19,7 @@ import java.util.List;
 public class AdminDashboardController {
 
     private final AdminDashboardService adminDashboardService;
+    private final CharacterSyncService characterSyncService;
 
     @GetMapping("/dashboard/summary")
     public ApiResponse<AdminDashboardSummaryResponse> summary() {
@@ -70,6 +73,23 @@ public class AdminDashboardController {
                 .message("OK")
                 .result(adminDashboardService.getDisputesReport())
                 .build();
+    }
+
+    @PostMapping("/sync-characters")
+    public ApiResponse<Integer> syncCharacters() {
+        try {
+            int added = characterSyncService.syncTopCharacters();
+            return ApiResponse.<Integer>builder()
+                    .code(0)
+                    .message("Đã đồng bộ thành công " + added + " nhân vật")
+                    .result(added)
+                    .build();
+        } catch (Exception e) {
+            return ApiResponse.<Integer>builder()
+                    .code(1)
+                    .message(e.getMessage())
+                    .build();
+        }
     }
 
 }

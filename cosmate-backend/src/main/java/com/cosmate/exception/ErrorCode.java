@@ -1,5 +1,7 @@
 package com.cosmate.exception;
 
+import org.springframework.http.HttpStatus;
+
 public enum ErrorCode {
     UNCATEGORIZED_EXCEPTION(99999, "Lỗi không xác định!"),
     INVALID_KEY(1001, "Key không hợp lệ!"),
@@ -25,6 +27,8 @@ public enum ErrorCode {
     ACCESSORY_NOT_FOUND(1020, "Không tìm thấy phụ kiện!"),
     RENTAL_OPTION_NOT_FOUND(1021, "Không tìm thấy gói thuê!"),
     SURCHARGE_NOT_FOUND(1022, "Không tìm thấy phụ phí!"),
+    AI_SERVICE_OVERLOADED(5003, "Hệ thống AI đang quá tải. Vui lòng đợi 1 phút rồi thử lại!"),
+    AI_CONTENT_BLOCKED(5004, "Hình ảnh hoặc nội dung vi phạm tiêu chuẩn an toàn của hệ thống."),
     IMAGE_NOT_FOUND(1023, "Không tìm thấy ảnh!");
 
     ErrorCode(int code, String message) {

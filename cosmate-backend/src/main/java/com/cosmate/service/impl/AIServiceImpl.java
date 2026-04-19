@@ -149,6 +149,7 @@ public class AIServiceImpl implements AIService {
      * Tạo vector nhúng (embedding) cho trang phục và lưu vào Database.
      */
     @Async
+    @org.springframework.transaction.annotation.Transactional
     @Override
     public void generateAndSaveVector(Integer costumeId, boolean updateText, boolean updateImage) {
         if (!updateText && !updateImage) return; // Không cần cập nhật gì thì thoát luôn cho nhẹ server
@@ -269,7 +270,7 @@ public class AIServiceImpl implements AIService {
 
         } catch (Exception e) {
             log.error("Lỗi Recommend AI: {}", e.getMessage(), e);
-            throw new RuntimeException("Gợi ý thất bại: " + e.getMessage());
+            throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.AI_SERVICE_OVERLOADED);
         }
     }
 
@@ -325,7 +326,7 @@ public class AIServiceImpl implements AIService {
             String resultText = extractGeminiResponseText(response);
 
             if (resultText.toUpperCase().contains("UNSAFE")) {
-                throw new RuntimeException("Hệ thống phát hiện hình ảnh vi phạm tiêu chuẩn cộng đồng!");
+                throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.AI_CONTENT_BLOCKED);
             }
         } catch (Exception e) {
             log.error("Lỗi khi kiểm duyệt AI hàng loạt: {}", e.getMessage());
@@ -371,15 +372,38 @@ public class AIServiceImpl implements AIService {
             String resultJson = extractGeminiResponseText(response);
 
             // ==========================================
-            // XỬ LÝ JSON KẾT QUẢ
+            // XỬ LÝ JSON KẾT QUẢ VÀ BẮT LỖI AI
             // ==========================================
+
+            // 1. Kiểm tra Safety Filter (Bị Google chặn do ảnh nhạy cảm/vũ khí)
+            if (resultJson == null || resultJson.trim().isEmpty()) {
+                throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.AI_CONTENT_BLOCKED);
+            }
+
+            // 2. Ép kiểu và lọc bỏ Markdown (ví dụ: ```json ... ```)
             int startIndex = resultJson.indexOf('{');
             int endIndex = resultJson.lastIndexOf('}');
             if (startIndex >= 0 && endIndex > startIndex) {
                 resultJson = resultJson.substring(startIndex, endIndex + 1).trim();
+            } else {
+                // Nếu AI chỉ chat nhảm mà không nhả ra dấu ngoặc nhọn nào
+                throw new RuntimeException("Hệ thống AI đang quá tải và không thể đưa ra điểm số chính xác lúc này. Bạn vui lòng bấm chấm điểm lại nhé!");
             }
 
-            JsonNode resultNode = objectMapper.readTree(resultJson);
+            // 3. Đọc JSON an toàn (Tránh lỗi 500 khi AI thiếu dấu phẩy, ngoặc kép)
+            JsonNode resultNode;
+            try {
+                resultNode = objectMapper.readTree(resultJson);
+            } catch (Exception e) {
+                log.error("Lỗi Parse JSON từ AI: {}", resultJson);
+                throw new RuntimeException("Định dạng điểm số AI trả về bị lỗi. Bạn vui lòng thử lại!");
+            }
+
+            // 4. Kiểm tra xem AI có trả về đủ các trường không
+            if (!resultNode.has("score") || !resultNode.has("comment")) {
+                throw new RuntimeException("AI không chấm đủ điểm cho bạn. Vui lòng bấm thử lại!");
+            }
+
             int finalScore = resultNode.path("score").asInt();
             String aiComment = resultNode.path("comment").asText();
 
@@ -613,7 +637,7 @@ public class AIServiceImpl implements AIService {
             return resultText.isEmpty() ? "Không thể generate được description, vui lòng tả thủ công." : resultText.replaceAll("[*#_]", "");
         } catch (Exception e) {
             log.error("Lỗi khi AI generate description: {}", e.getMessage());
-            throw new RuntimeException("Hệ thống AI của Google đang quá tải (503). Bạn vui lòng đợi vài phút rồi thử bấm lại nha!");
+            throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.AI_SERVICE_OVERLOADED);
         }
     }
 
@@ -716,7 +740,7 @@ public class AIServiceImpl implements AIService {
 
         // Bảo mật: Kiểm tra xem bài chấm này có phải của user đang request không
         if (!score.getCosplayerId().equals(userId)) {
-            throw new RuntimeException("Bạn không có quyền sửa kết quả của người khác!");
+            throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.FORBIDDEN);
         }
 
         score.setCharacterName(newName);
@@ -729,7 +753,7 @@ public class AIServiceImpl implements AIService {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy kết quả chấm điểm này!"));
 
         if (!score.getCosplayerId().equals(userId)) {
-            throw new RuntimeException("Bạn không có quyền xóa kết quả của người khác!");
+            throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.FORBIDDEN);
         }
 
         poseScoreRepository.delete(score);
@@ -809,7 +833,7 @@ public class AIServiceImpl implements AIService {
             return finalResponses;
         } catch (Exception e) {
             log.error("Lỗi khi phân tích câu trả lời Custom Batch: {}", e.getMessage(), e);
-            throw new RuntimeException("Lỗi phân tích AI: " + e.getMessage());
+            throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.AI_SERVICE_OVERLOADED);
         }
     }
 
@@ -844,8 +868,7 @@ public class AIServiceImpl implements AIService {
         String finalArchetypeId = calculateClosestArchetype(totalE, totalA, totalO);
 
         // 4. CẬP NHẬT DATABASE: Cột current_archetype trong bảng Users
-        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng!"));
-        user.setCurrentArchetype(finalArchetypeId);
+        User user = userRepository.findById(userId).orElseThrow(() -> new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.USER_NOT_FOUND));        user.setCurrentArchetype(finalArchetypeId);
         userRepository.save(user);
 
         // 5. LƯU DATABASE: Bảng Style_Surveys

@@ -54,4 +54,11 @@ public class CostumeRequest {
     private String rentalOptions;
 
     private List<Integer> characterIds;
+
+    public void setCharacterIds(List<Integer> characterIds) {
+        this.characterIds = characterIds == null ? null : characterIds.stream()
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList();
+    }
 }

@@ -83,14 +83,15 @@ public class CostumeServiceImpl implements CostumeService {
         handleAccessories(costume, request.getAccessories());
         handleRentalOptions(costume, request.getRentalOptions());
 
+        // Lưu bộ đồ để lấy ID và URL ảnh chính thức
+        Costume savedCostume = costumeRepository.save(costume);
+
         // Chọn Characters
         if (request.getCharacterIds() != null && !request.getCharacterIds().isEmpty()) {
             List<com.cosmate.entity.Character> chars = characterRepository.findAllById(request.getCharacterIds());
-            costume.setCharacters(chars);
+            savedCostume.setCharacters(chars);
+            savedCostume = costumeRepository.save(savedCostume);
         }
-
-        // Lưu bộ đồ để lấy ID và URL ảnh chính thức
-        Costume savedCostume = costumeRepository.save(costume);
 
         registerVectorGenerationAfterCommit(savedCostume.getId(), true, true);
 

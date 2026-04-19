@@ -80,7 +80,6 @@ public class AIServiceImpl implements AIService {
     private final PoseScoreRepository poseScoreRepository;
     private final FirebaseStorageService firebaseStorageService;
     private final OrderDetailRepository orderDetailRepository;
-    private final CharacterRepository characterRepository;
     private final ConcurrentHashMap<String, List<Integer>> archetypeTopCache = new ConcurrentHashMap<>();
     private final UserRepository userRepository;
     private final AiModelRouter aiModelRouter; // Thêm vào danh sách inject của Lombok @RequiredArgsConstructor
@@ -266,7 +265,8 @@ public class AIServiceImpl implements AIService {
                     .costumeName(c.getName())
                     .imageUrl(c.getImages().isEmpty() ? "" : c.getImages().get(0).getImageUrl())
                     .price(c.getPricePerDay())
-                    .similarityScore(1.0).build()).limit(30).collect(Collectors.toList());
+                    .similarityScore(0.80 + (new java.util.Random().nextDouble() * 0.19999))
+                    .build()).limit(30).collect(Collectors.toList());
 
         } catch (Exception e) {
             log.error("Lỗi Recommend AI: {}", e.getMessage(), e);

@@ -51,6 +51,7 @@ public class CostumeServiceImpl implements CostumeService {
     private final ObjectMapper objectMapper;
     private final AIService aiService;
     private final FirebaseStorageServiceImpl firebaseStorageService;
+    private final com.cosmate.repository.CharacterRepository characterRepository;
 
     @Override
     public List<CostumeResponse> getByProviderId(Integer providerId) {
@@ -81,6 +82,12 @@ public class CostumeServiceImpl implements CostumeService {
         handleSurcharges(costume, request.getSurcharges());
         handleAccessories(costume, request.getAccessories());
         handleRentalOptions(costume, request.getRentalOptions());
+
+        // Chọn Characters
+        if (request.getCharacterIds() != null && !request.getCharacterIds().isEmpty()) {
+            List<com.cosmate.entity.Character> chars = characterRepository.findAllById(request.getCharacterIds());
+            costume.setCharacters(chars);
+        }
 
         // Lưu bộ đồ để lấy ID và URL ảnh chính thức
         Costume savedCostume = costumeRepository.save(costume);
@@ -149,6 +156,12 @@ public class CostumeServiceImpl implements CostumeService {
         if (isValidString(request.getRentalOptions())) {
             costume.getRentalOptions().clear();
             handleRentalOptions(costume, request.getRentalOptions());
+        }
+
+        // Chọn Characters
+        if (request.getCharacterIds() != null && !request.getCharacterIds().isEmpty()) {
+            List<com.cosmate.entity.Character> chars = characterRepository.findAllById(request.getCharacterIds());
+            costume.setCharacters(chars);
         }
 
         if (isTextChanged || isImageChanged) {

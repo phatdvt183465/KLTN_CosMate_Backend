@@ -52,4 +52,6 @@ public class CostumeRequest {
 
     @Size(max = 10000)
     private String rentalOptions;
+
+    private List<Integer> characterIds;
 }

@@ -309,8 +309,13 @@ public class AIServiceImpl implements AIService {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
 
-            // 1. Dùng Helper thêm Text siêu gọn
-            partsNode.add(buildTextPart("Bạn là một AI kiểm duyệt nội dung. Hãy kiểm tra... Trả về SAFE hoặc UNSAFE."));
+            // 1. Dùng Helper thêm Text siêu gọn (có thể Demo)
+            String demoPrompt = "Bạn là một hệ thống kiểm duyệt hình ảnh khắt khe. " +
+                    "Hãy phân tích ảnh đầu vào. Nếu ảnh có chứa nội dung 18+, bạo lực, vũ khí, " +
+                    "HOẶC CÓ CHỨA HÌNH ẢNH CON CHÓ (bất kì loại chó nào), hãy trả về ĐÚNG 1 TỪ: UNSAFE. " +
+                    "Nếu là ảnh người bình thường an toàn, trả về ĐÚNG 1 TỪ: SAFE.";
+
+            partsNode.add(buildTextPart(demoPrompt));
 
             // 2. Dùng Helper thêm mảng Ảnh siêu gọn
             for (MultipartFile file : files) {

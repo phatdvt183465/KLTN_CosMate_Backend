@@ -84,13 +84,30 @@ public class OrderServiceImpl implements OrderService {
             throw new IllegalArgumentException("Invalid rentStart format. Use ISO date-time, e.g. 2026-02-15T10:00:00");
         }
 
-        // fetch the single costume
-        Optional<Costume> co = costumeRepository.findById(request.getCostumeId());
+        // [Security Fix] Check if rentStart is in the past (allow 5 mins skew)
+        if (rentStart.isBefore(LocalDateTime.now().minusMinutes(5))) {
+            throw new IllegalArgumentException("Lỗi: Thời gian bắt đầu thuê (rentStart) không được nằm trong quá khứ.");
+        }
+
+        // [Security Fix] Use Pessimistic Lock to avoid Race Condition when multiple users order the same costume
+        Optional<Costume> co = costumeRepository.findByIdForUpdate(request.getCostumeId());
         if (co.isEmpty()) throw new IllegalArgumentException("Costume id " + request.getCostumeId() + " not found");
         Costume c = co.get();
 
+        // [Security Fix] Check availability status
+        if (!"AVAILABLE".equalsIgnoreCase(c.getStatus())) {
+            throw new IllegalArgumentException("Lỗi: Trang phục này hiện không có sẵn (Đang cho thuê hoặc bảo trì).");
+        }
+
         // provider check (single costume => provider is that costume's provider)
         Integer providerId = c.getProviderId();
+
+        // [Security Fix] Anti-Money Laundering & Self-Renting Check
+        com.cosmate.entity.Provider currentProviderBlock = null;
+        try { currentProviderBlock = providerService.getByUserId(cosplayerId); } catch (Exception ignored) {}
+        if (currentProviderBlock != null && providerId.equals(currentProviderBlock.getId())) {
+            throw new IllegalArgumentException("Lỗi: Xung đột lợi ích. Chủ Shop không thể tự thao túng/thuê trang phục của chính Shop mình.");
+        }
 
         int rentDay = request.getRentDay();
 

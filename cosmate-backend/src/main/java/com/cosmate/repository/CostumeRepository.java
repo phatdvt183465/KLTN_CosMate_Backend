@@ -9,6 +9,11 @@ import java.util.List;
 
 @Repository
 public interface CostumeRepository extends JpaRepository<Costume, Integer> {
+    
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM Costume c WHERE c.id = :id")
+    java.util.Optional<Costume> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Integer id);
+
     List<Costume> findByProviderIdAndStatusNotIgnoreCase(Integer providerId, String status);
     List<Costume> findByNameContainingIgnoreCaseAndStatusNot(String keyword, String status);
 

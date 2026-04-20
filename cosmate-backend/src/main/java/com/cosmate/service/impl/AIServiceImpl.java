@@ -311,7 +311,7 @@ public class AIServiceImpl implements AIService {
 
             // 1. Dùng Helper thêm Text siêu gọn (có thể Demo)
             String demoPrompt = "Bạn là một hệ thống kiểm duyệt hình ảnh khắt khe. " +
-                    "Hãy phân tích ảnh đầu vào. Nếu ảnh có chứa nội dung 18+, bạo lực, vũ khí, " +
+                    "Hãy phân tích ảnh đầu vào. Nếu ảnh có chứa nội dung 18+, " +
                     "HOẶC CÓ CHỨA HÌNH ẢNH CON CHÓ (bất kì loại chó nào), hãy trả về ĐÚNG 1 TỪ: UNSAFE. " +
                     "Nếu là ảnh người bình thường an toàn, trả về ĐÚNG 1 TỪ: SAFE.";
 

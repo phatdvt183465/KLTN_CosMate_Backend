@@ -32,6 +32,10 @@ public interface AIService {
      */
     void validateMultipleImageContents(List<MultipartFile> files);
 
+    String moderateCostumeImages(List<MultipartFile> files);
+
+    void processNewCostumeAsync(Integer costumeId, List<MultipartFile> files);
+
     // --- CHẤM ĐIỂM ---
     PoseScoringResponse scorePose(PoseScoringRequest request);
 
@@ -39,7 +43,7 @@ public interface AIService {
     void generateVectorsForMissingImages();
 
     // Tiện ích: AI tự động viết mô tả chi tiết cho trang phục dựa trên Tên và Ảnh
-    String generateCostumeDescription(String costumeName, String customPrompt, List<MultipartFile> files);
+    String generateCostumeDescription(String costumeName, Integer personaId, List<MultipartFile> files);
 
     String extractFeaturesFromMultipleImages(List<MultipartFile> files);
 

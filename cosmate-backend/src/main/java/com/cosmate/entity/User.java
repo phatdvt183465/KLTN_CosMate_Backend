@@ -68,4 +68,7 @@ public class User {
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "role_id")
     private RoleEntity role;
+
+    @Column(name = "ai_tokens")
+    private Integer aiTokens = 100;
 }

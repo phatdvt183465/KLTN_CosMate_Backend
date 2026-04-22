@@ -43,6 +43,7 @@ public class GlobalExceptionHandler {
             case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
             case FORBIDDEN, ACCOUNT_BANNED -> HttpStatus.FORBIDDEN;
             case COSTUME_NOT_FOUND, COSTUME_DELETED, PROVIDER_NOT_FOUND, ACCESSORY_NOT_FOUND, RENTAL_OPTION_NOT_FOUND, SURCHARGE_NOT_FOUND, IMAGE_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case AI_TOKEN_INSUFFICIENT -> HttpStatus.BAD_REQUEST;
             default -> HttpStatus.BAD_REQUEST;
         };
 

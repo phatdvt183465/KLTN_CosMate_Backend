@@ -4,6 +4,7 @@ import com.cosmate.configuration.AiKnowledgeBase;
 import com.cosmate.configuration.AiModelRouter;
 import com.cosmate.dto.request.CustomAnswerRequest;
 import com.cosmate.dto.request.PoseScoringRequest;
+import com.cosmate.dto.request.QuizSubmitRequest;
 import com.cosmate.dto.request.RecommendationRequest;
 import com.cosmate.dto.request.SearchByImageRequest;
 import com.cosmate.dto.response.CustomAnswerResponse;
@@ -13,12 +14,12 @@ import com.cosmate.entity.Costume;
 import com.cosmate.entity.CostumeImage;
 import com.cosmate.entity.PoseScore;
 import com.cosmate.entity.User;
-import com.cosmate.configuration.AiKnowledgeBase;
 import com.cosmate.repository.CharacterRepository;
 import com.cosmate.repository.CostumeImageRepository;
 import com.cosmate.repository.CostumeRepository;
 import com.cosmate.repository.OrderDetailRepository;
 import com.cosmate.repository.PoseScoreRepository;
+import com.cosmate.repository.StyleSurveyRepository;
 import com.cosmate.repository.UserRepository;
 import com.cosmate.service.AIService;
 import com.cosmate.service.FirebaseStorageService;
@@ -35,22 +36,21 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Recover;
-import org.springframework.retry.annotation.Retryable;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.HttpServerErrorException;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -82,7 +82,11 @@ public class AIServiceImpl implements AIService {
     private final OrderDetailRepository orderDetailRepository;
     private final ConcurrentHashMap<String, List<Integer>> archetypeTopCache = new ConcurrentHashMap<>();
     private final UserRepository userRepository;
+    private final StyleSurveyRepository styleSurveyRepository;
     private final AiModelRouter aiModelRouter; // Thêm vào danh sách inject của Lombok @RequiredArgsConstructor
+    private final TransactionTemplate transactionTemplate;
+    @Lazy
+    private final AIService selfProxy;
 
     @Value("${gemini.api.key}")
     private String apiKey;
@@ -91,7 +95,9 @@ public class AIServiceImpl implements AIService {
      * Tìm kiếm các trang phục có độ tương đồng cao bằng thuật toán Cosine Similarity.
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public List<SearchResponse> searchSimilarCostumes(SearchByImageRequest request) {
+        consumeTokens(getCurrentUserIdFromContext(), 15);
         try {
             String queryText = request.getText() != null ? request.getText().trim() : "";
             List<MultipartFile> imageFiles = request.getFiles();
@@ -339,18 +345,63 @@ public class AIServiceImpl implements AIService {
         }
     }
 
+    @Override
+    public String moderateCostumeImages(List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) return "UNSAFE_IRRELEVANT";
+        try {
+            ObjectNode body = objectMapper.createObjectNode();
+            ArrayNode partsNode = objectMapper.createArrayNode();
+            partsNode.add(buildTextPart("Phân tích ảnh đầu vào. Trả về ĐÚNG 1 TỪ: 'UNSAFE_VIOLATION' nếu ảnh chứa nội dung 18+, phản cảm, bạo lực. Trả về 'SAFE' nếu ảnh có chứa người hóa trang, trang phục nguyên bộ, HOẶC CẬN CẢNH CHI TIẾT SẢN PHẨM (đường may, chất liệu, nút, vũ khí, tóc giả). Trả về 'UNSAFE_IRRELEVANT' CHỈ KHI bức ảnh hoàn toàn là rác (phong cảnh thiên nhiên, sổ đỏ, màn hình chat, meme)."));
+            for (MultipartFile file : files) {
+                ObjectNode imagePart = buildImagePart(file);
+                if (imagePart != null) partsNode.add(imagePart);
+            }
+            body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
+            String result = extractGeminiResponseText(callGeminiGenerateContent(body, false));
+            return result == null ? "UNSAFE_IRRELEVANT" : result.trim().toUpperCase();
+        } catch (Exception e) {
+            log.error("Lỗi kiểm duyệt ảnh costume: {}", e.getMessage(), e);
+            return "UNSAFE_IRRELEVANT";
+        }
+    }
+
+    @Async
+    @org.springframework.transaction.annotation.Transactional
+    @Override
+    public void processNewCostumeAsync(Integer costumeId, List<MultipartFile> files) {
+        Costume costume = costumeRepository.findById(costumeId).orElse(null);
+        if (costume == null) return;
+
+        String moderation = moderateCostumeImages(files);
+        try {
+            if ("UNSAFE_VIOLATION".equals(moderation) || "UNSAFE_IRRELEVANT".equals(moderation)) {
+                costume.setStatus("REJECTED");
+                costumeRepository.save(costume);
+                return;
+            }
+            selfProxy.generateAndSaveVector(costumeId, true, true);
+            costume.setStatus("ACTIVE");
+            costumeRepository.save(costume);
+        } catch (Exception e) {
+            log.error("processNewCostumeAsync failed for {}: {}", costumeId, e.getMessage(), e);
+        }
+    }
+
     /**
      * Đánh giá tư thế (pose) cosplay so với nhân vật gốc và trả về điểm số kèm nhận xét.
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public PoseScoringResponse scorePose(PoseScoringRequest request) {
+        consumeTokens(getCurrentUserIdFromContext(), 20);
         try {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
 
             String promptText = "Bạn là một giám khảo Cosplay. Dưới đây là bộ tiêu chuẩn WCS chính thức:\n"
                     + aiKnowledgeBase.getWcsRules() + "\n"
-                    + "Hãy so sánh ảnh user chụp với nhân vật '" + request.getCharacterName() + "'. ";
+                    + "Hãy so sánh ảnh user chụp với nhân vật '" + request.getCharacterName() + "'. "
+                    + "Nếu trong ảnh KHÔNG CÓ NGƯỜI, hoặc không giống ảnh hóa trang/tạo dáng, trả về chính xác chuỗi JSON: {\"score\": 0, \"comment\": \"NOT_COSPLAY\"}. ";
 
             if (request.getReferenceImage() != null && !request.getReferenceImage().isEmpty()) {
                 promptText += "Tôi có đính kèm 2 bức ảnh. Ảnh thứ hai là ảnh nhân vật gốc (Reference). Hãy chấm điểm dựa trên độ tương đồng về góc độ, tạo dáng và biểu cảm so với ảnh gốc này. ";
@@ -411,6 +462,9 @@ public class AIServiceImpl implements AIService {
 
             int finalScore = resultNode.path("score").asInt();
             String aiComment = resultNode.path("comment").asText();
+            if ("NOT_COSPLAY".equalsIgnoreCase(aiComment)) {
+                throw new RuntimeException("Bé Mèo không nhận diện được người hoặc trang phục trong ảnh. Bạn thử ảnh khác nha!");
+            }
 
             // ==========================================
             // PHẦN LƯU FIREBASE VÀ DB GIỮ NGUYÊN
@@ -455,6 +509,22 @@ public class AIServiceImpl implements AIService {
     }
 
     // --- Các hàm tiện ích (Utility Methods) ---
+
+    private void consumeTokens(Integer userId, int amount) {
+        if (userId == null) {
+            throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.UNAUTHORIZED);
+        }
+        transactionTemplate.executeWithoutResult(status -> {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.USER_NOT_FOUND));
+            Integer currentTokens = user.getAiTokens() == null ? 0 : user.getAiTokens();
+            if (currentTokens < amount) {
+                throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.AI_TOKEN_INSUFFICIENT);
+            }
+            user.setAiTokens(currentTokens - amount);
+            userRepository.save(user);
+        });
+    }
 
     private String extractJsonArray(String rawText) {
         if (rawText == null) return "[]";
@@ -611,7 +681,9 @@ public class AIServiceImpl implements AIService {
     }
 
     @Override
-    public String generateCostumeDescription(String costumeName, String customPrompt, List<MultipartFile> files) {
+    @org.springframework.transaction.annotation.Transactional
+    public String generateCostumeDescription(String costumeName, Integer personaId, List<MultipartFile> files) {
+        consumeTokens(getCurrentUserIdFromContext(), 20);
         if (files == null || files.isEmpty()) return "Không thể generate được description, vui lòng tả thủ công.";
         try {
             ObjectNode body = objectMapper.createObjectNode();
@@ -621,10 +693,15 @@ public class AIServiceImpl implements AIService {
             if (costumeName != null && !costumeName.trim().isEmpty()) {
                 promptStr += "Tên nhân vật/bộ trang phục này là: '" + costumeName + "'. ";
             }
-            promptStr += "Hãy nhìn vào những hình ảnh đính kèm và tạo ra một đoạn mô tả. ";
-            if (customPrompt != null && !customPrompt.trim().isEmpty()) {
-                promptStr += "ĐẶC BIỆT LƯU Ý YÊU CẦU SAU TỪ NGƯỜI DÙNG: " + customPrompt + ". ";
+            if (personaId != null) {
+                switch (personaId) {
+                    case 1 -> promptStr += "Phong cách bắt buộc: Chuyên nghiệp/Sale. ";
+                    case 2 -> promptStr += "Phong cách bắt buộc: Hài hước/Cute. ";
+                    case 3 -> promptStr += "Phong cách bắt buộc: Cổ trang/Deep. ";
+                    default -> promptStr += "Phong cách bắt buộc: Chuyên nghiệp/Sale. ";
+                }
             }
+            promptStr += "Hãy nhìn vào những hình ảnh đính kèm và tạo ra một đoạn mô tả. ";
             promptStr += " QUAN TRỌNG: TUYỆT ĐỐI KHÔNG chào hỏi, KHÔNG xưng hô (không dùng từ bạn hay tôi). KHÔNG có câu mở bài hay kết luận. CHỈ TRẢ VỀ trực tiếp nội dung mô tả sản phẩm để gắn thẳng lên website.";
 
             partsNode.add(buildTextPart(promptStr));
@@ -842,12 +919,10 @@ public class AIServiceImpl implements AIService {
         }
     }
 
-    // Inject thêm cái này ở đầu file
-    private final com.cosmate.repository.StyleSurveyRepository styleSurveyRepository;
-
     @Override
     @org.springframework.transaction.annotation.Transactional
-    public String submitStyleQuiz(Integer userId, com.cosmate.dto.request.QuizSubmitRequest request) {
+    public String submitStyleQuiz(Integer userId, QuizSubmitRequest request) {
+        consumeTokens(userId != null ? userId : getCurrentUserIdFromContext(), 30);
         int totalE = 0, totalA = 0, totalO = 0;
 
         // 1. Cộng điểm trắc nghiệm tĩnh
@@ -873,7 +948,8 @@ public class AIServiceImpl implements AIService {
         String finalArchetypeId = calculateClosestArchetype(totalE, totalA, totalO);
 
         // 4. CẬP NHẬT DATABASE: Cột current_archetype trong bảng Users
-        User user = userRepository.findById(userId).orElseThrow(() -> new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.USER_NOT_FOUND));        user.setCurrentArchetype(finalArchetypeId);
+        User user = userRepository.findById(userId).orElseThrow(() -> new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.USER_NOT_FOUND));
+        user.setCurrentArchetype(finalArchetypeId);
         userRepository.save(user);
 
         // 5. LƯU DATABASE: Bảng Style_Surveys

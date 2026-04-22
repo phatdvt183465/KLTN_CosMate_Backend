@@ -29,6 +29,7 @@ public enum ErrorCode {
     SURCHARGE_NOT_FOUND(1022, "Không tìm thấy phụ phí!"),
     AI_SERVICE_OVERLOADED(5003, "Hệ thống AI đang quá tải. Vui lòng đợi 1 phút rồi thử lại!"),
     AI_CONTENT_BLOCKED(5004, "Hình ảnh hoặc nội dung vi phạm tiêu chuẩn an toàn của hệ thống."),
+    AI_TOKEN_INSUFFICIENT(4001, "Bạn không đủ số dư Token. Vui lòng nạp thêm!"),
     IMAGE_NOT_FOUND(1023, "Không tìm thấy ảnh!");
 
     ErrorCode(int code, String message) {

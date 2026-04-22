@@ -97,10 +97,10 @@ public class AIController {
     @PostMapping(value = "/generate-description", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<String> generateDescription(
             @RequestParam(value = "name", required = false) String name,
-            @RequestParam(value = "customPrompt", required = false) String customPrompt,
+            @RequestParam(value = "personaId", required = false) Integer personaId,
             @RequestParam("files") List<MultipartFile> files) {
 
-        String description = aiService.generateCostumeDescription(name, customPrompt, files);
+        String description = aiService.generateCostumeDescription(name, personaId, files);
         return ApiResponse.<String>builder()
                 .message("Tạo mô tả thành công!")
                 .result(description)
@@ -178,6 +178,14 @@ public class AIController {
         return ApiResponse.<String>builder()
                 .result(archetypeId)
                 .message("Phân tích cá tính thành công! Bạn là: " + archetypeId)
+                .build();
+    }
+
+    @PostMapping(value = "/moderate-costume-images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<String> moderateCostumeImages(@RequestParam("files") List<MultipartFile> files) {
+        return ApiResponse.<String>builder()
+                .result(aiService.moderateCostumeImages(files))
+                .message("Kiểm duyệt ảnh thành công!")
                 .build();
     }
 

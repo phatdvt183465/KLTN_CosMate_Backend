@@ -73,9 +73,6 @@ public class OrderServiceImpl implements OrderService {
         if (request.getRentDay() == null || request.getRentDay() <= 0)
             throw new IllegalArgumentException("rentDay must be greater than 0");
 
-        if (request.getSelectedRentalOptionId() == null) {
-            throw new IllegalArgumentException("selectedRentalOptionId is required (one rental option must be chosen)");
-        }
 
         LocalDateTime rentStart;
         try {
@@ -139,15 +136,19 @@ public class OrderServiceImpl implements OrderService {
             }
         }
 
-        // process selected rental option (exactly 1)
+        // process selected rental option (optional)
         Integer selectedRentalOptionId = request.getSelectedRentalOptionId();
-        Optional<CostumeRentalOption> ropt = costumeRentalOptionRepository.findById(selectedRentalOptionId);
-        if (ropt.isEmpty()) throw new IllegalArgumentException("Rental option id " + selectedRentalOptionId + " not found");
-        CostumeRentalOption roption = ropt.get();
-        if (roption.getCostume() == null || !roption.getCostume().getId().equals(c.getId())) {
-            throw new IllegalArgumentException("Rental option id " + selectedRentalOptionId + " does not belong to costume " + c.getId());
+        CostumeRentalOption roption = null;
+        BigDecimal rentalOptionPrice = BigDecimal.ZERO;
+        if (selectedRentalOptionId != null) {
+            Optional<CostumeRentalOption> ropt = costumeRentalOptionRepository.findById(selectedRentalOptionId);
+            if (ropt.isEmpty()) throw new IllegalArgumentException("Rental option id " + selectedRentalOptionId + " not found");
+            roption = ropt.get();
+            if (roption.getCostume() == null || !roption.getCostume().getId().equals(c.getId())) {
+                throw new IllegalArgumentException("Rental option id " + selectedRentalOptionId + " does not belong to costume " + c.getId());
+            }
+            rentalOptionPrice = roption.getPrice() == null ? BigDecimal.ZERO : roption.getPrice();
         }
-        BigDecimal rentalOptionPrice = roption.getPrice() == null ? BigDecimal.ZERO : roption.getPrice();
 
         // compute totals
         BigDecimal totalRent = rentAmount.add(surchargeSum).add(accessoriesSum).add(rentalOptionPrice);
@@ -219,14 +220,16 @@ public class OrderServiceImpl implements OrderService {
             }
         }
 
-        // persist chosen rental option into OrderRentalOption table
-        OrderRentalOption oro = OrderRentalOption.builder()
-                .orderDetail(od)
-                .optionName(roption.getName())
-                .price(rentalOptionPrice)
-                .description(roption.getDescription())
-                .build();
-        orderRentalOptionRepository.save(oro);
+        // persist chosen rental option into OrderRentalOption table (only if provided)
+        if (roption != null) {
+            OrderRentalOption oro = OrderRentalOption.builder()
+                    .orderDetail(od)
+                    .optionName(roption.getName())
+                    .price(rentalOptionPrice)
+                    .description(roption.getDescription())
+                    .build();
+            orderRentalOptionRepository.save(oro);
+        }
 
         // persist order-level surcharge entries
         if (c.getSurcharges() != null) {

@@ -10,6 +10,8 @@ import com.cosmate.dto.response.CustomAnswerResponse;
 import com.cosmate.dto.response.PoseScoringResponse;
 import com.cosmate.dto.response.SearchResponse;
 import com.cosmate.entity.PoseScore;
+import com.cosmate.entity.User;
+import com.cosmate.repository.UserRepository;
 import com.cosmate.service.AIService;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.Valid;
@@ -31,6 +33,7 @@ public class AIController {
 
     private final AIService aiService;
     private final AiKnowledgeBase aiKnowledgeBase;
+    private final UserRepository userRepository;
 
     // API tìm kiếm: POST /api/search/ai
     @PostMapping(value = "/ai", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

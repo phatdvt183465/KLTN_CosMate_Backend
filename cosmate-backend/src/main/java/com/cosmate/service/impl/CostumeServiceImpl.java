@@ -75,7 +75,7 @@ public class CostumeServiceImpl implements CostumeService {
             costume.setRentDiscount(100); // default = 100% (no discount for subsequent days)
         }
         costume.setProviderId(request.getProviderId());
-        costume.setStatus("AVAILABLE");
+        costume.setStatus("PENDING");
 
         // Xử lý các thành phần liên quan
         handleImages(costume, request.getImageFiles());

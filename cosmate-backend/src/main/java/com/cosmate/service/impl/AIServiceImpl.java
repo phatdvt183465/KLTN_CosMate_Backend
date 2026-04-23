@@ -19,10 +19,12 @@ import com.cosmate.repository.CostumeImageRepository;
 import com.cosmate.repository.CostumeRepository;
 import com.cosmate.repository.OrderDetailRepository;
 import com.cosmate.repository.PoseScoreRepository;
+import com.cosmate.repository.ProviderRepository;
 import com.cosmate.repository.StyleSurveyRepository;
 import com.cosmate.repository.UserRepository;
 import com.cosmate.service.AIService;
 import com.cosmate.service.FirebaseStorageService;
+import com.cosmate.service.NotificationService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -43,10 +45,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
@@ -79,12 +79,13 @@ public class AIServiceImpl implements AIService {
     private final AiKnowledgeBase aiKnowledgeBase;
     private final PoseScoreRepository poseScoreRepository;
     private final FirebaseStorageService firebaseStorageService;
+    private final NotificationService notificationService;
     private final OrderDetailRepository orderDetailRepository;
+    private final ProviderRepository providerRepository;
     private final ConcurrentHashMap<String, List<Integer>> archetypeTopCache = new ConcurrentHashMap<>();
     private final UserRepository userRepository;
     private final StyleSurveyRepository styleSurveyRepository;
     private final AiModelRouter aiModelRouter; // Thêm vào danh sách inject của Lombok @RequiredArgsConstructor
-    private final TransactionTemplate transactionTemplate;
     @Lazy
     private final AIService selfProxy;
 
@@ -366,7 +367,6 @@ public class AIServiceImpl implements AIService {
     }
 
     @Async
-    @org.springframework.transaction.annotation.Transactional
     @Override
     public void processNewCostumeAsync(Integer costumeId, List<MultipartFile> files) {
         Costume costume = costumeRepository.findById(costumeId).orElse(null);
@@ -374,9 +374,16 @@ public class AIServiceImpl implements AIService {
 
         String moderation = moderateCostumeImages(files);
         try {
-            if ("UNSAFE_VIOLATION".equals(moderation) || "UNSAFE_IRRELEVANT".equals(moderation)) {
+            if ("UNSAFE_VIOLATION".equals(moderation)) {
                 costume.setStatus("REJECTED");
                 costumeRepository.save(costume);
+                sendCostumeRejectionNotification(costume, "Sản phẩm bị từ chối do chứa hình ảnh vi phạm tiêu chuẩn cộng đồng (18+/Bạo lực).");
+                return;
+            }
+            if ("UNSAFE_IRRELEVANT".equals(moderation)) {
+                costume.setStatus("REJECTED");
+                costumeRepository.save(costume);
+                sendCostumeRejectionNotification(costume, "Sản phẩm bị từ chối do hình ảnh tải lên không liên quan đến trang phục hoặc phụ kiện Cosplay.");
                 return;
             }
             selfProxy.generateAndSaveVector(costumeId, true, true);
@@ -391,7 +398,7 @@ public class AIServiceImpl implements AIService {
      * Đánh giá tư thế (pose) cosplay so với nhân vật gốc và trả về điểm số kèm nhận xét.
      */
     @Override
-    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.transaction.annotation.Transactional(noRollbackFor = IllegalArgumentException.class)
     public PoseScoringResponse scorePose(PoseScoringRequest request) {
         consumeTokens(getCurrentUserIdFromContext(), 20);
         try {
@@ -463,7 +470,7 @@ public class AIServiceImpl implements AIService {
             int finalScore = resultNode.path("score").asInt();
             String aiComment = resultNode.path("comment").asText();
             if ("NOT_COSPLAY".equalsIgnoreCase(aiComment)) {
-                throw new RuntimeException("Bé Mèo không nhận diện được người hoặc trang phục trong ảnh. Bạn thử ảnh khác nha!");
+                throw new IllegalArgumentException("Bé Mèo không nhận diện được người hoặc trang phục trong ảnh. Bạn thử ảnh khác nha!");
             }
 
             // ==========================================
@@ -510,20 +517,57 @@ public class AIServiceImpl implements AIService {
 
     // --- Các hàm tiện ích (Utility Methods) ---
 
-    private void consumeTokens(Integer userId, int amount) {
+    @org.springframework.transaction.annotation.Transactional
+    public void consumeTokens(Integer userId, int amount) {
         if (userId == null) {
             throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.UNAUTHORIZED);
         }
-        transactionTemplate.executeWithoutResult(status -> {
-            User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.USER_NOT_FOUND));
-            Integer currentTokens = user.getAiTokens() == null ? 0 : user.getAiTokens();
-            if (currentTokens < amount) {
-                throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.AI_TOKEN_INSUFFICIENT);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.USER_NOT_FOUND));
+        Integer currentTokens = user.getAiTokens() == null ? 0 : user.getAiTokens();
+        if (currentTokens < amount) {
+            throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.AI_TOKEN_INSUFFICIENT);
+        }
+        user.setAiTokens(currentTokens - amount);
+        userRepository.save(user);
+    }
+
+    private Integer getCurrentUserIdFromContext() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getPrincipal() == null) return null;
+        Object principal = auth.getPrincipal();
+        try {
+            if (principal instanceof String) {
+                if (((String) principal).equalsIgnoreCase("anonymousUser")) return null;
+                return Integer.valueOf((String) principal);
             }
-            user.setAiTokens(currentTokens - amount);
-            userRepository.save(user);
-        });
+            if (principal instanceof Integer) return (Integer) principal;
+            return Integer.valueOf(principal.toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void sendCostumeRejectionNotification(Costume costume, String message) {
+        try {
+            if (costume.getProviderId() == null) return;
+            // Lấy User ID từ Provider ID
+            com.cosmate.entity.Provider provider = providerRepository.findById(costume.getProviderId()).orElse(null);
+            if (provider == null || provider.getUserId() == null) return;
+
+            com.cosmate.entity.Notification notification = com.cosmate.entity.Notification.builder()
+                    .user(com.cosmate.entity.User.builder().id(provider.getUserId()).build())
+                    .type("SYSTEM_WARNING")
+                    .header("Sản phẩm bị từ chối phê duyệt")
+                    .content(message + " Sản phẩm: " + costume.getName())
+                    .sendAt(java.time.LocalDateTime.now())
+                    .isRead(false)
+                    .build();
+
+            notificationService.create(notification);
+        } catch (Exception e) {
+            log.error("Lỗi khi gửi thông báo từ chối Costume: {}", e.getMessage());
+        }
     }
 
     private String extractJsonArray(String rawText) {

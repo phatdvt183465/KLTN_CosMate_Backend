@@ -46,6 +46,7 @@ public class AuthController {
                 .email(user.getEmail())
                 .fullName(user.getFullName())
                 .avatarUrl(user.getAvatarUrl())
+                .role(user.getRole() == null ? null : user.getRole().getRoleName())
                 .phone(user.getPhone())
                 .status(user.getStatus())
                 .numberOfToken(user.getNumberOfToken())

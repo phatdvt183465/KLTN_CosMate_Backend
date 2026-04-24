@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Table(name = "menu_item")
+@Table(name = "Menu_Items")
 @Getter
 @Setter
 @NoArgsConstructor

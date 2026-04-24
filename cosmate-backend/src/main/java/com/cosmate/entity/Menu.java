@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Table(name = "menu")
+@Table(name = "Menus")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -31,17 +31,17 @@ public class Menu {
     @Column(length = 500)
     private String description;
 
-    @Column(name = "display_order", updatable = false)
+    @Column(name = "display_order")
     private Integer displayOrder;
 
-    @Column(name = "is_active", updatable = false)
+    @Column(name = "is_active")
     private Boolean isActive = true;
 
     @OneToMany(mappedBy = "menu", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<MenuItem> menuItems = new ArrayList<>();
 
     @CreationTimestamp
-    @Column(name = "created_at", updatable = false)
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
 
     @UpdateTimestamp

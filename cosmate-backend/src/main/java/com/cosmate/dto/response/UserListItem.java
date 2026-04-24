@@ -17,4 +17,5 @@ public class UserListItem {
     private String status;
     private String role;
     private LocalDateTime createdAt;
+    private Integer numberOfToken;
 }

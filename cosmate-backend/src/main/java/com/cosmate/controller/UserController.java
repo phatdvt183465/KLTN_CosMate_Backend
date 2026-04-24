@@ -117,6 +117,7 @@ public class UserController {
                 .avatarUrl(user.getAvatarUrl())
                 .phone(user.getPhone())
                 .status(user.getStatus())
+                .numberOfToken(user.getNumberOfToken())
                 .build();
 
         ApiResponse<UserResponse> api = new ApiResponse<>();
@@ -172,6 +173,7 @@ public class UserController {
                 .avatarUrl(user.getAvatarUrl())
                 .phone(user.getPhone())
                 .status(user.getStatus())
+                .numberOfToken(user.getNumberOfToken())
                 .build();
 
         log.debug("Profile updated successfully for user id={} avatarUrl={}", user.getId(), user.getAvatarUrl());
@@ -217,6 +219,7 @@ public class UserController {
                 .avatarUrl(user.getAvatarUrl())
                 .phone(user.getPhone())
                 .status(user.getStatus())
+                .numberOfToken(user.getNumberOfToken())
                 .build();
 
         ApiResponse<UserResponse> api = new ApiResponse<>();

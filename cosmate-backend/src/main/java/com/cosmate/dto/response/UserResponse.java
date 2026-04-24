@@ -15,4 +15,5 @@ public class UserResponse implements CrudDto<Integer> {
     private String role;
     private String phone;
     private String status;
+    private Integer numberOfToken;
 }

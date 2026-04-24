@@ -62,6 +62,10 @@ public class User {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @ExportField(name = "Số token")
+    @Column(name = "number_of_token", nullable = false, columnDefinition = "int default 100")
+    private Integer numberOfToken;
+
     @Column(name = "current_archetype", length = 50)
     private String currentArchetype;
 

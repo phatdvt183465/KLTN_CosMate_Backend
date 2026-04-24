@@ -28,6 +28,16 @@ public class UserAdminServiceImpl extends CrudServiceImpl<User, Integer, UserRes
     protected BaseCrudMapper<User, UserResponse> getMapper() { return userMapper; }
 
     @Override
+    protected void beforeCreate(User entity, UserResponse request) {
+        if (entity.getNumberOfToken() == null) entity.setNumberOfToken(100);
+    }
+
+    @Override
+    protected void beforeUpdate(User entity, UserResponse request) {
+        if (entity.getNumberOfToken() == null) entity.setNumberOfToken(100);
+    }
+
+    @Override
     protected String[] searchableFields() { return new String[]{"username", "email", "fullName", "phone"}; }
 
     @Override

@@ -48,6 +48,7 @@ public class AuthController {
                 .avatarUrl(user.getAvatarUrl())
                 .phone(user.getPhone())
                 .status(user.getStatus())
+                .numberOfToken(user.getNumberOfToken())
                 .build();
 
         ApiResponse<UserResponse> api = new ApiResponse<>();

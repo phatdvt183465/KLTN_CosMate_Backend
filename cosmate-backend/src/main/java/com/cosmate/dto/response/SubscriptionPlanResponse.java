@@ -15,6 +15,7 @@ public class SubscriptionPlanResponse {
     private Integer cycleMonths;
     private BigDecimal price;
     private Boolean isActive;
+    private Integer monthlyToken;
     private String description;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

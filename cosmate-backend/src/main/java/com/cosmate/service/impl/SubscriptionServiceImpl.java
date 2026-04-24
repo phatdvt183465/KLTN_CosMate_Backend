@@ -28,6 +28,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final SubscriptionPlanRepository planRepository;
     private final ProviderRepository providerRepository;
     private final ProviderSubscriptionRepository subscriptionRepository;
+    private final com.cosmate.repository.UserRepository userRepository;
     private final WalletService walletService;
     private final VnPayService vnPayService;
     private final MomoService momoService;
@@ -48,6 +49,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         if (plan.getCycleMonths() != null) existing.setCycleMonths(plan.getCycleMonths());
         if (plan.getPrice() != null) existing.setPrice(plan.getPrice());
         if (plan.getIsActive() != null) existing.setIsActive(plan.getIsActive());
+        if (plan.getMonthlyToken() != null) existing.setMonthlyToken(plan.getMonthlyToken());
         if (plan.getDescription() != null) existing.setDescription(plan.getDescription());
         return planRepository.save(existing);
     }
@@ -79,6 +81,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .name(plan.getName())
                 .duration(String.valueOf(plan.getCycleMonths()))
                 .price(plan.getPrice())
+                .monthlyToken(plan.getMonthlyToken())
                 .startDate(start)
                 .endDate(end)
                 .status("PENDING")
@@ -137,6 +140,25 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         // If startDate is null, set to now
         if (ps.getStartDate() == null) ps.setStartDate(LocalDateTime.now());
         if (ps.getEndDate() == null) ps.setEndDate(ps.getStartDate().plusMonths(ps.getSubscriptionPlan().getCycleMonths()));
+
+        // Grant monthly tokens to provider immediately (on successful payment)
+        try {
+            Provider provider = ps.getProvider();
+            if (provider != null && provider.getUserId() != null && ps.getMonthlyToken() != null && ps.getMonthlyToken() > 0) {
+                Integer userId = provider.getUserId();
+                var userOpt = userRepository.findById(userId);
+                if (userOpt.isPresent()) {
+                    var user = userOpt.get();
+                    Integer current = user.getNumberOfToken() == null ? 0 : user.getNumberOfToken();
+                    user.setNumberOfToken(current + ps.getMonthlyToken());
+                    userRepository.save(user);
+                }
+                // schedule next grant if subscription longer than 1 month
+                if (ps.getSubscriptionPlan() != null && ps.getSubscriptionPlan().getCycleMonths() != null && ps.getSubscriptionPlan().getCycleMonths() >= 2) {
+                    ps.setNextTokenGrantAt(ps.getStartDate().plusMonths(1));
+                }
+            }
+        } catch (Exception ignored) {}
 
         // If provider is not yet verified, mark them verified when this payment is successfully completed
         Provider provider = ps.getProvider();

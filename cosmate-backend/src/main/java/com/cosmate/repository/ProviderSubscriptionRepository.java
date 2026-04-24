@@ -14,4 +14,5 @@ public interface ProviderSubscriptionRepository extends JpaRepository<ProviderSu
     List<ProviderSubscription> findByProviderOrderByStartDateDesc(Provider provider);
     Optional<ProviderSubscription> findFirstByProviderOrderByEndDateDesc(Provider provider);
     Optional<ProviderSubscription> findByTransaction(Transaction tx);
+    java.util.List<ProviderSubscription> findByStatusAndNextTokenGrantAtBefore(String status, java.time.LocalDateTime before);
 }

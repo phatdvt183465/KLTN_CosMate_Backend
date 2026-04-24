@@ -43,6 +43,12 @@ public class ProviderSubscription {
     @Column(length = 50)
     private String status;
 
+    @Column(name = "monthly_token", nullable = false, columnDefinition = "int default 0")
+    private Integer monthlyToken = 0;
+
+    @Column(name = "next_token_grant_at")
+    private LocalDateTime nextTokenGrantAt;
+
     // transaction_id should be a foreign key to Transactions(id)
     @ManyToOne
     @JoinColumn(name = "transaction_id")

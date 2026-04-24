@@ -18,6 +18,8 @@ public class ProviderSubscriptionResponse {
     private LocalDateTime startDate;
     private LocalDateTime endDate;
     private String status;
+    private Integer monthlyToken;
+    private LocalDateTime nextTokenGrantAt;
     private Integer transactionId;
     private LocalDateTime createdAt;
 }

@@ -25,6 +25,7 @@ public class ServiceOrderScheduler {
     private final OrderDetailRepository orderDetailRepository;
     private final OrderDetailExtendRepository orderDetailExtendRepository;
     private final com.cosmate.repository.TransactionRepository transactionRepository;
+    private final com.cosmate.repository.TokenPurchaseHistoryRepository tokenPurchaseHistoryRepository;
     private final com.cosmate.service.NotificationService notificationService;
 
     // run every 10 minutes to pick up bookings that should start today
@@ -95,6 +96,35 @@ public class ServiceOrderScheduler {
         }
     }
 
+    // run every 1 minute to mark old pending token purchase histories as FAILED
+    @Scheduled(fixedDelayString = "PT1M")
+    public void markOldPendingTokenPurchasesFailed() {
+        try {
+            java.time.LocalDateTime cutoff = java.time.LocalDateTime.now().minusMinutes(20);
+            java.util.List<com.cosmate.entity.TokenPurchaseHistory> pending = tokenPurchaseHistoryRepository.findByStatusAndPurchaseDateBefore("PENDING", cutoff);
+            for (com.cosmate.entity.TokenPurchaseHistory h : pending) {
+                h.setStatus("FAILED");
+                tokenPurchaseHistoryRepository.save(h);
+                try {
+                    com.cosmate.entity.User u = h.getUser();
+                    if (u != null && u.getId() != null) {
+                        com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                                .user(com.cosmate.entity.User.builder().id(u.getId()).build())
+                                .type("TOKEN_PURCHASE")
+                                .header("Giao dịch mua token thất bại")
+                                .content("Đơn mua token (id=" + h.getId() + ") đã chuyển sang FAILED do quá thời gian.")
+                                .sendAt(java.time.LocalDateTime.now())
+                                .isRead(false)
+                                .build();
+                        notificationService.create(n);
+                    }
+                } catch (Exception ignored) {}
+                log.info("Marked token purchase history {} as FAILED due to timeout", h.getId());
+            }
+        } catch (Exception ex) {
+            log.error("Error in ServiceOrderScheduler.markOldPendingTokenPurchasesFailed: {}", ex.getMessage(), ex);
+        }
+    }
     // run every 5 minutes to move orders from IN_USE to EXTENDING when an extend exists
     @Scheduled(fixedDelayString = "PT5M")
     public void moveInUseOrdersToExtendingIfHasExtend() {

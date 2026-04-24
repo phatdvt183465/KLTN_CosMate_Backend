@@ -115,8 +115,10 @@ public class UserController {
                 .email(user.getEmail())
                 .fullName(user.getFullName())
                 .avatarUrl(user.getAvatarUrl())
+                .role(user.getRole() == null ? null : user.getRole().getRoleName())
                 .phone(user.getPhone())
                 .status(user.getStatus())
+                .numberOfToken(user.getNumberOfToken())
                 .build();
 
         ApiResponse<UserResponse> api = new ApiResponse<>();
@@ -170,8 +172,10 @@ public class UserController {
                 .email(user.getEmail())
                 .fullName(user.getFullName())
                 .avatarUrl(user.getAvatarUrl())
+                .role(user.getRole() == null ? null : user.getRole().getRoleName())
                 .phone(user.getPhone())
                 .status(user.getStatus())
+                .numberOfToken(user.getNumberOfToken())
                 .build();
 
         log.debug("Profile updated successfully for user id={} avatarUrl={}", user.getId(), user.getAvatarUrl());
@@ -215,8 +219,10 @@ public class UserController {
                 .email(user.getEmail())
                 .fullName(user.getFullName())
                 .avatarUrl(user.getAvatarUrl())
+                .role(user.getRole() == null ? null : user.getRole().getRoleName())
                 .phone(user.getPhone())
                 .status(user.getStatus())
+                .numberOfToken(user.getNumberOfToken())
                 .build();
 
         ApiResponse<UserResponse> api = new ApiResponse<>();

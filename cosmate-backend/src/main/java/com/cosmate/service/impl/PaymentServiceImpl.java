@@ -26,6 +26,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final MomoService momoService;
     private final SubscriptionService subscriptionService;
     private final TransactionRepository transactionRepository;
+    private final com.cosmate.service.TokenPurchaseService tokenPurchaseService;
     private final OrderRepository orderRepository;
     private final com.cosmate.service.NotificationService notificationService;
     private final com.cosmate.repository.OrderDetailExtendRepository orderDetailExtendRepository;
@@ -96,7 +97,13 @@ public class PaymentServiceImpl implements PaymentService {
                                         }
                                     } catch (Exception ignored2) {}
                                 } else if (type.startsWith("SUB")) {
-                                    try { subscriptionService.finalizeSubscriptionPayment(txnId); } catch (Exception ignored2) {}
+                                    try {
+                                        if (type.toUpperCase().contains("TOKEN")) {
+                                            tokenPurchaseService.finalizePurchase(txnId);
+                                        } else {
+                                            subscriptionService.finalizeSubscriptionPayment(txnId);
+                                        }
+                                    } catch (Exception ignored2) {}
                                 }
                             }
                         }
@@ -124,9 +131,15 @@ public class PaymentServiceImpl implements PaymentService {
                     tx.setStatus("COMPLETED");
                     transactionRepository.save(tx);
                     String type = tx.getType();
-                    if (type != null) {
-                        if (type.startsWith("SUB")) {
-                            try { subscriptionService.finalizeSubscriptionPayment(txnId); } catch (Exception ignored) {}
+                        if (type != null) {
+                            if (type.startsWith("SUB")) {
+                                try {
+                                    if (type.toUpperCase().contains("TOKEN")) {
+                                        tokenPurchaseService.finalizePurchase(txnId);
+                                    } else {
+                                        subscriptionService.finalizeSubscriptionPayment(txnId);
+                                    }
+                                } catch (Exception ignored) {}
                         } else if (type.startsWith("ORDER#")) {
                             try { Integer orderId = Integer.valueOf(type.substring("ORDER#".length())); Optional<Order> oOpt = orderRepository.findById(orderId); if (oOpt.isPresent()) { Order o = oOpt.get(); o.setStatus("PAID"); orderRepository.save(o); } } catch (Exception ignored) {}
                         } else if (type.startsWith("EXTEND#")) {

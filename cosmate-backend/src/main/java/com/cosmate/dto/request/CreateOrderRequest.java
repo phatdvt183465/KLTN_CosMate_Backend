@@ -39,8 +39,6 @@ public class CreateOrderRequest {
     // For the single costume: list of accessory ids selected (may be empty or null)
     private List<@Min(value = 1, message = "ACCESSORY_ID_INVALID") Integer> selectedAccessoryIds;
 
-    // For the single costume: the chosen rental option id (mandatory)
-    @NotNull(message = "RENTAL_OPTION_ID_INVALID")
-    @Min(value = 1, message = "RENTAL_OPTION_ID_INVALID")
+    // For the single costume: the chosen rental option id (optional)
     private Integer selectedRentalOptionId;
 }

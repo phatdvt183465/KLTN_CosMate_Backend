@@ -108,8 +108,9 @@ public class UserServiceImpl implements UserService {
                 .phone(request.getPhone())
                 .role(roleEntity);
 
-        // set createdAt timestamp for new users
+        // set createdAt timestamp for new users and default token count
         builder.createdAt(LocalDateTime.now());
+        builder.numberOfToken(100);
 
         if (request.getFullName() != null) builder.fullName(request.getFullName());
         if (avatarUrl != null) builder.avatarUrl(avatarUrl);
@@ -321,15 +322,19 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public List<UserListItem> listUsers() {
-        return userRepository.findAll().stream().map(u -> UserListItem.builder()
-                .id(u.getId())
-                .username(u.getUsername())
-                .email(u.getEmail())
-                .fullName(u.getFullName())
-                .phone(u.getPhone())
-                .status(u.getStatus())
-                .role(u.getRole() == null ? null : u.getRole().getRoleName())
-                .build()).toList();
+        return userRepository.findAll().stream().map(u -> {
+                UserListItem item = UserListItem.builder()
+                        .id(u.getId())
+                        .username(u.getUsername())
+                        .email(u.getEmail())
+                        .fullName(u.getFullName())
+                        .phone(u.getPhone())
+                        .status(u.getStatus())
+                        .role(u.getRole() == null ? null : u.getRole().getRoleName())
+                        .build();
+                item.setNumberOfToken(u.getNumberOfToken());
+                return item;
+        }).toList();
     }
 
     @Override
@@ -341,11 +346,15 @@ public class UserServiceImpl implements UserService {
 
         return userRepository.findByFullNameContainingIgnoreCaseAndStatus(normalizedKeyword, "ACTIVE")
                 .stream()
-                .map(u -> UserListItem.builder()
-                        .id(u.getId())
-                        .fullName(u.getFullName())
-                        .avatarUrl(u.getAvatarUrl())
-                        .build())
+                .map(u -> {
+                    UserListItem it = UserListItem.builder()
+                            .id(u.getId())
+                            .fullName(u.getFullName())
+                            .avatarUrl(u.getAvatarUrl())
+                            .build();
+                    it.setNumberOfToken(u.getNumberOfToken());
+                    return it;
+                })
                 .toList();
     }
 

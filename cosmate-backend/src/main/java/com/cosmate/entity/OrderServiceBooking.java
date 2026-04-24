@@ -24,6 +24,9 @@ public class OrderServiceBooking {
     @Column(name = "service_id")
     private Integer serviceId;
 
+    @Column(name = "service_name", length = 255)
+    private String serviceName;
+
     @Column(name = "booking_date")
     private LocalDate bookingDate;
 

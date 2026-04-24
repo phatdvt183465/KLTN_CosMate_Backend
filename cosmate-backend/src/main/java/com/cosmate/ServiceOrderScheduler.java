@@ -25,6 +25,9 @@ public class ServiceOrderScheduler {
     private final OrderDetailRepository orderDetailRepository;
     private final OrderDetailExtendRepository orderDetailExtendRepository;
     private final com.cosmate.repository.TransactionRepository transactionRepository;
+    private final com.cosmate.repository.TokenPurchaseHistoryRepository tokenPurchaseHistoryRepository;
+    private final com.cosmate.repository.ProviderSubscriptionRepository providerSubscriptionRepository;
+    private final com.cosmate.repository.UserRepository userRepository;
     private final com.cosmate.service.NotificationService notificationService;
 
     // run every 10 minutes to pick up bookings that should start today
@@ -95,6 +98,80 @@ public class ServiceOrderScheduler {
         }
     }
 
+    // run every 1 minute to mark old pending token purchase histories as FAILED
+    @Scheduled(fixedDelayString = "PT1M")
+    public void markOldPendingTokenPurchasesFailed() {
+        try {
+            java.time.LocalDateTime cutoff = java.time.LocalDateTime.now().minusMinutes(20);
+            java.util.List<com.cosmate.entity.TokenPurchaseHistory> pending = tokenPurchaseHistoryRepository.findByStatusAndPurchaseDateBefore("PENDING", cutoff);
+            for (com.cosmate.entity.TokenPurchaseHistory h : pending) {
+                h.setStatus("FAILED");
+                tokenPurchaseHistoryRepository.save(h);
+                try {
+                    com.cosmate.entity.User u = h.getUser();
+                    if (u != null && u.getId() != null) {
+                        com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                                .user(com.cosmate.entity.User.builder().id(u.getId()).build())
+                                .type("TOKEN_PURCHASE")
+                                .header("Giao dịch mua token thất bại")
+                                .content("Đơn mua token (id=" + h.getId() + ") đã chuyển sang FAILED do quá thời gian.")
+                                .sendAt(java.time.LocalDateTime.now())
+                                .isRead(false)
+                                .build();
+                        notificationService.create(n);
+                    }
+                } catch (Exception ignored) {}
+                log.info("Marked token purchase history {} as FAILED due to timeout", h.getId());
+            }
+        } catch (Exception ex) {
+            log.error("Error in ServiceOrderScheduler.markOldPendingTokenPurchasesFailed: {}", ex.getMessage(), ex);
+        }
+    }
+
+    // run hourly to grant monthly tokens for active provider subscriptions
+    @Scheduled(fixedDelayString = "PT1H")
+    public void grantMonthlyTokensForProviderSubscriptions() {
+        try {
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+            java.util.List<com.cosmate.entity.ProviderSubscription> list = providerSubscriptionRepository.findByStatusAndNextTokenGrantAtBefore("ACTIVE", now);
+            for (com.cosmate.entity.ProviderSubscription ps : list) {
+                try {
+                    if (ps.getMonthlyToken() == null || ps.getMonthlyToken() <= 0) continue;
+                    if (ps.getEndDate() != null && (ps.getNextTokenGrantAt() == null || !ps.getNextTokenGrantAt().isBefore(ps.getEndDate()))) continue;
+                    com.cosmate.entity.Provider prov = ps.getProvider();
+                    if (prov == null || prov.getUserId() == null) continue;
+                    java.util.Optional<com.cosmate.entity.User> uopt = userRepository.findById(prov.getUserId());
+                    if (uopt.isPresent()) {
+                        com.cosmate.entity.User u = uopt.get();
+                        Integer curr = u.getNumberOfToken() == null ? 0 : u.getNumberOfToken();
+                        u.setNumberOfToken(curr + ps.getMonthlyToken());
+                        userRepository.save(u);
+                        // notify provider
+                        try {
+                            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                                    .user(com.cosmate.entity.User.builder().id(u.getId()).build())
+                                    .type("TOKEN_GRANT")
+                                    .header("Đã nhận token hàng tháng")
+                                    .content("Bạn đã nhận " + ps.getMonthlyToken() + " token cho gói đăng ký '" + (ps.getName() == null ? "" : ps.getName()) + "'.")
+                                    .sendAt(java.time.LocalDateTime.now())
+                                    .isRead(false)
+                                    .build();
+                            notificationService.create(n);
+                        } catch (Exception ignored) {}
+                    }
+                    // advance nextTokenGrantAt by one month
+                    java.time.LocalDateTime next = ps.getNextTokenGrantAt() == null ? ps.getStartDate().plusMonths(1) : ps.getNextTokenGrantAt().plusMonths(1);
+                    ps.setNextTokenGrantAt(next);
+                    providerSubscriptionRepository.save(ps);
+                    log.info("Granted monthly tokens for provider subscription {}: +{} tokens", ps.getId(), ps.getMonthlyToken());
+                } catch (Exception e) {
+                    log.error("Error granting monthly tokens for provider subscription {}: {}", ps.getId(), e.getMessage(), e);
+                }
+            }
+        } catch (Exception ex) {
+            log.error("Error in ServiceOrderScheduler.grantMonthlyTokensForProviderSubscriptions: {}", ex.getMessage(), ex);
+        }
+    }
     // run every 5 minutes to move orders from IN_USE to EXTENDING when an extend exists
     @Scheduled(fixedDelayString = "PT5M")
     public void moveInUseOrdersToExtendingIfHasExtend() {

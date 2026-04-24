@@ -35,6 +35,9 @@ public class SubscriptionPlan {
     @Column(length = 255)
     private String description;
 
+    @Column(name = "monthly_token", nullable = false, columnDefinition = "int default 0")
+    private Integer monthlyToken = 0;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -46,6 +49,7 @@ public class SubscriptionPlan {
         if (createdAt == null) createdAt = LocalDateTime.now();
         if (updatedAt == null) updatedAt = LocalDateTime.now();
         if (isActive == null) isActive = true;
+        if (monthlyToken == null) monthlyToken = 0;
     }
 
     @PreUpdate

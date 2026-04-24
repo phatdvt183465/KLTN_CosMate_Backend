@@ -83,8 +83,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/providers/**").permitAll()
                         // Allow public GET access to costume reviews
                         .requestMatchers(HttpMethod.GET, "/api/reviews/costume/**").permitAll()
-                        // Allow public GET access to subscription plans
+                        // Allow public GET access to subscription plans and AI token plans
                         .requestMatchers(HttpMethod.GET, "/api/subscription-plans/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/ai-token-plans/**").permitAll()
                         // OPTIONS preflight
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // Other endpoints

@@ -444,6 +444,7 @@ public class OrderServiceImpl implements OrderService {
         OrderServiceBooking osb = OrderServiceBooking.builder()
                 .orderId(order.getId())
                 .serviceId(s.getId())
+                .serviceName(s.getServiceName())
                 .bookingDate(bookingDate)
                 .timeSlot(req.getTimeSlot())
                 .numberOfHuman(req.getNumberOfHuman())

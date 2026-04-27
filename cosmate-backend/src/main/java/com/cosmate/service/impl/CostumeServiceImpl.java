@@ -93,7 +93,6 @@ public class CostumeServiceImpl implements CostumeService {
             savedCostume = costumeRepository.save(savedCostume);
         }
 
-        registerVectorGenerationAfterCommit(savedCostume.getId(), true, true);
         aiService.processNewCostumeAsync(savedCostume.getId(), request.getImageFiles());
 
         return mapToResponse(savedCostume);

@@ -2,6 +2,7 @@ package com.cosmate.controller;
 
 import com.cosmate.configuration.AiKnowledgeBase;
 import com.cosmate.dto.request.CustomAnswerRequest;
+import com.cosmate.dto.request.PoseFeedbackRequest;
 import com.cosmate.dto.request.PoseScoringRequest;
 import com.cosmate.dto.request.RecommendationRequest;
 import com.cosmate.dto.request.SearchByImageRequest;
@@ -84,6 +85,14 @@ public class AIController {
         return ApiResponse.<PoseScoringResponse>builder()
                 .result(aiService.scorePose(request))
                 .message("Chấm điểm thành công!")
+                .build();
+    }
+
+    @PostMapping("/pose-score/feedback")
+    public ApiResponse<Void> poseScoreFeedback(@Valid @RequestBody PoseFeedbackRequest request) {
+        aiService.createPoseFeedback(request);
+        return ApiResponse.<Void>builder()
+                .message("Gửi phản hồi thành công!")
                 .build();
     }
 

@@ -1,5 +1,6 @@
 package com.cosmate.service;
 
+import com.cosmate.dto.request.PoseFeedbackRequest;
 import com.cosmate.dto.request.PoseScoringRequest;
 import com.cosmate.dto.request.RecommendationRequest;
 import com.cosmate.dto.request.SearchByImageRequest;
@@ -38,6 +39,7 @@ public interface AIService {
 
     // --- CHẤM ĐIỂM ---
     PoseScoringResponse scorePose(PoseScoringRequest request);
+    void createPoseFeedback(PoseFeedbackRequest request);
 
     // API dọn dẹp: Cập nhật vector cho toàn bộ ảnh cũ bị thiếu
     void generateVectorsForMissingImages();
@@ -66,4 +68,6 @@ public interface AIService {
     void refreshArchetypeCache();
 
     String submitStyleQuiz(Integer userId, com.cosmate.dto.request.QuizSubmitRequest request);
+
+    void consumeTokens(Integer userId, int amount);
 }

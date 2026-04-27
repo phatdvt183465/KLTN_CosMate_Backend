@@ -3,6 +3,7 @@ package com.cosmate.service.impl;
 import com.cosmate.configuration.AiKnowledgeBase;
 import com.cosmate.configuration.AiModelRouter;
 import com.cosmate.dto.request.CustomAnswerRequest;
+import com.cosmate.dto.request.PoseFeedbackRequest;
 import com.cosmate.dto.request.PoseScoringRequest;
 import com.cosmate.dto.request.QuizSubmitRequest;
 import com.cosmate.dto.request.RecommendationRequest;
@@ -10,17 +11,16 @@ import com.cosmate.dto.request.SearchByImageRequest;
 import com.cosmate.dto.response.CustomAnswerResponse;
 import com.cosmate.dto.response.PoseScoringResponse;
 import com.cosmate.dto.response.SearchResponse;
-import com.cosmate.entity.Costume;
-import com.cosmate.entity.CostumeImage;
-import com.cosmate.entity.PoseScore;
-import com.cosmate.entity.User;
+import com.cosmate.entity.*;
 import com.cosmate.repository.CharacterRepository;
 import com.cosmate.repository.CostumeImageRepository;
 import com.cosmate.repository.CostumeRepository;
 import com.cosmate.repository.OrderDetailRepository;
+import com.cosmate.repository.PoseFeedbackRepository;
 import com.cosmate.repository.PoseScoreRepository;
 import com.cosmate.repository.ProviderRepository;
 import com.cosmate.repository.StyleSurveyRepository;
+import com.cosmate.repository.SystemConfigRepository;
 import com.cosmate.repository.UserRepository;
 import com.cosmate.service.AIService;
 import com.cosmate.service.FirebaseStorageService;
@@ -32,6 +32,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -82,12 +83,15 @@ public class AIServiceImpl implements AIService {
     private final NotificationService notificationService;
     private final OrderDetailRepository orderDetailRepository;
     private final ProviderRepository providerRepository;
+    private final PoseFeedbackRepository poseFeedbackRepository;
+    private final SystemConfigRepository systemConfigRepository;
     private final ConcurrentHashMap<String, List<Integer>> archetypeTopCache = new ConcurrentHashMap<>();
     private final UserRepository userRepository;
     private final StyleSurveyRepository styleSurveyRepository;
-    private final AiModelRouter aiModelRouter; // Thêm vào danh sách inject của Lombok @RequiredArgsConstructor
+    private final AiModelRouter aiModelRouter;
     @Lazy
-    private final AIService selfProxy;
+    @Autowired
+    private AIService selfProxy;
 
     @Value("${gemini.api.key}")
     private String apiKey;
@@ -98,47 +102,54 @@ public class AIServiceImpl implements AIService {
     @Override
     @org.springframework.transaction.annotation.Transactional
     public List<SearchResponse> searchSimilarCostumes(SearchByImageRequest request) {
-        consumeTokens(getCurrentUserIdFromContext(), 15);
+        selfProxy.consumeTokens(getCurrentUserIdFromContext(), 15);
         try {
             String queryText = request.getText() != null ? request.getText().trim() : "";
             List<MultipartFile> imageFiles = request.getFiles();
+            boolean hasImages = imageFiles != null && !imageFiles.isEmpty() && imageFiles.stream().anyMatch(file -> file != null && !file.isEmpty());
+            boolean hasText = !queryText.isEmpty();
 
-            if (imageFiles == null || imageFiles.isEmpty() || imageFiles.get(0).isEmpty()) {
-                throw new IllegalArgumentException("Tính năng tìm kiếm bằng AI bắt buộc phải upload ít nhất 1 hình ảnh!");
+            if (!hasImages && !hasText) {
+                throw new IllegalArgumentException("Tính năng tìm kiếm AI cần nhập text hoặc upload ít nhất 1 hình ảnh!");
             }
 
-            // 1. TẠO VECTOR CHO ẢNH
-            String imageTags = extractFeaturesFromMultipleImages(imageFiles);
-            List<Double> queryImageVector = callGeminiGetVector(imageTags);
+            List<Double> queryImageVector = null;
+            if (hasImages) {
+                String imageTags = extractFeaturesFromMultipleImages(imageFiles);
+                queryImageVector = callGeminiGetVector(imageTags);
+            }
 
-            // 2. TẠO VECTOR CHO CHỮ (NẾU CÓ)
-            List<Double> queryTextVector = queryText.isEmpty() ? null : callGeminiGetVector(queryText);
+            List<Double> queryTextVector = hasText ? callGeminiGetVector(queryText) : null;
 
             List<Costume> allCostumes = costumeRepository.findAllWithVector();
             List<SearchResponse> results = new ArrayList<>();
 
             for (Costume costume : allCostumes) {
-                if (costume.getImageVector() == null || costume.getTextVector() == null || costume.getImageVector().isEmpty()) continue;
+                if (costume.getTextVector() == null || costume.getTextVector().isEmpty()) continue;
+                if (hasImages && (costume.getImageVector() == null || costume.getImageVector().isEmpty())) continue;
 
-                List<Double> dbImageVector = objectMapper.readValue(costume.getImageVector(), new TypeReference<List<Double>>() {});
                 List<Double> dbTextVector = objectMapper.readValue(costume.getTextVector(), new TypeReference<List<Double>>() {});
-
-                double imageScore = calculateCosineSimilarity(queryImageVector, dbImageVector);
                 double textScore = queryTextVector != null ? calculateCosineSimilarity(queryTextVector, dbTextVector) : 0.0;
 
-                // 3. CÔNG THỨC 70% ẢNH - 30% CHỮ
-                double finalScore = queryTextVector != null ? (imageScore * 0.7) + (textScore * 0.3) : imageScore;
-
-                if (finalScore > 0.55) { // Ngưỡng an toàn
-                    String displayImageUrl = costume.getImages().isEmpty() ? "" : costume.getImages().get(0).getImageUrl();
-                    results.add(SearchResponse.builder()
-                            .costumeId(costume.getId())
-                            .costumeName(costume.getName())
-                            .imageUrl(displayImageUrl)
-                            .price(costume.getPricePerDay())
-                            .similarityScore(finalScore)
-                            .build());
+                double finalScore;
+                if (hasImages) {
+                    List<Double> dbImageVector = objectMapper.readValue(costume.getImageVector(), new TypeReference<List<Double>>() {});
+                    double imageScore = calculateCosineSimilarity(queryImageVector, dbImageVector);
+                    finalScore = (imageScore * 0.7) + (textScore * 0.3);
+                    if (finalScore <= 0.55) continue;
+                } else {
+                    finalScore = textScore * 1.0;
+                    if (finalScore <= 0.5) continue;
                 }
+
+                String displayImageUrl = costume.getImages().isEmpty() ? "" : costume.getImages().get(0).getImageUrl();
+                results.add(SearchResponse.builder()
+                        .costumeId(costume.getId())
+                        .costumeName(costume.getName())
+                        .imageUrl(displayImageUrl)
+                        .price(costume.getPricePerDay())
+                        .similarityScore(finalScore)
+                        .build());
             }
 
             return results.stream()
@@ -362,7 +373,7 @@ public class AIServiceImpl implements AIService {
             return result == null ? "UNSAFE_IRRELEVANT" : result.trim().toUpperCase();
         } catch (Exception e) {
             log.error("Lỗi kiểm duyệt ảnh costume: {}", e.getMessage(), e);
-            return "UNSAFE_IRRELEVANT";
+            return "ERROR";
         }
     }
 
@@ -373,6 +384,12 @@ public class AIServiceImpl implements AIService {
         if (costume == null) return;
 
         String moderation = moderateCostumeImages(files);
+
+        if ("ERROR".equals(moderation)) {
+            log.warn("AI lỗi hoặc quá tải. Giữ nguyên trạng thái PENDING cho bộ đồ ID: {}", costumeId);
+            return;
+        }
+
         try {
             if ("UNSAFE_VIOLATION".equals(moderation)) {
                 costume.setStatus("REJECTED");
@@ -387,7 +404,7 @@ public class AIServiceImpl implements AIService {
                 return;
             }
             selfProxy.generateAndSaveVector(costumeId, true, true);
-            costume.setStatus("ACTIVE");
+            costume.setStatus("AVAILABLE");
             costumeRepository.save(costume);
         } catch (Exception e) {
             log.error("processNewCostumeAsync failed for {}: {}", costumeId, e.getMessage(), e);
@@ -400,7 +417,7 @@ public class AIServiceImpl implements AIService {
     @Override
     @org.springframework.transaction.annotation.Transactional(noRollbackFor = IllegalArgumentException.class)
     public PoseScoringResponse scorePose(PoseScoringRequest request) {
-        consumeTokens(getCurrentUserIdFromContext(), 20);
+        selfProxy.consumeTokens(getCurrentUserIdFromContext(), 20);
         try {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
@@ -515,19 +532,43 @@ public class AIServiceImpl implements AIService {
         }
     }
 
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public void createPoseFeedback(PoseFeedbackRequest request) {
+        Integer userId = getCurrentUserIdFromContext();
+        if (userId == null) {
+            throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.UNAUTHORIZED);
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.USER_NOT_FOUND));
+        PoseScore poseScore = poseScoreRepository.findById(request.getPoseScoreId())
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy PoseScore tương ứng!"));
+
+        PoseFeedback feedback = PoseFeedback.builder()
+                .user(user)
+                .poseScore(poseScore)
+                .feedbackText(request.getFeedbackText())
+                .build();
+        poseFeedbackRepository.save(feedback);
+    }
+
     // --- Các hàm tiện ích (Utility Methods) ---
 
-    @org.springframework.transaction.annotation.Transactional
+    @Override
+    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void consumeTokens(Integer userId, int amount) {
         if (userId == null) {
             throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.UNAUTHORIZED);
         }
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.USER_NOT_FOUND));
+
         Integer currentTokens = user.getAiTokens() == null ? 0 : user.getAiTokens();
         if (currentTokens < amount) {
             throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.AI_TOKEN_INSUFFICIENT);
         }
+
         user.setAiTokens(currentTokens - amount);
         userRepository.save(user);
     }
@@ -727,7 +768,7 @@ public class AIServiceImpl implements AIService {
     @Override
     @org.springframework.transaction.annotation.Transactional
     public String generateCostumeDescription(String costumeName, Integer personaId, List<MultipartFile> files) {
-        consumeTokens(getCurrentUserIdFromContext(), 20);
+        selfProxy.consumeTokens(getCurrentUserIdFromContext(), 20);
         if (files == null || files.isEmpty()) return "Không thể generate được description, vui lòng tả thủ công.";
         try {
             ObjectNode body = objectMapper.createObjectNode();
@@ -737,14 +778,22 @@ public class AIServiceImpl implements AIService {
             if (costumeName != null && !costumeName.trim().isEmpty()) {
                 promptStr += "Tên nhân vật/bộ trang phục này là: '" + costumeName + "'. ";
             }
+
+            String personaKey = "PROMPT_PERSONA_SALE";
             if (personaId != null) {
-                switch (personaId) {
-                    case 1 -> promptStr += "Phong cách bắt buộc: Chuyên nghiệp/Sale. ";
-                    case 2 -> promptStr += "Phong cách bắt buộc: Hài hước/Cute. ";
-                    case 3 -> promptStr += "Phong cách bắt buộc: Cổ trang/Deep. ";
-                    default -> promptStr += "Phong cách bắt buộc: Chuyên nghiệp/Sale. ";
+                if (personaId == 2) {
+                    personaKey = "PROMPT_PERSONA_CUTE";
+                } else if (personaId == 3) {
+                    personaKey = "PROMPT_PERSONA_DEEP";
                 }
             }
+            String personaPrompt = systemConfigRepository.findById(personaKey)
+                    .map(SystemConfig::getConfigValue)
+                    .filter(value -> value != null && !value.trim().isEmpty())
+                    .orElseGet(() -> systemConfigRepository.findById("PROMPT_PERSONA_SALE")
+                            .map(SystemConfig::getConfigValue)
+                            .orElse(""));
+            promptStr += personaPrompt + " ";
             promptStr += "Hãy nhìn vào những hình ảnh đính kèm và tạo ra một đoạn mô tả. ";
             promptStr += " QUAN TRỌNG: TUYỆT ĐỐI KHÔNG chào hỏi, KHÔNG xưng hô (không dùng từ bạn hay tôi). KHÔNG có câu mở bài hay kết luận. CHỈ TRẢ VỀ trực tiếp nội dung mô tả sản phẩm để gắn thẳng lên website.";
 
@@ -966,7 +1015,7 @@ public class AIServiceImpl implements AIService {
     @Override
     @org.springframework.transaction.annotation.Transactional
     public String submitStyleQuiz(Integer userId, QuizSubmitRequest request) {
-        consumeTokens(userId != null ? userId : getCurrentUserIdFromContext(), 30);
+        selfProxy.consumeTokens(userId != null ? userId : getCurrentUserIdFromContext(), 30);
         int totalE = 0, totalA = 0, totalO = 0;
 
         // 1. Cộng điểm trắc nghiệm tĩnh

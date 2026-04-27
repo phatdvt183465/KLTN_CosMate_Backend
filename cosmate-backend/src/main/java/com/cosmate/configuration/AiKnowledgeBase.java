@@ -1,5 +1,6 @@
 package com.cosmate.configuration;
 
+import com.cosmate.repository.SystemConfigRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
@@ -14,10 +15,12 @@ import java.io.InputStream;
 @Slf4j
 @Getter
 @Component
+@org.springframework.context.annotation.DependsOn("databaseSeeder")
 @RequiredArgsConstructor
 public class AiKnowledgeBase {
 
     private final ObjectMapper objectMapper;
+    private final SystemConfigRepository systemConfigRepository;
 
     // Lưu dữ liệu trên RAM
     private JsonNode archetypes;
@@ -32,9 +35,9 @@ public class AiKnowledgeBase {
             archetypes = loadJson("ai-data/jungian_archetypes_extended.json");
             stage1Survey = loadJson("ai-data/survey_stage_1.json");
             stage2Survey = loadJson("ai-data/survey_stage_2.json");
-            try (InputStream is = new ClassPathResource("ai-data/wcs_scoring_rules.txt").getInputStream()) {
-                wcsRules = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            }
+            wcsRules = systemConfigRepository.findById("WCS_RULES")
+                    .map(config -> config.getConfigValue() == null ? "" : config.getConfigValue())
+                    .orElse("");
 
             log.info("🔥 Đã nạp thành công Knowledge Base (RAG) và WCS Rules lên RAM!");
         } catch (Exception e) {

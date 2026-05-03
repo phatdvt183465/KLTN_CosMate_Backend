@@ -26,7 +26,6 @@ public class AiKnowledgeBase {
     private JsonNode archetypes;
     private JsonNode stage1Survey;
     private JsonNode stage2Survey;
-    private JsonNode surveyEnd;
     private String wcsRules;
 
     @PostConstruct

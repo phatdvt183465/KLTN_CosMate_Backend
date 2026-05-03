@@ -178,22 +178,27 @@ public class AIServiceImpl implements AIService {
                 boolean isChanged = false;
 
                 // 1. CHỈ TẠO LẠI IMAGE VECTOR NẾU CÓ YÊU CẦU
-                if (updateImage && costume.getImages() != null) {
-                    StringBuilder allImageTags = new StringBuilder();
-                    for (CostumeImage img : costume.getImages()) {
+                if (updateImage && costume.getImages() != null && !costume.getImages().isEmpty()) {
+                    List<byte[]> downloadedImages = new ArrayList<>();
+
+                    // Giới hạn tối đa 3-5 ảnh để bóc tag (tránh payload quá lớn gây lỗi quá tải)
+                    costume.getImages().stream().limit(4).forEach(img -> {
                         byte[] bytes = downloadImageFromUrl(img.getImageUrl());
-                        if (bytes != null) {
-                            String tags = extractTagsFromBytes(bytes);
-                            if (!tags.isEmpty()) {
-                                if (allImageTags.length() > 0) allImageTags.append(", ");
-                                allImageTags.append(tags);
+                        if (bytes != null) downloadedImages.add(bytes);
+                    });
+
+                    if (!downloadedImages.isEmpty()) {
+                        // GỌI API LẦN 1: Bóc tag cho toàn bộ 4 ảnh cùng lúc
+                        String allImageTags = extractTagsFromMultipleImageBytes(downloadedImages);
+
+                        if (allImageTags != null && !allImageTags.isEmpty()) {
+                            // GỌI API LẦN 2: Nhúng chuỗi tag thành Vector
+                            String imageVector = generateVectorForText(allImageTags);
+                            if (imageVector != null) {
+                                costume.setImageVector(imageVector);
+                                isChanged = true;
                             }
                         }
-                    }
-                    String imageVector = generateVectorForText(allImageTags.toString());
-                    if (imageVector != null) {
-                        costume.setImageVector(imageVector);
-                        isChanged = true;
                     }
                 }
 
@@ -246,10 +251,14 @@ public class AIServiceImpl implements AIService {
             }
             if (targetArchetype == null) throw new RuntimeException("Không tìm thấy dữ liệu Archetype trong RAG!");
 
-            String searchContent = String.format("Trang phục dành cho nguyên mẫu %s. Phong cách: %s. Màu: %s.",
+            String searchContent = String.format(
+                    "Trang phục dành cho nguyên mẫu %s. Khát vọng cốt lõi: %s. Phong cách: %s. Màu sắc: %s. Nhân vật tiêu biểu: %s.",
                     targetArchetype.path("archetype_name").asText(),
+                    targetArchetype.path("core_desire").asText(),
                     targetArchetype.path("clothing_style").asText(),
-                    targetArchetype.path("color_palette").toString());
+                    targetArchetype.path("color_palette").toString(),
+                    targetArchetype.path("famousCharacters").toString()
+            );
 
             // TẦNG 1: LỌC CỘNG TÁC (TỪ CACHE RAM)
             List<Integer> cachedIds = currentArchetype != null ? archetypeTopCache.getOrDefault(currentArchetype, Collections.emptyList()) : Collections.emptyList();
@@ -422,9 +431,20 @@ public class AIServiceImpl implements AIService {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
 
-            String promptText = "Bạn là một giám khảo Cosplay. Dưới đây là bộ tiêu chuẩn WCS chính thức:\n"
-                    + aiKnowledgeBase.getWcsRules() + "\n"
-                    + "Hãy so sánh ảnh user chụp với nhân vật '" + request.getCharacterName() + "'. "
+            // 1. Lấy Luật WCS Cứng
+            String promptText = "Bạn là một giám khảo Cosplay. Dưới đây là 50% tiêu chuẩn WCS chính thức:\n"
+                    + aiKnowledgeBase.getWcsRules() + "\n";
+
+            // 2. Lấy Luật Động từ Database (Nạp vào lúc runtime)
+            String dynamicRules = systemConfigRepository.findById("DYNAMIC_POSE_RULES")
+                    .map(SystemConfig::getConfigValue).orElse("");
+
+            if (!dynamicRules.isEmpty()) {
+                promptText += "TIÊU CHUẨN CỘNG ĐỒNG (Chiếm tối đa 50% trọng số điểm): " + dynamicRules + "\n";
+            }
+
+            // 3. Tiếp tục nối các lệnh điều khiển luồng khắt khe của hệ thống
+            promptText += "Hãy so sánh ảnh user chụp với nhân vật '" + request.getCharacterName() + "'. "
                     + "Nếu trong ảnh KHÔNG CÓ NGƯỜI, hoặc không giống ảnh hóa trang/tạo dáng, trả về chính xác chuỗi JSON: {\"score\": 0, \"comment\": \"NOT_COSPLAY\"}. ";
 
             if (request.getReferenceImage() != null && !request.getReferenceImage().isEmpty()) {
@@ -717,31 +737,34 @@ public class AIServiceImpl implements AIService {
             try {
                 boolean isChanged = false;
 
-                // 1. CHỈ TẠO IMAGE VECTOR NẾU NÓ THỰC SỰ TRỐNG (TIẾT KIỆM REQUEST)
+                // 1. CHỈ TẠO IMAGE VECTOR NẾU NÓ THỰC SỰ TRỐNG (DÙNG LOGIC GỘP ẢNH TỐI ƯU API)
                 if (costume.getImageVector() == null || costume.getImageVector().trim().isEmpty()) {
-                    StringBuilder imageTags = new StringBuilder();
                     if (costume.getImages() != null && !costume.getImages().isEmpty()) {
-                        costume.getImages().stream().limit(3).forEach(img -> {
-                            byte[] imageBytes = downloadImageFromUrl(img.getImageUrl());
-                            if (imageBytes != null) {
-                                String hiddenTags = extractTagsFromBytes(imageBytes);
-                                if (!hiddenTags.isEmpty()) {
-                                    if (!imageTags.isEmpty()) imageTags.append(", ");
-                                    imageTags.append(hiddenTags);
+                        List<byte[]> downloadedImages = new ArrayList<>();
+
+                        // Lấy tối đa 4 ảnh của RIÊNG bộ đồ này
+                        costume.getImages().stream().limit(4).forEach(img -> {
+                            byte[] bytes = downloadImageFromUrl(img.getImageUrl());
+                            if (bytes != null) downloadedImages.add(bytes);
+                        });
+
+                        if (!downloadedImages.isEmpty()) {
+                            // GỌI API LẦN 1: Bóc tag gom chung cho tất cả ảnh của bộ đồ này
+                            String allImageTags = extractTagsFromMultipleImageBytes(downloadedImages);
+
+                            if (allImageTags != null && !allImageTags.isEmpty()) {
+                                // GỌI API LẦN 2: Nhúng chuỗi tag thành Vector
+                                String imageVector = generateVectorForText(allImageTags);
+                                if (imageVector != null) {
+                                    costume.setImageVector(imageVector);
+                                    isChanged = true;
                                 }
                             }
-                        });
-                    }
-                    if (!imageTags.isEmpty()) {
-                        String imageVector = generateVectorForText(imageTags.toString());
-                        if (imageVector != null) {
-                            costume.setImageVector(imageVector);
-                            isChanged = true;
                         }
                     }
                 }
 
-                // 2. CHỈ TẠO TEXT VECTOR NẾU NÓ THỰC SỰ TRỐNG (TIẾT KIỆM REQUEST)
+                // 2. CHỈ TẠO TEXT VECTOR NẾU NÓ THỰC SỰ TRỐNG
                 if (costume.getTextVector() == null || costume.getTextVector().trim().isEmpty()) {
                     String textInput = ((costume.getName() != null ? costume.getName() : "") + " " + (costume.getDescription() != null ? costume.getDescription() : "")).trim();
                     if (!textInput.isEmpty()) {
@@ -753,7 +776,7 @@ public class AIServiceImpl implements AIService {
                     }
                 }
 
-                // 3. CHỈ GỌI LỆNH SAVE VÀO DB NẾU THỰC SỰ CÓ CẬP NHẬT MỚI
+                // 3. LƯU VÀO DB NẾU CÓ CẬP NHẬT
                 if (isChanged) {
                     costumeRepository.save(costume);
                     successCount++;
@@ -1174,6 +1197,95 @@ public class AIServiceImpl implements AIService {
         } catch (Exception e) {
             log.error("Lỗi khi convert mảng byte sang Base64: {}", e.getMessage());
             return null;
+        }
+    }
+
+    /**
+     * TỐI ƯU API: Bóc tag từ một danh sách các ảnh (byte[]) trong CÙNG 1 REQUEST
+     */
+    private String extractTagsFromMultipleImageBytes(List<byte[]> imagesBytes) {
+        if (imagesBytes == null || imagesBytes.isEmpty()) return "";
+        try {
+            ObjectNode body = objectMapper.createObjectNode();
+            ArrayNode partsNode = objectMapper.createArrayNode();
+
+            partsNode.add(buildTextPart("Hãy phân tích TẤT CẢ các hình ảnh của cùng một bộ trang phục này và liệt kê các từ khóa (tags) đặc trưng nhất xuất hiện. Tập trung vào: loại trang phục, màu sắc, họa tiết, chất liệu, phong cách, và tên nhân vật. Chỉ trả về một chuỗi các từ khóa ngăn cách bằng dấu phẩy, không giải thích."));
+
+            for (byte[] bytes : imagesBytes) {
+                ObjectNode imagePart = buildImagePart(bytes, "image/jpeg");
+                if (imagePart != null) partsNode.add(imagePart);
+            }
+
+            body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
+
+            JsonNode response = callGeminiGenerateContent(body, false); // Gọi model Flash nhanh
+            return extractGeminiResponseText(response);
+        } catch (Exception e) {
+            log.error("Lỗi AI khi bóc tag từ nhiều mảng byte: {}", e.getMessage());
+            return "";
+        }
+    }
+
+    // =========================================================================
+    // PHASE 2: DYNAMIC RAG - TỰ HỌC TỪ FEEDBACK CỦA CỘNG ĐỒNG
+    // Chạy ngầm vào 2h sáng Chủ Nhật hàng tuần
+    // =========================================================================
+    @org.springframework.scheduling.annotation.Scheduled(cron = "0 0 2 * * SUN")
+    public void analyzeAndApplyPoseFeedbacks() {
+        log.info("Bắt đầu tiến trình AI phân tích Pose Feedback từ cộng đồng...");
+        List<PoseFeedback> feedbacks = poseFeedbackRepository.findAll();
+
+        if (feedbacks.isEmpty()) {
+            log.info("Chưa có feedback nào mới. Bỏ qua.");
+            return;
+        }
+
+        try {
+            ArrayNode feedbackArray = objectMapper.createArrayNode();
+            for (PoseFeedback fb : feedbacks) {
+                ObjectNode node = objectMapper.createObjectNode();
+                node.put("userId", fb.getUser().getId()); // Đưa userId vào để AI biết đếm số lượng người (chặn spam)
+                node.put("feedback", fb.getFeedbackText());
+                feedbackArray.add(node);
+            }
+
+            // PROMPT THẦN THÁNH: Ép AI làm toán và gom cụm
+            String promptText = "Bạn là một AI Data Scientist cho giải đấu Cosplay. Dưới đây là danh sách các Feedback của người dùng: " + feedbackArray.toString() + "\n"
+                    + "NHIỆM VỤ CỦA BẠN:\n"
+                    + "1. Lọc bỏ: Bỏ qua các feedback nhảm nhí, chửi thề, hoặc không liên quan đến kỹ thuật Cosplay.\n"
+                    + "2. Gom cụm (Clustering): Gom các feedback có ý nghĩa giống nhau lại. Đếm số lượng 'userId' độc lập cho mỗi cụm.\n"
+                    + "3. Tính trọng số động: Luật WCS Gốc luôn chiếm tối thiểu 50% trọng số. Các feedback cộng đồng chiếm tối đa 50%. Mỗi 1 user đóng góp tối đa 5% trọng số cho một tiêu chí cụm. (Ví dụ: Cụm A có 2 user nói giống nhau -> Trọng số 10%).\n"
+                    + "4. Tóm tắt bộ luật: Dựa vào các cụm hợp lệ, hãy viết một đoạn 'LUẬT BỔ SUNG' (Supplementary Rules) để hướng dẫn AI cách cộng/trừ điểm.\n\n"
+                    + "ĐẦU RA BẮT BUỘC: Trả về ĐÚNG MỘT JSON có cấu trúc: {\"valid_feedbacks\": 10, \"supplementary_rules\": \"[Đoạn luật bổ sung...]\"}";
+
+            ObjectNode body = objectMapper.createObjectNode();
+            ArrayNode partsNode = objectMapper.createArrayNode();
+            partsNode.add(buildTextPart(promptText));
+            body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
+
+            // Gọi model suy luận sâu
+            JsonNode response = callGeminiGenerateContent(body, true);
+            String resultJson = extractGeminiResponseText(response);
+            resultJson = extractJsonArray(resultJson); // Tái sử dụng hàm để cắt lấy chuỗi JSON
+
+            JsonNode resultNode = objectMapper.readTree(resultJson);
+            String supplementaryRules = resultNode.path("supplementary_rules").asText();
+
+            if (!supplementaryRules.isEmpty()) {
+                // Lưu vào Database để dùng cho những lần chấm điểm sau
+                SystemConfig dynamicConfig = systemConfigRepository.findById("DYNAMIC_POSE_RULES")
+                        .orElse(SystemConfig.builder()
+                                .configKey("DYNAMIC_POSE_RULES")
+                                .description("Luật chấm điểm bổ sung tự học từ Pose Feedback")
+                                .build());
+
+                dynamicConfig.setConfigValue(supplementaryRules);
+                systemConfigRepository.save(dynamicConfig);
+                log.info("Đã nạp thành công Luật Bổ Sung vào Database!");
+            }
+
+        } catch (Exception e) {
+            log.error("Lỗi khi AI phân tích Pose Feedback: {}", e.getMessage());
         }
     }
 }

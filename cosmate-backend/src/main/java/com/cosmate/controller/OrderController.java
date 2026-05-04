@@ -15,6 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.validation.Valid;
 import java.util.List;
+import java.security.SecureRandom;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -24,6 +25,9 @@ public class OrderController {
     private final OrderService orderService;
     private final ProviderService providerService;
     private final com.cosmate.service.NotificationService notificationService;
+
+    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final String TRACKING_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
     // helper to extract current authenticated user id
     private Integer getCurrentUserId() {
@@ -197,15 +201,26 @@ public class OrderController {
 
     @PostMapping(path = "/{id}/ship", consumes = {"multipart/form-data"})
     public ApiResponse<?> shipOrder(@PathVariable Integer id,
-                                    @RequestParam("trackingCode") String trackingCode,
+                                    @RequestParam(value = "trackingCode", required = false) String trackingCode,
                                     @RequestParam(value = "shippingCarrierName", required = false) String shippingCarrierName,
                                     @RequestPart(value = "images", required = false) MultipartFile[] images,
-                                    @RequestParam(value = "notes", required = false) List<String> notes) {
+                                    @RequestParam(value = "notes", required = false) List<String> notes,
+                                    @RequestParam(value = "autoCreateGhn", required = false, defaultValue = "false") boolean autoCreateGhn) {
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             Integer currentUserId = getCurrentUserId();
             if (currentUserId == null) return ApiResponse.<Object>builder().code(401).message("Chưa xác thực - Vui lòng đăng nhập").build();
             boolean isAdminStaff = hasAdminStaffRole(auth);
+            // handle auto-create GHN option
+            if (autoCreateGhn) {
+                // generate random tracking code (length between 6 and 10)
+                trackingCode = generateRandomTrackingCode(10);
+                shippingCarrierName = "GHN";
+            } else {
+                if (trackingCode == null || trackingCode.isBlank()) {
+                    return ApiResponse.<Object>builder().code(400).message("trackingCode is required when autoCreateGhn is false").build();
+                }
+            }
             try {
                 java.util.Map<String,Object> result = orderService.shipOrder(currentUserId, id, trackingCode, shippingCarrierName, images, notes, isAdminStaff);
                 return ApiResponse.<Object>builder().result(result).message("Order updated to SHIPPING_OUT").build();
@@ -274,13 +289,23 @@ public class OrderController {
 
     @PostMapping(path = "/{id}/return", consumes = {"multipart/form-data"})
     public ApiResponse<?> startReturn(@PathVariable Integer id,
-                                      @RequestParam("trackingCode") String trackingCode,
+                                      @RequestParam(value = "trackingCode", required = false) String trackingCode,
                                       @RequestParam(value = "shippingCarrierName", required = false) String shippingCarrierName,
                                       @RequestPart(value = "images", required = false) MultipartFile[] images,
-                                      @RequestParam(value = "notes", required = false) List<String> notes) {
+                                      @RequestParam(value = "notes", required = false) List<String> notes,
+                                      @RequestParam(value = "autoCreateGhn", required = false, defaultValue = "false") boolean autoCreateGhn) {
         try {
             Integer currentUserId = getCurrentUserId();
             if (currentUserId == null) return ApiResponse.<Object>builder().code(401).message("Chưa xác thực - Vui lòng đăng nhập").build();
+            // handle auto-create GHN option
+            if (autoCreateGhn) {
+                trackingCode = generateRandomTrackingCode(10);
+                shippingCarrierName = "GHN";
+            } else {
+                if (trackingCode == null || trackingCode.isBlank()) {
+                    return ApiResponse.<Object>builder().code(400).message("trackingCode is required when autoCreateGhn is false").build();
+                }
+            }
             try {
                 java.util.Map<String,Object> res = orderService.startReturn(currentUserId, id, trackingCode, shippingCarrierName, images, notes);
                 return ApiResponse.<Object>builder().result(res).message("Order updated to SHIPPING_BACK").build();
@@ -290,6 +315,21 @@ public class OrderController {
         } catch (Exception ex) {
             return ApiResponse.<Object>builder().code(500).message("Failed to start return: " + ex.getMessage()).build();
         }
+    }
+
+    private String generateRandomTrackingCode(int maxLen) {
+        if (maxLen <= 0) return "";
+        int min = Math.min(6, maxLen);
+        int len = min;
+        if (maxLen > min) {
+            len = min + RANDOM.nextInt(maxLen - min + 1);
+        }
+        StringBuilder sb = new StringBuilder(len);
+        for (int i = 0; i < len; i++) {
+            int idx = RANDOM.nextInt(TRACKING_CHARS.length());
+            sb.append(TRACKING_CHARS.charAt(idx));
+        }
+        return sb.toString();
     }
 
     @PostMapping("/{id}/complete")

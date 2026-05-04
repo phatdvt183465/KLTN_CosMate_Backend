@@ -681,7 +681,7 @@ public class OrderServiceImpl implements OrderService {
 
         String status = order.getStatus();
         if (status == null) status = "";
-        if (!(status.equals("UNCONFIRM") || status.equals("UNPAID") || status.equals("PAID") || status.equals("WAITING_SERVICE_DATE"))) {
+        if (!(status.equals("UNCONFIRM") || status.equals("UNPAID") || status.equals("PAID") || status.equals("WAITING_SERVICE_DATE") || status.equals("PREPARING"))) {
             throw new IllegalArgumentException("Order cannot be cancelled in its current status: " + status);
         }
 
@@ -692,6 +692,62 @@ public class OrderServiceImpl implements OrderService {
             com.cosmate.entity.Wallet wallet = wopt.get();
             java.math.BigDecimal amount = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
             walletService.credit(wallet, amount, "Refund for cancelled order", "ORDER_REFUND:" + order.getId(), null, order);
+        } else if ("PREPARING".equals(status)) {
+            // When cancelling in PREPARING, transfer the deposit to provider and refund the remaining amount to cosplayer
+            try {
+                java.math.BigDecimal total = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
+                java.util.List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
+                java.math.BigDecimal depositTotal = java.math.BigDecimal.ZERO;
+                if (details != null && !details.isEmpty()) {
+                    for (OrderDetail d : details) {
+                        try { java.math.BigDecimal dep = d.getDepositAmount() == null ? java.math.BigDecimal.ZERO : d.getDepositAmount(); depositTotal = depositTotal.add(dep); } catch (Exception ignored) {}
+                    }
+                }
+                if (depositTotal == null) depositTotal = java.math.BigDecimal.ZERO;
+
+                // Refund remainder to cosplayer (total - deposit)
+                java.math.BigDecimal refund = total.subtract(depositTotal);
+                if (refund == null) refund = java.math.BigDecimal.ZERO;
+                if (refund.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                    try {
+                        com.cosmate.entity.User cosUser = com.cosmate.entity.User.builder().id(order.getCosplayerId()).build();
+                        com.cosmate.entity.Wallet cosWallet = walletService.createForUser(cosUser);
+                        walletService.credit(cosWallet, refund, "Refund for cancelled order (after deposit)", "ORDER_REFUND:" + order.getId(), null, order);
+                    } catch (Exception ignored) {}
+                }
+
+                // Transfer deposit to provider
+                if (depositTotal.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                    Integer providerUserId = null;
+                    try {
+                        com.cosmate.entity.Provider provEntity = null;
+                        try { provEntity = providerService.getById(order.getProviderId()); } catch (Exception ignored2) { provEntity = null; }
+                        if (provEntity != null && provEntity.getUserId() != null) {
+                            providerUserId = provEntity.getUserId();
+                        }
+                    } catch (Exception ignored) {}
+
+                    if (providerUserId != null) {
+                        try {
+                            java.util.Optional<com.cosmate.entity.Wallet> woptProv = walletService.getByUserId(providerUserId);
+                            if (woptProv.isPresent()) {
+                                com.cosmate.entity.Wallet provWallet = woptProv.get();
+                                walletService.credit(provWallet, depositTotal, "Deposit transfer on cancelled PREPARING order", "DEPOSIT_PAYOUT:" + order.getId(), null, order);
+                            } else {
+                                java.util.Optional<com.cosmate.entity.User> providerUserOpt = userRepository.findById(providerUserId);
+                                if (providerUserOpt.isPresent()) {
+                                    walletService.createForUser(providerUserOpt.get());
+                                    java.util.Optional<com.cosmate.entity.Wallet> wopt2 = walletService.getByUserId(providerUserId);
+                                    if (wopt2.isPresent()) {
+                                        com.cosmate.entity.Wallet provWallet = wopt2.get();
+                                        walletService.credit(provWallet, depositTotal, "Deposit transfer on cancelled PREPARING order", "DEPOSIT_PAYOUT:" + order.getId(), null, order);
+                                    }
+                                }
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                }
+            } catch (Exception ignored) {}
         }
 
         order.setStatus("CANCELLED");

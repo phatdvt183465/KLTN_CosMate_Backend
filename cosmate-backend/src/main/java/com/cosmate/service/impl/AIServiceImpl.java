@@ -584,12 +584,12 @@ public class AIServiceImpl implements AIService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.USER_NOT_FOUND));
 
-        Integer currentTokens = user.getAiTokens() == null ? 0 : user.getAiTokens();
+        Integer currentTokens = user.getNumberOfToken() == null ? 0 : user.getNumberOfToken();
         if (currentTokens < amount) {
             throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.AI_TOKEN_INSUFFICIENT);
         }
 
-        user.setAiTokens(currentTokens - amount);
+        user.setNumberOfToken(currentTokens - amount);
         userRepository.save(user);
     }
 

@@ -6,6 +6,9 @@ import com.cosmate.dto.response.ApiResponse;
 import com.cosmate.dto.response.UserListItem;
 import com.cosmate.dto.response.UserResponse;
 import com.cosmate.entity.User;
+import com.cosmate.exception.AppException;
+import com.cosmate.exception.ErrorCode;
+import com.cosmate.repository.UserRepository;
 import com.cosmate.service.UserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +38,7 @@ import java.util.stream.Collectors;
 public class UserController {
 
     private final UserService userService;
+    private final UserRepository userRepository;
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -380,5 +384,19 @@ public class UserController {
         api.setMessage("OK");
         api.setResult(result);
         return ResponseEntity.ok(api);
+    }
+
+    @GetMapping("/my-tokens")
+    public ApiResponse<Integer> getMyTokens() {
+        // Lấy userId từ SecurityContext
+        Integer userId = getCurrentUserId();
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        return ApiResponse.<Integer>builder()
+                .result(user.getNumberOfToken() == null ? 0 : user.getNumberOfToken())
+                .message("Lấy số dư token thành công")
+                .build();
     }
 }

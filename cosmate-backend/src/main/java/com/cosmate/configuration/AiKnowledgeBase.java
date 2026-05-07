@@ -7,20 +7,24 @@ import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
-
-import java.io.InputStream;
 
 @Slf4j
 @Getter
 @Component
-@org.springframework.context.annotation.DependsOn("databaseSeeder")
+@org.springframework.context.annotation.DependsOn("databaseSeeder") // Đảm bảo Seeder chạy trước file này
 @RequiredArgsConstructor
 public class AiKnowledgeBase {
 
     private final ObjectMapper objectMapper;
     private final SystemConfigRepository systemConfigRepository;
+
+    private String promptModDemo;
+    private String promptModCostume;
+    private String promptTagsMulti;
+    private String promptTagsSingle;
+    private String promptAnalyzeAnswers;
+    private String promptAnalyzeFeedback;
 
     // Lưu dữ liệu trên RAM
     private JsonNode archetypes;
@@ -31,23 +35,41 @@ public class AiKnowledgeBase {
     @PostConstruct
     public void loadKnowledgeBase() {
         try {
-            archetypes = loadJson("ai-data/jungian_archetypes_extended.json");
-            stage1Survey = loadJson("ai-data/survey_stage_1.json");
-            stage2Survey = loadJson("ai-data/survey_stage_2.json");
+            // Lôi dữ liệu TỪ DATABASE (chứ không phải từ file nữa)
+            archetypes = loadJsonFromDb("ARCHETYPES_DATA");
+            stage1Survey = loadJsonFromDb("QUIZ_STAGE_1");
+            stage2Survey = loadJsonFromDb("QUIZ_STAGE_2");
+
             wcsRules = systemConfigRepository.findById("WCS_RULES")
                     .map(config -> config.getConfigValue() == null ? "" : config.getConfigValue())
                     .orElse("");
 
-            log.info("🔥 Đã nạp thành công Knowledge Base (RAG) và WCS Rules lên RAM!");
+            promptModDemo = loadStringFromDb("PROMPT_MOD_DEMO");
+            promptModCostume = loadStringFromDb("PROMPT_MOD_COSTUME");
+            promptTagsMulti = loadStringFromDb("PROMPT_TAGS_MULTI");
+            promptTagsSingle = loadStringFromDb("PROMPT_TAGS_SINGLE");
+            promptAnalyzeAnswers = loadStringFromDb("PROMPT_ANALYZE_ANSWERS");
+            promptAnalyzeFeedback = loadStringFromDb("PROMPT_ANALYZE_FEEDBACK");
+
+            log.info("🔥 Đã nạp thành công Knowledge Base (Từ Database) lên RAM!");
         } catch (Exception e) {
-            log.error("Lỗi khi nạp dữ liệu AI từ resources: {}", e.getMessage());
+            log.error("❌ Lỗi khi nạp dữ liệu AI từ Database: {}", e.getMessage());
         }
     }
 
-    private JsonNode loadJson(String path) throws Exception {
-        try (InputStream is = new ClassPathResource(path).getInputStream()) {
-            return objectMapper.readTree(is);
-        }
+    // Hàm Helper: Móc chuỗi JSON từ DB và ép kiểu sang JsonNode
+    private JsonNode loadJsonFromDb(String configKey) throws Exception {
+        String jsonString = systemConfigRepository.findById(configKey)
+                .map(config -> config.getConfigValue())
+                .orElse("[]"); // Trả về mảng rỗng nếu không tìm thấy để tránh lỗi Null
+
+        return objectMapper.readTree(jsonString);
+    }
+
+    private String loadStringFromDb(String configKey) {
+        return systemConfigRepository.findById(configKey)
+                .map(config -> config.getConfigValue() != null ? config.getConfigValue() : "")
+                .orElse("");
     }
 
     @Getter

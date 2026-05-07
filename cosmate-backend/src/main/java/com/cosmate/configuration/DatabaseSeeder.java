@@ -6,6 +6,10 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.core.io.ClassPathResource;
+
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 
 @Slf4j
 @Component("databaseSeeder")
@@ -52,6 +56,29 @@ public class DatabaseSeeder {
         if (!systemConfigRepository.existsByConfigKey("PROMPT_PERSONA_DEEP")) {
             String deepPrompt = "Phong cách cổ trang, hoa mỹ, từ ngữ bay bổng (hán việt), nhấn mạnh vào cốt truyện và khí chất của nhân vật.";
             systemConfigRepository.save(SystemConfig.builder().configKey("PROMPT_PERSONA_DEEP").configValue(deepPrompt).description("Văn mẫu cho AI Description - Phong cách Cổ trang").build());
+        }
+
+        seedJsonToDatabase("ARCHETYPES_DATA", "ai-data/jungian_archetypes_extended.json", "Dữ liệu 12 Archetypes cho AI");
+        seedJsonToDatabase("QUIZ_STAGE_1", "ai-data/survey_stage_1.json", "Bộ câu hỏi trắc nghiệm Stage 1");
+        seedJsonToDatabase("QUIZ_STAGE_2", "ai-data/survey_stage_2.json", "Bộ câu hỏi trắc nghiệm Stage 2");
+    }
+
+    private void seedJsonToDatabase(String configKey, String filePath, String description) {
+        if (!systemConfigRepository.existsByConfigKey(configKey)) {
+            try (InputStream is = new ClassPathResource(filePath).getInputStream()) {
+                String jsonContent = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+
+                SystemConfig config = SystemConfig.builder()
+                        .configKey(configKey)
+                        .configValue(jsonContent)
+                        .description(description)
+                        .build();
+
+                systemConfigRepository.save(config);
+                log.info("✅ Đã tự động seed {} vào Database từ file {}.", configKey, filePath);
+            } catch (Exception e) {
+                log.error("❌ Lỗi khi seed dữ liệu {}: {}", configKey, e.getMessage());
+            }
         }
     }
 }

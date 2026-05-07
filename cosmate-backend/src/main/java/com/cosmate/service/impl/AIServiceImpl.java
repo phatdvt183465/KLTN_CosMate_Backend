@@ -132,12 +132,23 @@ public class AIServiceImpl implements AIService {
                 double textScore = queryTextVector != null ? calculateCosineSimilarity(queryTextVector, dbTextVector) : 0.0;
 
                 double finalScore;
-                if (hasImages) {
+
+                if (hasImages && hasText) {
+                    // TRƯỜNG HỢP 1: CÓ CẢ HÌNH VÀ CHỮ (Trọng số 70/30)
                     List<Double> dbImageVector = objectMapper.readValue(costume.getImageVector(), new TypeReference<List<Double>>() {});
                     double imageScore = calculateCosineSimilarity(queryImageVector, dbImageVector);
                     finalScore = (imageScore * 0.7) + (textScore * 0.3);
-                    if (finalScore <= 0.55) continue;
+                    if (finalScore <= 0.5) continue;
+
+                } else if (hasImages) {
+                    // TRƯỜNG HỢP 2: CHỈ CÓ HÌNH (Trọng số 100% hình)
+                    List<Double> dbImageVector = objectMapper.readValue(costume.getImageVector(), new TypeReference<List<Double>>() {});
+                    double imageScore = calculateCosineSimilarity(queryImageVector, dbImageVector);
+                    finalScore = imageScore * 1.0;
+                    if (finalScore <= 0.5) continue;
+
                 } else {
+                    // TRƯỜNG HỢP 3: CHỈ CÓ CHỮ (Trọng số 100% chữ)
                     finalScore = textScore * 1.0;
                     if (finalScore <= 0.5) continue;
                 }

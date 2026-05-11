@@ -7,6 +7,7 @@ import com.cosmate.repository.CostumeRepository;
 import com.cosmate.repository.OrderDetailRepository;
 import com.cosmate.repository.OrderRepository;
 import com.cosmate.repository.ProviderRepository;
+import com.cosmate.service.WalletService;
 import com.cosmate.service.ProviderStatisticsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -28,6 +29,7 @@ public class ProviderStatisticsServiceImpl implements ProviderStatisticsService 
     private final OrderRepository orderRepository;
     private final OrderDetailRepository orderDetailRepository;
     private final ProviderRepository providerRepository;
+    private final WalletService walletService;
 
     @Override
     public ProviderStatisticsResponse getProviderStatistics(Integer providerId, Integer months) {
@@ -109,6 +111,41 @@ public class ProviderStatisticsServiceImpl implements ProviderStatisticsService 
                 .revenueByMonth(revenueByMonth)
                 .revenueByQuarter(revenueByQuarter)
                 .build();
+    }
+
+    @Override
+    public java.util.List<com.cosmate.dto.response.OrderStatusCountResponse> getOrderCountsByStatus(Integer providerId) {
+        // validate provider exists
+        Provider p = providerRepository.findById(providerId).orElseThrow(() -> new IllegalArgumentException("Provider not found"));
+        List<com.cosmate.entity.Order> orders = orderRepository.findByProviderIdOrderByCreatedAtDesc(providerId);
+        Map<String, Long> grouped = orders.stream()
+                .collect(Collectors.groupingBy(o -> o.getStatus() == null ? "UNKNOWN" : o.getStatus(), Collectors.counting()));
+        return grouped.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(e -> com.cosmate.dto.response.OrderStatusCountResponse.builder().status(e.getKey()).count(e.getValue()).build())
+                .toList();
+    }
+
+    @Override
+    public java.util.List<com.cosmate.dto.response.TransactionResponse> getRecentWalletTransactions(Integer providerId, Integer limit) {
+        Provider p = providerRepository.findById(providerId).orElseThrow(() -> new IllegalArgumentException("Provider not found"));
+        var opt = walletService.getByUserId(p.getUserId());
+        if (opt.isEmpty()) return java.util.List.of();
+        var wallet = opt.get();
+        List<com.cosmate.entity.Transaction> txs = walletService.getTransactionsForWallet(wallet);
+        int lim = (limit != null && limit > 0) ? limit : 10;
+        return txs.stream().map(t -> com.cosmate.dto.response.TransactionResponse.builder()
+                .id(t.getId())
+                .amount(t.getAmount())
+                .type(t.getType())
+                .status(t.getStatus())
+                .paymentMethod(t.getPaymentMethod())
+                .walletId(t.getWallet() == null ? null : t.getWallet().getWalletId())
+                .orderId(t.getOrder() == null ? null : t.getOrder().getId())
+                .createdAt(t.getCreatedAt())
+                .build())
+                .limit(lim)
+                .toList();
     }
 }
 

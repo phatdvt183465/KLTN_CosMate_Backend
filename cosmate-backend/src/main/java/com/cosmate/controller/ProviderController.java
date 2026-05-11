@@ -29,6 +29,7 @@ public class ProviderController {
 
     private final ProviderService providerService;
     private final ProviderStatisticsService providerStatisticsService;
+    
     private static final Logger log = LoggerFactory.getLogger(ProviderController.class);
 
     private Integer getCurrentUserId() {
@@ -326,6 +327,65 @@ public class ProviderController {
             return ResponseEntity.badRequest().body(api);
         } catch (Exception e) {
             log.error("Unexpected error fetching provider statistics for {}: {}", id, e.getMessage(), e);
+            api.setCode(99999);
+            api.setMessage("Unexpected server error: " + e.getMessage());
+            return ResponseEntity.status(500).body(api);
+        }
+    }
+
+    @GetMapping("/{id}/orders-status")
+    public ResponseEntity<ApiResponse<java.util.List<com.cosmate.dto.response.OrderStatusCountResponse>>> getOrdersByStatus(@PathVariable("id") Integer id) {
+        ApiResponse<java.util.List<com.cosmate.dto.response.OrderStatusCountResponse>> api = new ApiResponse<>();
+        try {
+            Provider p = providerService.getById(id);
+            if (!isPrivilegedViewer(p)) {
+                api.setCode(1006);
+                api.setMessage("Không có quyền truy cập thống kê provider này");
+                return ResponseEntity.status(403).body(api);
+            }
+            var resp = providerStatisticsService.getOrderCountsByStatus(id);
+            api.setCode(0);
+            api.setMessage("OK");
+            api.setResult(resp);
+            return ResponseEntity.ok(api);
+        } catch (AppException ae) {
+            ErrorCode ec = ae.getErrorCode();
+            api.setCode(ec.getCode());
+            api.setMessage(ec.getMessage());
+            if (ec == ErrorCode.PROVIDER_NOT_FOUND) return ResponseEntity.status(404).body(api);
+            return ResponseEntity.badRequest().body(api);
+        } catch (Exception e) {
+            log.error("Unexpected error fetching orders by status for provider {}: {}", id, e.getMessage(), e);
+            api.setCode(99999);
+            api.setMessage("Unexpected server error: " + e.getMessage());
+            return ResponseEntity.status(500).body(api);
+        }
+    }
+
+    @GetMapping("/{id}/wallet/transactions")
+    public ResponseEntity<ApiResponse<java.util.List<com.cosmate.dto.response.TransactionResponse>>> getWalletTransactions(@PathVariable("id") Integer id,
+                                                                                                                             @RequestParam(value = "limit", required = false) Integer limit) {
+        ApiResponse<java.util.List<com.cosmate.dto.response.TransactionResponse>> api = new ApiResponse<>();
+        try {
+            Provider p = providerService.getById(id);
+            if (!isPrivilegedViewer(p)) {
+                api.setCode(1006);
+                api.setMessage("Không có quyền truy cập thống kê provider này");
+                return ResponseEntity.status(403).body(api);
+            }
+            var resp = providerStatisticsService.getRecentWalletTransactions(id, limit);
+            api.setCode(0);
+            api.setMessage("OK");
+            api.setResult(resp);
+            return ResponseEntity.ok(api);
+        } catch (AppException ae) {
+            ErrorCode ec = ae.getErrorCode();
+            api.setCode(ec.getCode());
+            api.setMessage(ec.getMessage());
+            if (ec == ErrorCode.PROVIDER_NOT_FOUND) return ResponseEntity.status(404).body(api);
+            return ResponseEntity.badRequest().body(api);
+        } catch (Exception e) {
+            log.error("Unexpected error fetching wallet transactions for provider {}: {}", id, e.getMessage(), e);
             api.setCode(99999);
             api.setMessage("Unexpected server error: " + e.getMessage());
             return ResponseEntity.status(500).body(api);

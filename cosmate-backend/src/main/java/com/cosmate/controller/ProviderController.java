@@ -9,6 +9,7 @@ import com.cosmate.exception.AppException;
 import com.cosmate.exception.ErrorCode;
 import com.cosmate.service.ProviderService;
 import com.cosmate.service.ProviderStatisticsService;
+import com.cosmate.service.SubscriptionService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +30,7 @@ public class ProviderController {
 
     private final ProviderService providerService;
     private final ProviderStatisticsService providerStatisticsService;
+    private final SubscriptionService subscriptionService;
     
     private static final Logger log = LoggerFactory.getLogger(ProviderController.class);
 
@@ -386,6 +388,71 @@ public class ProviderController {
             return ResponseEntity.badRequest().body(api);
         } catch (Exception e) {
             log.error("Unexpected error fetching wallet transactions for provider {}: {}", id, e.getMessage(), e);
+            api.setCode(99999);
+            api.setMessage("Unexpected server error: " + e.getMessage());
+            return ResponseEntity.status(500).body(api);
+        }
+    }
+
+    @GetMapping("/id/{providerId}/subscriptions-info")
+    public ResponseEntity<ApiResponse<com.cosmate.dto.response.ProviderSubscriptionSummaryResponse>> getProviderSubscriptionsInfo(@PathVariable("providerId") Integer providerId) {
+        ApiResponse<com.cosmate.dto.response.ProviderSubscriptionSummaryResponse> api = new ApiResponse<>();
+        try {
+            Provider p = providerService.getById(providerId);
+            // Get provider subscriptions
+            java.util.List<com.cosmate.entity.ProviderSubscription> subs = subscriptionService.listByProviderUserId(p.getUserId());
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+
+            // Consider only ACTIVE subscriptions for remaining days
+            java.util.List<com.cosmate.entity.ProviderSubscription> activeSubs = subs.stream()
+                    .filter(s -> s.getStatus() != null && s.getStatus().equalsIgnoreCase("ACTIVE"))
+                    .toList();
+
+            long totalRemaining = activeSubs.stream().mapToLong(s -> {
+                if (s.getEndDate() == null) return 0L;
+                if (s.getEndDate().isAfter(now)) return java.time.Duration.between(now, s.getEndDate()).toDays();
+                return 0L;
+            }).sum();
+
+            // Find current active subscription: one that contains now (start <= now <= end), otherwise pick the one with latest endDate
+            java.util.Optional<com.cosmate.entity.ProviderSubscription> currentOpt = activeSubs.stream()
+                    .filter(s -> s.getStartDate() != null && s.getEndDate() != null && ( !s.getStartDate().isAfter(now) && !s.getEndDate().isBefore(now) ))
+                    .findFirst();
+            if (currentOpt.isEmpty()) {
+                currentOpt = activeSubs.stream().filter(s -> s.getEndDate() != null).sorted((a,b) -> b.getEndDate().compareTo(a.getEndDate())).findFirst();
+            }
+
+            String currentName = null;
+            Long currentDays = 0L;
+            if (currentOpt.isPresent()) {
+                var s = currentOpt.get();
+                currentName = s.getName();
+                if (s.getEndDate() != null && s.getEndDate().isAfter(now)) {
+                    currentDays = java.time.Duration.between(now, s.getEndDate()).toDays();
+                    if (currentDays < 0) currentDays = 0L;
+                } else {
+                    currentDays = 0L;
+                }
+            }
+
+            com.cosmate.dto.response.ProviderSubscriptionSummaryResponse resp = com.cosmate.dto.response.ProviderSubscriptionSummaryResponse.builder()
+                    .currentPlanName(currentName)
+                    .currentDaysRemaining(currentDays)
+                    .totalRemainingDays(totalRemaining)
+                    .build();
+
+            api.setCode(0);
+            api.setMessage("OK");
+            api.setResult(resp);
+            return ResponseEntity.ok(api);
+        } catch (AppException ae) {
+            ErrorCode ec = ae.getErrorCode();
+            api.setCode(ec.getCode());
+            api.setMessage(ec.getMessage());
+            if (ec == ErrorCode.PROVIDER_NOT_FOUND) return ResponseEntity.status(404).body(api);
+            return ResponseEntity.badRequest().body(api);
+        } catch (Exception e) {
+            log.error("Unexpected error fetching subscriptions info for provider {}: {}", providerId, e.getMessage(), e);
             api.setCode(99999);
             api.setMessage("Unexpected server error: " + e.getMessage());
             return ResponseEntity.status(500).body(api);

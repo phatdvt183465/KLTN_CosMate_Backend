@@ -8,6 +8,7 @@ import com.cosmate.entity.Provider;
 import com.cosmate.exception.AppException;
 import com.cosmate.exception.ErrorCode;
 import com.cosmate.service.ProviderService;
+import com.cosmate.service.ProviderStatisticsService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +28,7 @@ import java.util.stream.Collectors;
 public class ProviderController {
 
     private final ProviderService providerService;
+    private final ProviderStatisticsService providerStatisticsService;
     private static final Logger log = LoggerFactory.getLogger(ProviderController.class);
 
     private Integer getCurrentUserId() {
@@ -297,5 +299,36 @@ public class ProviderController {
                 .result(providerService.getProvidersByRole(roleName))
                 .message("Lấy danh sách Provider theo vai trò thành công")
                 .build();
+    }
+
+    @GetMapping("/{id}/statistics")
+    public ResponseEntity<ApiResponse<com.cosmate.dto.response.ProviderStatisticsResponse>> getProviderStatistics(@PathVariable("id") Integer id,
+                                                                                                                  @RequestParam(value = "months", required = false) Integer months) {
+        ApiResponse<com.cosmate.dto.response.ProviderStatisticsResponse> api = new ApiResponse<>();
+        try {
+            Provider p = providerService.getById(id);
+            if (!isPrivilegedViewer(p)) {
+                api.setCode(1006);
+                api.setMessage("Không có quyền truy cập thống kê provider này");
+                return ResponseEntity.status(403).body(api);
+            }
+
+            com.cosmate.dto.response.ProviderStatisticsResponse resp = providerStatisticsService.getProviderStatistics(id, months);
+            api.setCode(0);
+            api.setMessage("OK");
+            api.setResult(resp);
+            return ResponseEntity.ok(api);
+        } catch (AppException ae) {
+            ErrorCode ec = ae.getErrorCode();
+            api.setCode(ec.getCode());
+            api.setMessage(ec.getMessage());
+            if (ec == ErrorCode.PROVIDER_NOT_FOUND) return ResponseEntity.status(404).body(api);
+            return ResponseEntity.badRequest().body(api);
+        } catch (Exception e) {
+            log.error("Unexpected error fetching provider statistics for {}: {}", id, e.getMessage(), e);
+            api.setCode(99999);
+            api.setMessage("Unexpected server error: " + e.getMessage());
+            return ResponseEntity.status(500).body(api);
+        }
     }
 }

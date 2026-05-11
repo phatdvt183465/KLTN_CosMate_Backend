@@ -19,4 +19,7 @@ public interface OrderDetailRepository extends JpaRepository<OrderDetail, Intege
             "GROUP BY od.costume_id " +
             "ORDER BY COUNT(od.costume_id) DESC", nativeQuery = true)
     java.util.List<Integer> findTopCostumeIdsByArchetype(@org.springframework.data.repository.query.Param("archetype") String archetype, @org.springframework.data.repository.query.Param("limit") int limit);
+
+    @Query(value = "SELECT COALESCE(SUM(od.number_of_items),0) FROM Order_Detail od INNER JOIN Orders o ON od.order_id = o.id WHERE o.provider_id = :providerId", nativeQuery = true)
+    Long sumNumberOfItemsByProvider(@org.springframework.data.repository.query.Param("providerId") Integer providerId);
 }

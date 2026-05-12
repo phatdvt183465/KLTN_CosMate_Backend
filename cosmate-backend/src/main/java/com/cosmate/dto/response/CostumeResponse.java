@@ -7,11 +7,13 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.util.List;
 
+import com.cosmate.base.crud.dto.CrudDto;
+
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CostumeResponse {
+public class CostumeResponse implements CrudDto<Integer> {
     private Integer id;
     private String name;
     private String description;
@@ -32,6 +34,8 @@ public class CostumeResponse {
 
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class SurchargeResponse {
         private Integer id;
         private String name;
@@ -41,6 +45,8 @@ public class CostumeResponse {
 
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class AccessoryResponse {
         private Integer id;
         private String name;
@@ -51,6 +57,8 @@ public class CostumeResponse {
 
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class RentalOptionResponse {
         private Integer id;
         private String name;
@@ -60,6 +68,8 @@ public class CostumeResponse {
 
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class CharacterDto {
         private Integer id;
         private String name;

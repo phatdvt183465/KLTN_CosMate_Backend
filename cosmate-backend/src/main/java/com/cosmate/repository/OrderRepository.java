@@ -6,8 +6,10 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+import com.cosmate.base.crud.BaseCrudRepository;
+
 @Repository
-public interface OrderRepository extends JpaRepository<Order, Integer> {
+public interface OrderRepository extends BaseCrudRepository<Order, Integer> {
     List<Order> findByCosplayerIdOrderByCreatedAtDesc(Integer cosplayerId);
     List<Order> findByProviderIdOrderByCreatedAtDesc(Integer providerId);
     List<Order> findAllByOrderByCreatedAtDesc();

@@ -7,8 +7,10 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+import com.cosmate.base.crud.BaseCrudRepository;
+
 @Repository
-public interface CostumeRepository extends JpaRepository<Costume, Integer> {
+public interface CostumeRepository extends BaseCrudRepository<Costume, Integer> {
     List<Costume> findByProviderIdAndStatusNotIgnoreCase(Integer providerId, String status);
     List<Costume> findByNameContainingIgnoreCaseAndStatusNot(String keyword, String status);
 

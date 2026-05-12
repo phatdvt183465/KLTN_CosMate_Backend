@@ -9,8 +9,10 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 
+import com.cosmate.base.crud.BaseCrudRepository;
+
 @Repository
-public interface ProviderRepository extends JpaRepository<Provider, Integer> {
+public interface ProviderRepository extends BaseCrudRepository<Provider, Integer> {
     Optional<Provider> findByUserId(Integer userId);
 
     @Query(value = "SELECT p.* FROM Providers p " +

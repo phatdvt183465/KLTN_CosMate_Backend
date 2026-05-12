@@ -5,8 +5,10 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import com.cosmate.base.crud.dto.CrudDto;
+
 @Data
-public class OrderResponse {
+public class OrderResponse implements CrudDto<Integer> {
     private Integer id;
     private Integer cosplayerId;
     private Integer providerId;

@@ -25,6 +25,8 @@ public class AiKnowledgeBase {
     private String promptTagsSingle;
     private String promptAnalyzeAnswers;
     private String promptAnalyzeFeedback;
+    private String promptRecommendation;
+    private String promptScorePose;
 
     // Lưu dữ liệu trên RAM
     private JsonNode archetypes;
@@ -50,6 +52,8 @@ public class AiKnowledgeBase {
             promptTagsSingle = loadStringFromDb("PROMPT_TAGS_SINGLE");
             promptAnalyzeAnswers = loadStringFromDb("PROMPT_ANALYZE_ANSWERS");
             promptAnalyzeFeedback = loadStringFromDb("PROMPT_ANALYZE_FEEDBACK");
+            promptRecommendation = loadStringFromDb("PROMPT_RECOMMENDATION");
+            promptScorePose = loadStringFromDb("PROMPT_SCORE_POSE");
 
             log.info("🔥 Đã nạp thành công Knowledge Base (Từ Database) lên RAM!");
         } catch (Exception e) {

@@ -262,14 +262,16 @@ public class AIServiceImpl implements AIService {
             }
             if (targetArchetype == null) throw new RuntimeException("Không tìm thấy dữ liệu Archetype trong RAG!");
 
-            String searchContent = String.format(
-                    "Trang phục dành cho nguyên mẫu %s. Khát vọng cốt lõi: %s. Phong cách: %s. Màu sắc: %s. Nhân vật tiêu biểu: %s.",
-                    targetArchetype.path("archetype_name").asText(),
-                    targetArchetype.path("core_desire").asText(),
-                    targetArchetype.path("clothing_style").asText(),
-                    targetArchetype.path("color_palette").toString(),
-                    targetArchetype.path("famousCharacters").toString()
-            );
+            String basePrompt = aiKnowledgeBase.getPromptRecommendation() != null && !aiKnowledgeBase.getPromptRecommendation().isEmpty()
+                    ? aiKnowledgeBase.getPromptRecommendation()
+                    : "Trang phục dành cho nguyên mẫu {name}. Khát vọng cốt lõi: {desire}. Phong cách: {style}. Màu sắc: {color}. Nhân vật tiêu biểu: {characters}.";
+
+            String searchContent = basePrompt
+                    .replace("{name}", targetArchetype.path("archetype_name").asText())
+                    .replace("{desire}", targetArchetype.path("core_desire").asText())
+                    .replace("{style}", targetArchetype.path("clothing_style").asText())
+                    .replace("{color}", targetArchetype.path("color_palette").toString())
+                    .replace("{characters}", targetArchetype.path("famousCharacters").toString());
 
             // TẦNG 1: LỌC CỘNG TÁC (TỪ CACHE RAM)
             List<Integer> cachedIds = currentArchetype != null ? archetypeTopCache.getOrDefault(currentArchetype, Collections.emptyList()) : Collections.emptyList();
@@ -347,11 +349,10 @@ public class AIServiceImpl implements AIService {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
 
-            // 1. Dùng Helper thêm Text siêu gọn (có thể Demo)
-            String demoPrompt = "Bạn là một hệ thống kiểm duyệt hình ảnh khắt khe. " +
-                    "Hãy phân tích ảnh đầu vào. Nếu ảnh có chứa nội dung 18+, " +
-                    "HOẶC CÓ CHỨA HÌNH ẢNH CON CHÓ (bất kì loại chó nào), hãy trả về ĐÚNG 1 TỪ: UNSAFE. " +
-                    "Nếu là ảnh người bình thường an toàn, trả về ĐÚNG 1 TỪ: SAFE.";
+            // 1. Lấy prompt từ RAM cache (nếu không có thì dùng fallback)
+            String demoPrompt = aiKnowledgeBase.getPromptModDemo() != null && !aiKnowledgeBase.getPromptModDemo().isEmpty() 
+                    ? aiKnowledgeBase.getPromptModDemo() 
+                    : "Bạn là một hệ thống kiểm duyệt hình ảnh khắt khe. Hãy phân tích ảnh đầu vào. Nếu ảnh có chứa nội dung 18+, HOẶC CÓ CHỨA HÌNH ẢNH CON CHÓ (bất kì loại chó nào), hãy trả về ĐÚNG 1 TỪ: UNSAFE. Nếu là ảnh người bình thường an toàn, trả về ĐÚNG 1 TỪ: SAFE.";
 
             partsNode.add(buildTextPart(demoPrompt));
 
@@ -383,7 +384,10 @@ public class AIServiceImpl implements AIService {
         try {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
-            partsNode.add(buildTextPart("Phân tích ảnh đầu vào. Trả về ĐÚNG 1 TỪ: 'UNSAFE_VIOLATION' nếu ảnh chứa nội dung 18+, phản cảm, bạo lực. Trả về 'SAFE' nếu ảnh có chứa người hóa trang, trang phục nguyên bộ, HOẶC CẬN CẢNH CHI TIẾT SẢN PHẨM (đường may, chất liệu, nút, vũ khí, tóc giả). Trả về 'UNSAFE_IRRELEVANT' CHỈ KHI bức ảnh hoàn toàn là rác (phong cảnh thiên nhiên, sổ đỏ, màn hình chat, meme)."));
+            String promptText = aiKnowledgeBase.getPromptModCostume() != null && !aiKnowledgeBase.getPromptModCostume().isEmpty() 
+                    ? aiKnowledgeBase.getPromptModCostume() 
+                    : "Phân tích ảnh đầu vào. Trả về ĐÚNG 1 TỪ: 'UNSAFE_VIOLATION' nếu ảnh chứa nội dung 18+, phản cảm, bạo lực. Trả về 'SAFE' nếu ảnh có chứa người hóa trang, trang phục nguyên bộ, HOẶC CẬN CẢNH CHI TIẾT SẢN PHẨM (đường may, chất liệu, nút, vũ khí, tóc giả). Trả về 'UNSAFE_IRRELEVANT' CHỈ KHI bức ảnh hoàn toàn là rác (phong cảnh thiên nhiên, sổ đỏ, màn hình chat, meme).";
+            partsNode.add(buildTextPart(promptText));
             for (MultipartFile file : files) {
                 ObjectNode imagePart = buildImagePart(file);
                 if (imagePart != null) partsNode.add(imagePart);
@@ -443,7 +447,7 @@ public class AIServiceImpl implements AIService {
             ArrayNode partsNode = objectMapper.createArrayNode();
 
             // 1. Lấy Luật WCS Cứng
-            String promptText = "Bạn là một giám khảo Cosplay. Dưới đây là 50% tiêu chuẩn WCS chính thức:\n"
+            String rules = "Bạn là một giám khảo Cosplay. Dưới đây là 50% tiêu chuẩn WCS chính thức:\n"
                     + aiKnowledgeBase.getWcsRules() + "\n";
 
             // 2. Lấy Luật Động từ Database (Nạp vào lúc runtime)
@@ -451,19 +455,23 @@ public class AIServiceImpl implements AIService {
                     .map(SystemConfig::getConfigValue).orElse("");
 
             if (!dynamicRules.isEmpty()) {
-                promptText += "TIÊU CHUẨN CỘNG ĐỒNG (Chiếm tối đa 50% trọng số điểm): " + dynamicRules + "\n";
+                rules += "TIÊU CHUẨN CỘNG ĐỒNG (Chiếm tối đa 50% trọng số điểm): " + dynamicRules + "\n";
             }
 
-            // 3. Tiếp tục nối các lệnh điều khiển luồng khắt khe của hệ thống
-            promptText += "Hãy so sánh ảnh user chụp với nhân vật '" + request.getCharacterName() + "'. "
-                    + "Nếu trong ảnh KHÔNG CÓ NGƯỜI, hoặc không giống ảnh hóa trang/tạo dáng, trả về chính xác chuỗi JSON: {\"score\": 0, \"comment\": \"NOT_COSPLAY\"}. ";
+            // 3. Lấy Prompt từ DB và map các chuỗi thay vì dùng String.format (%s) dễ gây lỗi
+            String basePrompt = aiKnowledgeBase.getPromptScorePose() != null && !aiKnowledgeBase.getPromptScorePose().isEmpty()
+                    ? aiKnowledgeBase.getPromptScorePose()
+                    : "Hãy so sánh ảnh user chụp với nhân vật '{characterName}'. Nếu trong ảnh KHÔNG CÓ NGƯỜI, hoặc không giống ảnh hóa trang/tạo dáng, trả về chính xác chuỗi JSON: {\"score\": 0, \"comment\": \"NOT_COSPLAY\"}. {referenceText} Chỉ trả về JSON định dạng: {\"score\": [Điểm tổng 1-100], \"pose_score\": [1-40], \"expression_score\": [1-40], \"costume_score\": [1-20], \"comment\": \"[Nhận xét kỹ thuật...]\"}";
+            
+            String referenceText = (request.getReferenceImage() != null && !request.getReferenceImage().isEmpty())
+                    ? "Tôi có đính kèm 2 bức ảnh. Ảnh thứ hai là ảnh nhân vật gốc (Reference). Hãy chấm điểm dựa trên độ tương đồng về góc độ, tạo dáng và biểu cảm so với ảnh gốc này. "
+                    : "Hãy dựa vào cơ sở dữ liệu của bạn về nhân vật này để chấm điểm. ";
 
-            if (request.getReferenceImage() != null && !request.getReferenceImage().isEmpty()) {
-                promptText += "Tôi có đính kèm 2 bức ảnh. Ảnh thứ hai là ảnh nhân vật gốc (Reference). Hãy chấm điểm dựa trên độ tương đồng về góc độ, tạo dáng và biểu cảm so với ảnh gốc này. ";
-            } else {
-                promptText += "Hãy dựa vào cơ sở dữ liệu của bạn về nhân vật này để chấm điểm. ";
-            }
-            promptText += "Chỉ trả về JSON định dạng: {\"score\": [Điểm tổng 1-100], \"pose_score\": [1-40], \"expression_score\": [1-40], \"costume_score\": [1-20], \"comment\": \"[Nhận xét kỹ thuật...]\"}";
+            String finalPrompt = basePrompt
+                    .replace("{characterName}", request.getCharacterName() != null ? request.getCharacterName() : "Unknown")
+                    .replace("{referenceText}", referenceText);
+
+            String promptText = rules + finalPrompt;
 
             partsNode.add(buildTextPart(promptText));
 
@@ -587,21 +595,16 @@ public class AIServiceImpl implements AIService {
     // --- Các hàm tiện ích (Utility Methods) ---
 
     @Override
-    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    @org.springframework.transaction.annotation.Transactional
     public void consumeTokens(Integer userId, int amount) {
         if (userId == null) {
             throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.UNAUTHORIZED);
         }
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.USER_NOT_FOUND));
-
-        Integer currentTokens = user.getNumberOfToken() == null ? 0 : user.getNumberOfToken();
-        if (currentTokens < amount) {
+        
+        int updatedRows = userRepository.deductTokensSafe(userId, amount);
+        if (updatedRows == 0) {
             throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.AI_TOKEN_INSUFFICIENT);
         }
-
-        user.setNumberOfToken(currentTokens - amount);
-        userRepository.save(user);
     }
 
     private Integer getCurrentUserIdFromContext() {
@@ -856,7 +859,10 @@ public class AIServiceImpl implements AIService {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
 
-            partsNode.add(buildTextPart("Trích xuất các từ khóa đặc trưng nhất của bộ trang phục xuất hiện trong TẤT CẢ các bức ảnh đính kèm. Tập trung vào: loại trang phục, màu sắc, họa tiết, và tên nhân vật. Chỉ trả về một chuỗi các từ khóa ngăn cách bằng dấu phẩy."));
+            String promptText = aiKnowledgeBase.getPromptTagsMulti() != null && !aiKnowledgeBase.getPromptTagsMulti().isEmpty()
+                    ? aiKnowledgeBase.getPromptTagsMulti()
+                    : "Trích xuất các từ khóa đặc trưng nhất của bộ trang phục xuất hiện trong TẤT CẢ các bức ảnh đính kèm. Tập trung vào: loại trang phục, màu sắc, họa tiết, và tên nhân vật. Chỉ trả về một chuỗi các từ khóa ngăn cách bằng dấu phẩy.";
+            partsNode.add(buildTextPart(promptText));
 
             for (MultipartFile file : files) {
                 ObjectNode imagePart = buildImagePart(file);
@@ -889,7 +895,10 @@ public class AIServiceImpl implements AIService {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
 
-            partsNode.add(buildTextPart("Hãy phân tích hình ảnh bộ trang phục này và liệt kê các từ khóa (tags) đặc trưng nhất. Tập trung vào: loại trang phục, màu sắc, họa tiết, chất liệu, phong cách, và tên nhân vật nếu nhận diện được. Chỉ trả về chuỗi các từ khóa ngăn cách bằng dấu phẩy, không giải thích dài dòng."));
+            String promptText = aiKnowledgeBase.getPromptTagsSingle() != null && !aiKnowledgeBase.getPromptTagsSingle().isEmpty()
+                    ? aiKnowledgeBase.getPromptTagsSingle()
+                    : "Hãy phân tích hình ảnh bộ trang phục này và liệt kê các từ khóa (tags) đặc trưng nhất. Tập trung vào: loại trang phục, màu sắc, họa tiết, chất liệu, phong cách, và tên nhân vật nếu nhận diện được. Chỉ trả về chuỗi các từ khóa ngăn cách bằng dấu phẩy, không giải thích dài dòng.";
+            partsNode.add(buildTextPart(promptText));
 
             ObjectNode imagePart = buildImagePart(imageBytes, "image/jpeg");
             if (imagePart != null) partsNode.add(imagePart);
@@ -982,16 +991,11 @@ public class AIServiceImpl implements AIService {
                 inputJsonArray.add(item);
             }
 
-            String promptText = "You are an expert psychological evaluator trained on Pennebaker LIWC and Big Five trait analysis.\n"
-                    + "Tôi sẽ cung cấp một mảng JSON chứa các câu trả lời tự luận của người dùng.\n"
-                    + "ĐẦU VÀO:\n" + inputJsonArray.toString() + "\n\n"
-                    + "NHIỆM VỤ BẮT BUỘC:\n"
-                    + "1. Bạn PHẢI đánh giá TẤT CẢ các phần tử trong mảng. Đầu vào có bao nhiêu ID, đầu ra BẮT BUỘC phải có bấy nhiêu ID tương ứng.\n"
-                    + "2. Với mỗi câu trả lời, kiểm tra tính hợp lệ. Nếu vô nghĩa, chửi thề, đánh giá isValid = false.\n"
-                    + "3. Nếu hợp lệ, chấm điểm E, A, O từ -2 đến 2 dựa trên Linguistic markers.\n\n"
-                    + "ĐỊNH DẠNG ĐẦU RA BẮT BUỘC:\n"
-                    + "Chỉ trả về MỘT MẢNG JSON duy nhất, không kèm giải thích, không dùng markdown. Cấu trúc mỗi phần tử:\n"
-                    + "{\"id\": [id tương ứng], \"isValid\": true, \"reason\": \"Lý do ngắn\", \"scores\": {\"E\": 0, \"A\": 0, \"O\": 0}}";
+            String basePrompt = aiKnowledgeBase.getPromptAnalyzeAnswers() != null && !aiKnowledgeBase.getPromptAnalyzeAnswers().isEmpty()
+                    ? aiKnowledgeBase.getPromptAnalyzeAnswers()
+                    : "You are an expert psychological evaluator trained on Pennebaker LIWC and Big Five trait analysis.\nTôi sẽ cung cấp một mảng JSON chứa các câu trả lời tự luận của người dùng.\nĐẦU VÀO:\n{answers}\n\nNHIỆM VỤ BẮT BUỘC:\n1. Bạn PHẢI đánh giá TẤT CẢ các phần tử trong mảng. Đầu vào có bao nhiêu ID, đầu ra BẮT BUỘC phải có bấy nhiêu ID tương ứng.\n2. Với mỗi câu trả lời, kiểm tra tính hợp lệ. Nếu vô nghĩa, chửi thề, đánh giá isValid = false.\n3. Nếu hợp lệ, chấm điểm E, A, O từ -2 đến 2 dựa trên Linguistic markers.\n\nĐỊNH DẠNG ĐẦU RA BẮT BUỘC:\nChỉ trả về MỘT MẢNG JSON duy nhất, không kèm giải thích, không dùng markdown. Cấu trúc mỗi phần tử:\n{\"id\": [id tương ứng], \"isValid\": true, \"reason\": \"Lý do ngắn\", \"scores\": {\"E\": 0, \"A\": 0, \"O\": 0}}";
+            
+            String promptText = basePrompt.replace("{answers}", inputJsonArray.toString());
 
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
@@ -1220,7 +1224,10 @@ public class AIServiceImpl implements AIService {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
 
-            partsNode.add(buildTextPart("Hãy phân tích TẤT CẢ các hình ảnh của cùng một bộ trang phục này và liệt kê các từ khóa (tags) đặc trưng nhất xuất hiện. Tập trung vào: loại trang phục, màu sắc, họa tiết, chất liệu, phong cách, và tên nhân vật. Chỉ trả về một chuỗi các từ khóa ngăn cách bằng dấu phẩy, không giải thích."));
+            String promptText = aiKnowledgeBase.getPromptTagsMulti() != null && !aiKnowledgeBase.getPromptTagsMulti().isEmpty()
+                    ? aiKnowledgeBase.getPromptTagsMulti()
+                    : "Hãy phân tích TẤT CẢ các hình ảnh của cùng một bộ trang phục này và liệt kê các từ khóa (tags) đặc trưng nhất xuất hiện. Tập trung vào: loại trang phục, màu sắc, họa tiết, chất liệu, phong cách, và tên nhân vật. Chỉ trả về một chuỗi các từ khóa ngăn cách bằng dấu phẩy, không giải thích.";
+            partsNode.add(buildTextPart(promptText));
 
             for (byte[] bytes : imagesBytes) {
                 ObjectNode imagePart = buildImagePart(bytes, "image/jpeg");
@@ -1261,13 +1268,11 @@ public class AIServiceImpl implements AIService {
             }
 
             // PROMPT THẦN THÁNH: Ép AI làm toán và gom cụm
-            String promptText = "Bạn là một AI Data Scientist cho giải đấu Cosplay. Dưới đây là danh sách các Feedback của người dùng: " + feedbackArray.toString() + "\n"
-                    + "NHIỆM VỤ CỦA BẠN:\n"
-                    + "1. Lọc bỏ: Bỏ qua các feedback nhảm nhí, chửi thề, hoặc không liên quan đến kỹ thuật Cosplay.\n"
-                    + "2. Gom cụm (Clustering): Gom các feedback có ý nghĩa giống nhau lại. Đếm số lượng 'userId' độc lập cho mỗi cụm.\n"
-                    + "3. Tính trọng số động: Luật WCS Gốc luôn chiếm tối thiểu 50% trọng số. Các feedback cộng đồng chiếm tối đa 50%. Mỗi 1 user đóng góp tối đa 5% trọng số cho một tiêu chí cụm. (Ví dụ: Cụm A có 2 user nói giống nhau -> Trọng số 10%).\n"
-                    + "4. Tóm tắt bộ luật: Dựa vào các cụm hợp lệ, hãy viết một đoạn 'LUẬT BỔ SUNG' (Supplementary Rules) để hướng dẫn AI cách cộng/trừ điểm.\n\n"
-                    + "ĐẦU RA BẮT BUỘC: Trả về ĐÚNG MỘT JSON có cấu trúc: {\"valid_feedbacks\": 10, \"supplementary_rules\": \"[Đoạn luật bổ sung...]\"}";
+            String basePrompt = aiKnowledgeBase.getPromptAnalyzeFeedback() != null && !aiKnowledgeBase.getPromptAnalyzeFeedback().isEmpty()
+                    ? aiKnowledgeBase.getPromptAnalyzeFeedback()
+                    : "Bạn là một AI Data Scientist cho giải đấu Cosplay. Dưới đây là danh sách các Feedback của người dùng: {feedback}\nNHIỆM VỤ CỦA BẠN:\n1. Lọc bỏ: Bỏ qua các feedback nhảm nhí, chửi thề, hoặc không liên quan đến kỹ thuật Cosplay.\n2. Gom cụm (Clustering): Gom các feedback có ý nghĩa giống nhau lại. Đếm số lượng 'userId' độc lập cho mỗi cụm.\n3. Tính trọng số động: Luật WCS Gốc luôn chiếm tối thiểu 50% trọng số. Các feedback cộng đồng chiếm tối đa 50%. Mỗi 1 user đóng góp tối đa 5% trọng số cho một tiêu chí cụm. (Ví dụ: Cụm A có 2 user nói giống nhau -> Trọng số 10%).\n4. Tóm tắt bộ luật: Dựa vào các cụm hợp lệ, hãy viết một đoạn 'LUẬT BỔ SUNG' (Supplementary Rules) để hướng dẫn AI cách cộng/trừ điểm.\n\nĐẦU RA BẮT BUỘC: Trả về ĐÚNG MỘT JSON có cấu trúc: {\"valid_feedbacks\": 10, \"supplementary_rules\": \"[Đoạn luật bổ sung...]\"}";
+            
+            String promptText = basePrompt.replace("{feedback}", feedbackArray.toString());
 
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();

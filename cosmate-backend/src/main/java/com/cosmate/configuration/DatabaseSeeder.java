@@ -58,6 +58,15 @@ public class DatabaseSeeder {
             systemConfigRepository.save(SystemConfig.builder().configKey("PROMPT_PERSONA_DEEP").configValue(deepPrompt).description("Văn mẫu cho AI Description - Phong cách Cổ trang").build());
         }
 
+        seedTextToDatabase("PROMPT_MOD_DEMO", "Bạn là một hệ thống kiểm duyệt hình ảnh khắt khe. Hãy phân tích ảnh đầu vào. Nếu ảnh có chứa nội dung 18+, HOẶC CÓ CHỨA HÌNH ẢNH CON CHÓ (bất kì loại chó nào), hãy trả về ĐÚNG 1 TỪ: UNSAFE. Nếu là ảnh người bình thường an toàn, trả về ĐÚNG 1 TỪ: SAFE.", "Prompt kiểm duyệt ảnh chung");
+        seedTextToDatabase("PROMPT_MOD_COSTUME", "Phân tích ảnh đầu vào. Trả về ĐÚNG 1 TỪ: 'UNSAFE_VIOLATION' nếu ảnh chứa nội dung 18+, phản cảm, bạo lực. Trả về 'SAFE' nếu ảnh có chứa người hóa trang, trang phục nguyên bộ, HOẶC CẬN CẢNH CHI TIẾT SẢN PHẨM (đường may, chất liệu, nút, vũ khí, tóc giả). Trả về 'UNSAFE_IRRELEVANT' CHỈ KHI bức ảnh hoàn toàn là rác (phong cảnh thiên nhiên, sổ đỏ, màn hình chat, meme).", "Prompt kiểm duyệt ảnh trang phục");
+        seedTextToDatabase("PROMPT_TAGS_MULTI", "Trích xuất các từ khóa đặc trưng nhất của bộ trang phục xuất hiện trong TẤT CẢ các bức ảnh đính kèm. Tập trung vào: loại trang phục, màu sắc, họa tiết, và tên nhân vật. Chỉ trả về một chuỗi các từ khóa ngăn cách bằng dấu phẩy.", "Prompt bóc tag nhiều ảnh");
+        seedTextToDatabase("PROMPT_TAGS_SINGLE", "Hãy phân tích hình ảnh bộ trang phục này và liệt kê các từ khóa (tags) đặc trưng nhất. Tập trung vào: loại trang phục, màu sắc, họa tiết, chất liệu, phong cách, và tên nhân vật nếu nhận diện được. Chỉ trả về chuỗi các từ khóa ngăn cách bằng dấu phẩy, không giải thích dài dòng.", "Prompt bóc tag 1 ảnh");
+        seedTextToDatabase("PROMPT_ANALYZE_ANSWERS", "You are an expert psychological evaluator trained on Pennebaker LIWC and Big Five trait analysis.\nTôi sẽ cung cấp một mảng JSON chứa các câu trả lời tự luận của người dùng.\nĐẦU VÀO:\n{answers}\n\nNHIỆM VỤ BẮT BUỘC:\n1. Bạn PHẢI đánh giá TẤT CẢ các phần tử trong mảng. Đầu vào có bao nhiêu ID, đầu ra BẮT BUỘC phải có bấy nhiêu ID tương ứng.\n2. Với mỗi câu trả lời, kiểm tra tính hợp lệ. Nếu vô nghĩa, chửi thề, đánh giá isValid = false.\n3. Nếu hợp lệ, chấm điểm E, A, O từ -2 đến 2 dựa trên Linguistic markers.\n\nĐỊNH DẠNG ĐẦU RA BẮT BUỘC:\nChỉ trả về MỘT MẢNG JSON duy nhất, không kèm giải thích, không dùng markdown. Cấu trúc mỗi phần tử:\n{\"id\": [id tương ứng], \"isValid\": true, \"reason\": \"Lý do ngắn\", \"scores\": {\"E\": 0, \"A\": 0, \"O\": 0}}", "Prompt phân tích câu trả lời trắc nghiệm");
+        seedTextToDatabase("PROMPT_ANALYZE_FEEDBACK", "Bạn là một AI Data Scientist cho giải đấu Cosplay. Dưới đây là danh sách các Feedback của người dùng: {feedback}\nNHIỆM VỤ CỦA BẠN:\n1. Lọc bỏ: Bỏ qua các feedback nhảm nhí, chửi thề, hoặc không liên quan đến kỹ thuật Cosplay.\n2. Gom cụm (Clustering): Gom các feedback có ý nghĩa giống nhau lại. Đếm số lượng 'userId' độc lập cho mỗi cụm.\n3. Tính trọng số động: Luật WCS Gốc luôn chiếm tối thiểu 50% trọng số. Các feedback cộng đồng chiếm tối đa 50%. Mỗi 1 user đóng góp tối đa 5% trọng số cho một tiêu chí cụm. (Ví dụ: Cụm A có 2 user nói giống nhau -> Trọng số 10%).\n4. Tóm tắt bộ luật: Dựa vào các cụm hợp lệ, hãy viết một đoạn 'LUẬT BỔ SUNG' (Supplementary Rules) để hướng dẫn AI cách cộng/trừ điểm.\n\nĐẦU RA BẮT BUỘC: Trả về ĐÚNG MỘT JSON có cấu trúc: {\"valid_feedbacks\": 10, \"supplementary_rules\": \"[Đoạn luật bổ sung...]\"}", "Prompt phân tích Feedback");
+        seedTextToDatabase("PROMPT_RECOMMENDATION", "Trang phục dành cho nguyên mẫu {name}. Khát vọng cốt lõi: {desire}. Phong cách: {style}. Màu sắc: {color}. Nhân vật tiêu biểu: {characters}.", "Prompt recommend trang phục");
+        seedTextToDatabase("PROMPT_SCORE_POSE", "Hãy so sánh ảnh user chụp với nhân vật '{characterName}'. Nếu trong ảnh KHÔNG CÓ NGƯỜI, hoặc không giống ảnh hóa trang/tạo dáng, trả về chính xác chuỗi JSON: {\"score\": 0, \"comment\": \"NOT_COSPLAY\"}. {referenceText} Chỉ trả về JSON định dạng: {\"score\": [Điểm tổng 1-100], \"pose_score\": [1-40], \"expression_score\": [1-40], \"costume_score\": [1-20], \"comment\": \"[Nhận xét kỹ thuật...]\"}", "Prompt chấm điểm Pose");
+
         seedJsonToDatabase("ARCHETYPES_DATA", "ai-data/jungian_archetypes_extended.json", "Dữ liệu 12 Archetypes cho AI");
         seedJsonToDatabase("QUIZ_STAGE_1", "ai-data/survey_stage_1.json", "Bộ câu hỏi trắc nghiệm Stage 1");
         seedJsonToDatabase("QUIZ_STAGE_2", "ai-data/survey_stage_2.json", "Bộ câu hỏi trắc nghiệm Stage 2");
@@ -79,6 +88,18 @@ public class DatabaseSeeder {
             } catch (Exception e) {
                 log.error("❌ Lỗi khi seed dữ liệu {}: {}", configKey, e.getMessage());
             }
+        }
+    }
+
+    private void seedTextToDatabase(String configKey, String textContent, String description) {
+        if (!systemConfigRepository.existsByConfigKey(configKey)) {
+            SystemConfig config = SystemConfig.builder()
+                    .configKey(configKey)
+                    .configValue(textContent)
+                    .description(description)
+                    .build();
+            systemConfigRepository.save(config);
+            log.info("✅ Đã tự động seed văn bản {} vào Database.", configKey);
         }
     }
 }

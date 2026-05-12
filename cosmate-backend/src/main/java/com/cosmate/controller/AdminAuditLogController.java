@@ -17,11 +17,11 @@ public class AdminAuditLogController {
     private final AdminAuditLogService service;
 
     @GetMapping("/audit-logs")
-    public ApiResponse<List<AdminAuditLogResponse>> auditLogs() {
-        return ApiResponse.<List<AdminAuditLogResponse>>builder()
+    public ApiResponse<org.springframework.data.domain.Page<AdminAuditLogResponse>> auditLogs(org.springframework.data.domain.Pageable pageable) {
+        return ApiResponse.<org.springframework.data.domain.Page<AdminAuditLogResponse>>builder()
                 .code(0)
                 .message("OK")
-                .result(service.findAll())
+                .result(service.findAll(pageable))
                 .build();
     }
 }

@@ -6,6 +6,8 @@ import com.cosmate.repository.AdminAuditLogRepository;
 import com.cosmate.service.AdminAuditLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -27,8 +29,8 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
     }
 
     @Override
-    public List<AdminAuditLogResponse> findAll() {
-        return repository.findAll().stream().map(log -> AdminAuditLogResponse.builder()
+    public Page<AdminAuditLogResponse> findAll(Pageable pageable) {
+        return repository.findAll(pageable).map(log -> AdminAuditLogResponse.builder()
                 .id(String.valueOf(log.getId()))
                 .actor(log.getActor())
                 .action(log.getAction())
@@ -36,6 +38,6 @@ public class AdminAuditLogServiceImpl implements AdminAuditLogService {
                 .entityId(log.getEntityId())
                 .detail(log.getDetail())
                 .createdAt(log.getCreatedAt())
-                .build()).toList();
+                .build());
     }
 }

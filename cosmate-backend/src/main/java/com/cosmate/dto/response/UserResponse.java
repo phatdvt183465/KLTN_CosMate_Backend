@@ -16,4 +16,6 @@ public class UserResponse implements CrudDto<Integer> {
     private String phone;
     private String status;
     private Integer numberOfToken;
+    private java.time.LocalDateTime createdAt;
+    private String currentArchetype;
 }

@@ -37,13 +37,13 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
 
         BigDecimal revenueToday = orderRepository.findAll().stream()
                 .filter(o -> o.getCreatedAt() != null && o.getCreatedAt().toLocalDate().isEqual(LocalDate.now()))
-                .map(o -> o.getTotalAmount() == null ? BigDecimal.ZERO : o.getTotalAmount())
+                .map(this::calculateOrderRevenue)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal revenueThisMonth = orderRepository.findAll().stream()
                 .filter(o -> o.getCreatedAt() != null && o.getCreatedAt().toLocalDate().getYear() == LocalDate.now().getYear()
                         && o.getCreatedAt().toLocalDate().getMonth() == LocalDate.now().getMonth())
-                .map(o -> o.getTotalAmount() == null ? BigDecimal.ZERO : o.getTotalAmount())
+                .map(this::calculateOrderRevenue)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         return AdminDashboardSummaryResponse.builder()
@@ -66,7 +66,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                 .filter(o -> o.getCreatedAt() != null)
                 .collect(java.util.stream.Collectors.groupingBy(o -> o.getCreatedAt().format(fmt),
                         java.util.stream.Collectors.reducing(BigDecimal.ZERO,
-                                o -> o.getTotalAmount() == null ? BigDecimal.ZERO : o.getTotalAmount(), BigDecimal::add)))
+                                this::calculateOrderRevenue, BigDecimal::add)))
                 .entrySet().stream()
                 .sorted(java.util.Map.Entry.comparingByKey())
                 .map(e -> AdminReportSeriesPointResponse.builder().label(e.getKey()).value(e.getValue()).build())
@@ -130,5 +130,28 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                         .createdAt(log.getCreatedAt())
                         .build())
                 .toList();
+    }
+
+    private BigDecimal calculateOrderRevenue(com.cosmate.entity.Order o) {
+        if (o == null || o.getStatus() == null) return BigDecimal.ZERO;
+        String status = o.getStatus().toUpperCase();
+
+        if ("UNPAID".equals(status) || "UNCONFIRM".equals(status) || "CANCELLED".equals(status)) {
+            return BigDecimal.ZERO;
+        }
+
+        BigDecimal total = o.getTotalAmount() == null ? BigDecimal.ZERO : o.getTotalAmount();
+
+        if ("RENT_SERVICE".equals(o.getOrderType())) {
+            return total;
+        }
+
+        BigDecimal deposit = o.getTotalDepositAmount() == null ? BigDecimal.ZERO : o.getTotalDepositAmount();
+
+        if ("DISPUTE".equals(status) || "PENALTY".equals(status)) {
+            return total;
+        }
+
+        return total.subtract(deposit);
     }
 }

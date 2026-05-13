@@ -18,5 +18,15 @@ public class CostumeImage {
     @Column(name = "image_url")
     private String imageUrl;
 
-    private String type;
+    private String type; // MAIN / DETAIL
+
+    @Column(name = "media_type")
+    private String mediaType; // IMAGE / VIDEO
+
+    @PrePersist
+    public void prePersist() {
+        if (this.mediaType == null) {
+            this.mediaType = "IMAGE";
+        }
+    }
 }

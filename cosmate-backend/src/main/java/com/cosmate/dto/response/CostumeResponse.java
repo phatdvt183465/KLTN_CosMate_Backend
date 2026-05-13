@@ -27,6 +27,7 @@ public class CostumeResponse implements CrudDto<Integer> {
     private Integer providerId;
     private Integer completedRentCount;
     private List<String> imageUrls;
+    private List<MediaResponse> medias;
     private List<SurchargeResponse> surcharges;
     private List<AccessoryResponse> accessories;
     private List<RentalOptionResponse> rentalOptions;
@@ -74,5 +75,15 @@ public class CostumeResponse implements CrudDto<Integer> {
         private Integer id;
         private String name;
         private String anime;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class MediaResponse {
+        private String url;
+        private String type; // MAIN / DETAIL
+        private String mediaType; // IMAGE / VIDEO
     }
 }

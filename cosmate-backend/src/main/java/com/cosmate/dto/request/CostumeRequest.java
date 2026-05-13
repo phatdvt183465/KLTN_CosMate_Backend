@@ -43,6 +43,8 @@ public class CostumeRequest {
     private Integer providerId;
 
     private List<MultipartFile> imageFiles;
+    
+    private List<MultipartFile> videoFiles;
 
     @Size(max = 10000)
     private String surcharges;

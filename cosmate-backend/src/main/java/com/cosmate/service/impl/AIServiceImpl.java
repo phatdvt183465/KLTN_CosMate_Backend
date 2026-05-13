@@ -1251,7 +1251,7 @@ public class AIServiceImpl implements AIService {
     @org.springframework.scheduling.annotation.Scheduled(cron = "0 0 2 * * SUN")
     public void analyzeAndApplyPoseFeedbacks() {
         log.info("Bắt đầu tiến trình AI phân tích Pose Feedback từ cộng đồng...");
-        List<PoseFeedback> feedbacks = poseFeedbackRepository.findAll();
+        List<PoseFeedback> feedbacks = poseFeedbackRepository.findByStatus("PENDING");
 
         if (feedbacks.isEmpty()) {
             log.info("Chưa có feedback nào mới. Bỏ qua.");
@@ -1299,6 +1299,11 @@ public class AIServiceImpl implements AIService {
                 systemConfigRepository.save(dynamicConfig);
                 log.info("Đã nạp thành công Luật Bổ Sung vào Database!");
             }
+
+            for (PoseFeedback fb : feedbacks) {
+                fb.setStatus("PROCESSED");
+            }
+            poseFeedbackRepository.saveAll(feedbacks);
 
         } catch (Exception e) {
             log.error("Lỗi khi AI phân tích Pose Feedback: {}", e.getMessage());

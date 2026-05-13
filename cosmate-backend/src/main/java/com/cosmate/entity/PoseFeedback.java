@@ -32,7 +32,17 @@ public class PoseFeedback {
     @Column(name = "feedback_text", columnDefinition = "TEXT")
     private String feedbackText;
 
+    @Column(name = "status")
+    private String status;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    @PrePersist
+    public void prePersist() {
+        if (this.status == null) {
+            this.status = "PENDING";
+        }
+    }
 }

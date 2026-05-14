@@ -952,6 +952,12 @@ public class AIServiceImpl implements AIService {
     }
 
     @Override
+    public PoseScore getPoseScoreDetail(Integer id, Integer currentUserId) {
+        return poseScoreRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy kết quả chấm điểm này!"));
+    }
+
+    @Override
     public PoseScore updatePoseCharacterName(Integer scoreId, Integer userId, String newName) {
         PoseScore score = poseScoreRepository.findById(scoreId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy kết quả chấm điểm này!"));

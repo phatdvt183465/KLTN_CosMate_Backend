@@ -96,6 +96,20 @@ public class AIController {
                 .build();
     }
 
+
+    @GetMapping("/pose-history/{id}")
+    public ApiResponse<PoseScore> getPoseHistoryById(@PathVariable Integer id) {
+        Integer currentUserId = null;
+        Authentication authentication = SecurityContextHolder.getContext() != null ? SecurityContextHolder.getContext().getAuthentication() : null;
+        if (authentication != null && authentication.getPrincipal() != null && !"anonymousUser".equals(authentication.getPrincipal())) {
+            currentUserId = getCurrentUserId();
+        }
+        return ApiResponse.<PoseScore>builder()
+                .result(aiService.getPoseScoreDetail(id, currentUserId))
+                .message("Lấy chi tiết Pose Battle thành công!")
+                .build();
+    }
+
     // API tool: Quét và tạo vector cho các ảnh cũ bị thiếu
     @PostMapping("/generate-missing-vectors")
     public ApiResponse<Void> generateMissingVectors() {

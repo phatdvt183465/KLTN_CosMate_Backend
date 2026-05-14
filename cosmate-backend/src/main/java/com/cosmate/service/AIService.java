@@ -55,6 +55,9 @@ public interface AIService {
     // Lấy lịch sử chấm điểm Pose
     List<PoseScore> getMyPoseHistory(Integer userId, String keyword);
 
+    // Lấy chi tiết một kết quả Pose để share công khai
+    PoseScore getPoseScoreDetail(Integer id, Integer currentUserId);
+
     // Thêm tên nhân vật cosplay Pose
     PoseScore updatePoseCharacterName(Integer scoreId, Integer userId, String newName);
 

@@ -12,4 +12,7 @@ public interface PoseScoreRepository extends JpaRepository<PoseScore, Integer> {
 
     // Lấy lịch sử CÓ TÌM KIẾM theo tên nhân vật
     List<PoseScore> findByCosplayerIdAndCharacterNameContainingIgnoreCaseOrderByCreatedAtDesc(Integer cosplayerId, String characterName);
+
+    // Lấy chi tiết kết quả Pose public/share
+    java.util.Optional<PoseScore> findById(Integer id);
 }

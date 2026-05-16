@@ -9,4 +9,7 @@ public interface VnPayService {
     String createPaymentUrl(Integer userId, BigDecimal amount, String returnUrl) throws Exception;
     Map<String, String> handleReturn(Map<String, String> params) throws Exception;
     String createPaymentUrlForTransaction(Integer userId, BigDecimal amount, String returnUrl, Integer transactionId) throws Exception;
+    // New overloads that accept isMobile flag (default false when not provided)
+    String createPaymentUrl(Integer userId, BigDecimal amount, String returnUrl, boolean isMobile) throws Exception;
+    String createPaymentUrlForTransaction(Integer userId, BigDecimal amount, String returnUrl, Integer transactionId, boolean isMobile) throws Exception;
 }

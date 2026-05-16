@@ -9,4 +9,6 @@ public class ProviderSubscribeRequest {
     private String returnUrl;
     // optional payment method: if null -> default to VNPAY for backward compatibility
     private PaymentMethod paymentMethod;
+    // whether the request comes from mobile client - default false
+    private Boolean isMobile = false;
 }

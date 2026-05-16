@@ -69,7 +69,34 @@ public class VnPayServiceImpl implements VnPayService {
 
     @Override
     @Transactional
+    public String createPaymentUrl(Integer userId, BigDecimal amount, String returnUrl, boolean isMobile) throws Exception {
+        // create pending transaction and delegate, preserving isMobile flag
+        com.cosmate.entity.User u = com.cosmate.entity.User.builder().id(userId).build();
+        Wallet wallet = walletService.createForUser(u);
+
+        Transaction pending = Transaction.builder()
+                .wallet(wallet)
+                .amount(amount)
+                .type("CREDIT")
+                .paymentMethod("VNPAY")
+                .status("PENDING")
+                .createdAt(LocalDateTime.now())
+                .build();
+        pending = transactionRepository.save(pending);
+        logger.info("Created pending VnPay transaction id={} userId={} amount={} paymentMethod={}", pending.getId(), userId, amount, pending.getPaymentMethod());
+
+        return createPaymentUrlForTransaction(userId, amount, returnUrl, pending.getId(), isMobile);
+    }
+
+    @Override
+    @Transactional
     public String createPaymentUrlForTransaction(Integer userId, BigDecimal amount, String returnUrl, Integer transactionId) throws Exception {
+        return createPaymentUrlForTransaction(userId, amount, returnUrl, transactionId, false);
+    }
+
+    @Override
+    @Transactional
+    public String createPaymentUrlForTransaction(Integer userId, BigDecimal amount, String returnUrl, Integer transactionId, boolean isMobile) throws Exception {
         long amountVnd100 = amount.multiply(new BigDecimal(100)).longValue();
 
         // create txn ref with SUB or WALLET depending on type - here use SUB if transaction type starts with SUBSCRIPTION else WALLET
@@ -101,6 +128,8 @@ public class VnPayServiceImpl implements VnPayService {
         vnp_Params.put("vnp_CreateDate", LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss")));
         vnp_Params.put("vnp_ExpireDate", LocalDateTime.now().plusMinutes(15).format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss")));
         vnp_Params.put("vnp_IpAddr", "127.0.0.1");
+        // include mobile flag as extra param for signature when requested
+        if (isMobile) vnp_Params.put("vnp_IsMobile", "true");
 
         List<String> fieldNames = new ArrayList<>(vnp_Params.keySet());
         Collections.sort(fieldNames);

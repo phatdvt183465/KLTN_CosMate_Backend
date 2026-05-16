@@ -13,6 +13,7 @@ public interface SubscriptionService {
 
     // Provider actions
     String initiateProviderSubscription(Integer providerUserId, Integer planId, String returnUrl, PaymentMethod paymentMethod) throws Exception;
+    String initiateProviderSubscription(Integer providerUserId, Integer planId, String returnUrl, PaymentMethod paymentMethod, boolean isMobile) throws Exception; // New: accept isMobile flag from client (default false)
     ProviderSubscription finalizeSubscriptionPayment(Integer transactionId) throws Exception; // called when VnPay return handled
 
     // New: query subscriptions

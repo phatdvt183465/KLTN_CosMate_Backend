@@ -315,6 +315,8 @@ public class OrderServiceImpl implements OrderService {
         // Create transaction record depending on payment method
         String pm = request.getPaymentMethod();
         if (pm == null) pm = "WALLET";
+        // whether the client is a mobile client - default false when not provided
+        boolean isMobile = request.getIsMobile() != null && request.getIsMobile();
 
         OrderResponse resp = new OrderResponse();
         resp.setId(order.getId());
@@ -393,9 +395,9 @@ public class OrderServiceImpl implements OrderService {
 
             String paymentUrl;
             if ("MOMO".equalsIgnoreCase(pm)) {
-                paymentUrl = momoService.createPaymentUrlForTransaction(cosplayerId, totalAmount, returnUrl, pending.getId());
+                paymentUrl = momoService.createPaymentUrlForTransaction(cosplayerId, totalAmount, returnUrl, pending.getId(), isMobile);
             } else {
-                paymentUrl = vnPayService.createPaymentUrlForTransaction(cosplayerId, totalAmount, returnUrl, pending.getId());
+                paymentUrl = vnPayService.createPaymentUrlForTransaction(cosplayerId, totalAmount, returnUrl, pending.getId(), isMobile);
             }
             resp.setPaymentUrl(paymentUrl);
             return resp;
@@ -889,7 +891,7 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public OrderResponse payOrder(Integer cosplayerId, Integer orderId, String paymentMethod, String returnUrl) throws Exception {
+    public OrderResponse payOrder(Integer cosplayerId, Integer orderId, String paymentMethod, String returnUrl, boolean isMobile) throws Exception {
         Optional<Order> opt = orderRepository.findById(orderId);
         if (opt.isEmpty()) throw new IllegalArgumentException("Order not found");
         Order order = opt.get();
@@ -971,9 +973,9 @@ public class OrderServiceImpl implements OrderService {
 
         String paymentUrl;
         if ("MOMO".equalsIgnoreCase(pm)) {
-            paymentUrl = momoService.createPaymentUrlForTransaction(cosplayerId, totalAmount, returnUrl, pending.getId());
+            paymentUrl = momoService.createPaymentUrlForTransaction(cosplayerId, totalAmount, returnUrl, pending.getId(), isMobile);
         } else {
-            paymentUrl = vnPayService.createPaymentUrlForTransaction(cosplayerId, totalAmount, returnUrl, pending.getId());
+            paymentUrl = vnPayService.createPaymentUrlForTransaction(cosplayerId, totalAmount, returnUrl, pending.getId(), isMobile);
         }
         resp.setPaymentUrl(paymentUrl);
         return resp;

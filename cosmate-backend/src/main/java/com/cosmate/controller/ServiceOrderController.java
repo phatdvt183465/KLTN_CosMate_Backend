@@ -91,13 +91,14 @@ public class ServiceOrderController {
     @PostMapping("/{id}/pay")
     public ApiResponse<OrderResponse> payServiceOrder(@PathVariable Integer id,
                                                       @RequestParam(required = false) String paymentMethod,
-                                                      @RequestParam(required = false) String returnUrl) {
+                                                      @RequestParam(required = false) String returnUrl,
+                                                      @RequestParam(required = false, defaultValue = "false") boolean isMobile) {
         try {
             Integer currentUserId = getCurrentUserId();
             if (currentUserId == null) return ApiResponse.<OrderResponse>builder().code(401).message("Chưa xác thực - Vui lòng đăng nhập").build();
 
             // forward to the shared OrderService.payOrder logic (will validate ownership and UNPAID status)
-            OrderResponse resp = orderService.payOrder(currentUserId, id, paymentMethod, returnUrl);
+            OrderResponse resp = orderService.payOrder(currentUserId, id, paymentMethod, returnUrl, isMobile);
             return ApiResponse.<OrderResponse>builder().result(resp).message("Payment initiated").build();
         } catch (IllegalArgumentException ex) {
             return ApiResponse.<OrderResponse>builder().code(400).message(ex.getMessage()).build();

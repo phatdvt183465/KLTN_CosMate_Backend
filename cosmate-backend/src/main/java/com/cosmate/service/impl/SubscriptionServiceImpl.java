@@ -62,6 +62,12 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     @Override
     @Transactional
     public String initiateProviderSubscription(Integer providerUserId, Integer planId, String returnUrl, PaymentMethod paymentMethod) throws Exception {
+        return initiateProviderSubscription(providerUserId, planId, returnUrl, paymentMethod, false);
+    }
+
+    @Override
+    @Transactional
+    public String initiateProviderSubscription(Integer providerUserId, Integer planId, String returnUrl, PaymentMethod paymentMethod, boolean isMobile) throws Exception {
         // find provider by user id
         Provider provider = providerRepository.findByUserId(providerUserId).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
         SubscriptionPlan plan = planRepository.findById(planId).orElseThrow(() -> new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION));
@@ -113,10 +119,10 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         String payUrl;
         if (pm == PaymentMethod.VNPAY) {
             String r = (returnUrl == null || returnUrl.isEmpty()) ? "/api/payments/vnpay-return" : returnUrl;
-            payUrl = vnPayService.createPaymentUrlForTransaction(wallet.getUser().getId(), plan.getPrice(), r, t.getId());
+            payUrl = vnPayService.createPaymentUrlForTransaction(wallet.getUser().getId(), plan.getPrice(), r, t.getId(), isMobile);
         } else if (pm == PaymentMethod.MOMO) {
             String r = (returnUrl == null || returnUrl.isEmpty()) ? "/api/payments/momo-return" : returnUrl;
-            payUrl = momoService.createPaymentUrlForTransaction(wallet.getUser().getId(), plan.getPrice(), r, t.getId());
+            payUrl = momoService.createPaymentUrlForTransaction(wallet.getUser().getId(), plan.getPrice(), r, t.getId(), isMobile);
         } else {
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION);
         }

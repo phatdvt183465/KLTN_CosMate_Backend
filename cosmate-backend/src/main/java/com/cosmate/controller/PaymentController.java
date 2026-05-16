@@ -38,13 +38,18 @@ public class PaymentController {
         return frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
     }
 
+    // Expo IP for mobile deep link (e.g. 10.88.54.16:8081) - can be set in application.properties or environment
+    @Value("${expo.ip:}")
+    private String expoIp;
+
     @PostMapping("/api/vnpay/create")
     public ResponseEntity<ApiResponse<Map<String, String>>> createPayment(@RequestParam Integer userId,
                                                                            @RequestParam BigDecimal amount,
-                                                                           @RequestParam String returnUrl) {
+                                                                           @RequestParam String returnUrl,
+                                                                           @RequestParam(required = false, defaultValue = "false") boolean isMobile) {
         ApiResponse<Map<String, String>> api = new ApiResponse<>();
         try {
-            String url = vnPayService.createPaymentUrl(userId, amount, returnUrl);
+            String url = vnPayService.createPaymentUrl(userId, amount, returnUrl, isMobile);
             Map<String, String> res = new HashMap<>();
             res.put("paymentUrl", url);
             api.setCode(0);
@@ -61,10 +66,11 @@ public class PaymentController {
     @PostMapping("/api/momo/create")
     public ResponseEntity<ApiResponse<Map<String, String>>> createMomoPayment(@RequestParam Integer userId,
                                                                                @RequestParam BigDecimal amount,
-                                                                               @RequestParam(required = false) String returnUrl) {
+                                                                               @RequestParam(required = false) String returnUrl,
+                                                                               @RequestParam(required = false, defaultValue = "false") boolean isMobile) {
         ApiResponse<Map<String, String>> api = new ApiResponse<>();
         try {
-            String url = momoService.createPaymentUrl(userId, amount, returnUrl);
+            String url = momoService.createPaymentUrl(userId, amount, returnUrl, isMobile);
             Map<String, String> res = new HashMap<>();
             res.put("paymentUrl", url);
             api.setCode(0);
@@ -83,16 +89,18 @@ public class PaymentController {
                                                                                      @RequestParam BigDecimal amount,
                                                                                      @RequestParam String paymentMethod,
                                                                                      @RequestParam(required = false) String returnUrl,
-                                                                                     @RequestParam(required = false) Integer transactionId) {
+                                                                                     @RequestParam(required = false) Integer transactionId,
+                                                                                     @RequestParam(required = false, defaultValue = "false") boolean isMobile) {
         ApiResponse<Map<String, String>> api = new ApiResponse<>();
         try {
             String url;
+            // isMobile comes from request param
             if (paymentMethod != null && paymentMethod.equalsIgnoreCase("momo")) {
-                if (transactionId != null) url = momoService.createPaymentUrlForTransaction(userId, amount, returnUrl, transactionId);
-                else url = momoService.createPaymentUrl(userId, amount, returnUrl);
+                if (transactionId != null) url = momoService.createPaymentUrlForTransaction(userId, amount, returnUrl, transactionId, isMobile);
+                else url = momoService.createPaymentUrl(userId, amount, returnUrl, isMobile);
             } else { // default VNPay
-                if (transactionId != null) url = vnPayService.createPaymentUrlForTransaction(userId, amount, returnUrl, transactionId);
-                else url = vnPayService.createPaymentUrl(userId, amount, returnUrl);
+                if (transactionId != null) url = vnPayService.createPaymentUrlForTransaction(userId, amount, returnUrl, transactionId, isMobile);
+                else url = vnPayService.createPaymentUrl(userId, amount, returnUrl, isMobile);
             }
             Map<String, String> res = new HashMap<>();
             res.put("paymentUrl", url);
@@ -113,7 +121,17 @@ public class PaymentController {
         try {
             Map<String, String> result = paymentService.processVnPayReturn(allParams);
             String status = result.get("status");
-            StringBuilder redirect = new StringBuilder(getFrontendBase() + "/payment/result");
+            // determine if this return should redirect to mobile (expo) app
+            boolean isMobile = false;
+            if (allParams != null) {
+                String vnpIsMobile = allParams.getOrDefault("vnp_IsMobile", allParams.getOrDefault("vnp_ismobile", ""));
+                if (vnpIsMobile != null && (vnpIsMobile.equalsIgnoreCase("true") || vnpIsMobile.equals("1"))) isMobile = true;
+                String extraData = allParams.get("extraData");
+                if (!isMobile && extraData != null && extraData.contains("isMobile=true")) isMobile = true;
+            }
+            if (!isMobile && result.containsKey("isMobile") && "true".equalsIgnoreCase(result.get("isMobile"))) isMobile = true;
+
+            StringBuilder redirect = new StringBuilder(isMobile && expoIp != null && !expoIp.isBlank() ? ("exp://" + expoIp + "/--/payment-result") : (getFrontendBase() + "/payment/result"));
             redirect.append("?status=");
             String frontendStatus = "failed";
             if (status != null) {
@@ -158,7 +176,15 @@ public class PaymentController {
         try {
             Map<String, String> result = paymentService.processMomoReturn(allParams);
             String status = result.get("status");
-            StringBuilder redirect = new StringBuilder(getFrontendBase() + "/payment/result");
+            // determine if this return should redirect to mobile (expo) app
+            boolean isMobile = false;
+            if (allParams != null) {
+                String extraData = allParams.get("extraData");
+                if (extraData != null && extraData.contains("isMobile=true")) isMobile = true;
+            }
+            if (!isMobile && result.containsKey("isMobile") && "true".equalsIgnoreCase(result.get("isMobile"))) isMobile = true;
+
+            StringBuilder redirect = new StringBuilder(isMobile && expoIp != null && !expoIp.isBlank() ? ("exp://" + expoIp + "/--/payment-result") : (getFrontendBase() + "/payment/result"));
             redirect.append("?status=");
             String frontendStatus = "failed";
             if (status != null) {

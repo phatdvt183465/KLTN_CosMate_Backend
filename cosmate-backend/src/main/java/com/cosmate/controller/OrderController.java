@@ -74,9 +74,10 @@ public class OrderController {
     public ApiResponse<OrderResponse> payOrder(@RequestParam Integer cosplayerId,
                                                @PathVariable Integer id,
                                                @RequestParam(required = false) String paymentMethod,
-                                               @RequestParam(required = false) String returnUrl) {
+                                               @RequestParam(required = false) String returnUrl,
+                                               @RequestParam(required = false, defaultValue = "false") boolean isMobile) {
         try {
-            OrderResponse resp = orderService.payOrder(cosplayerId, id, paymentMethod, returnUrl);
+            OrderResponse resp = orderService.payOrder(cosplayerId, id, paymentMethod, returnUrl, isMobile);
             return ApiResponse.<OrderResponse>builder().result(resp).message("Payment initiated").build();
         } catch (IllegalArgumentException ex) {
             return ApiResponse.<OrderResponse>builder().code(400).message(ex.getMessage()).build();

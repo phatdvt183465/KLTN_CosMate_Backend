@@ -75,7 +75,33 @@ public class MomoServiceImpl implements MomoService {
 
     @Override
     @Transactional
+    public String createPaymentUrl(Integer userId, BigDecimal amount, String returnUrl, boolean isMobile) throws Exception {
+        // create pending transaction similar to VnPay implementation
+        com.cosmate.entity.User u = com.cosmate.entity.User.builder().id(userId).build();
+        Wallet wallet = walletService.createForUser(u);
+
+        Transaction pending = Transaction.builder()
+                .wallet(wallet)
+                .amount(amount)
+                .type("CREDIT")
+                .paymentMethod("MOMO")
+                .status("PENDING")
+                .createdAt(LocalDateTime.now())
+                .build();
+        pending = transactionRepository.save(pending);
+        logger.info("Created pending Momo transaction id={} userId={} amount={} paymentMethod={}", pending.getId(), userId, amount, pending.getPaymentMethod());
+        return createPaymentUrlForTransaction(userId, amount, returnUrl, pending.getId(), isMobile);
+    }
+
+    @Override
+    @Transactional
     public String createPaymentUrlForTransaction(Integer userId, BigDecimal amount, String returnUrl, Integer transactionId) throws Exception {
+        return createPaymentUrlForTransaction(userId, amount, returnUrl, transactionId, false);
+    }
+
+    @Override
+    @Transactional
+    public String createPaymentUrlForTransaction(Integer userId, BigDecimal amount, String returnUrl, Integer transactionId, boolean isMobile) throws Exception {
         if (returnUrl == null || returnUrl.isEmpty()) returnUrl = defaultReturnUrl;
 
         Optional<Transaction> txOpt = transactionRepository.findById(transactionId);
@@ -100,9 +126,11 @@ public class MomoServiceImpl implements MomoService {
         String redirectUrl = returnUrl;
         String ipnUrl = returnUrl; // callback
 
+        String extraDataStr = isMobile ? "isMobile=true" : "";
+
         String rawSignature = "accessKey=" + accessKey +
                 "&amount=" + amountVnd +
-                "&extraData=" + "" +
+                "&extraData=" + extraDataStr +
                 "&ipnUrl=" + ipnUrl +
                 "&orderId=" + orderId +
                 "&orderInfo=" + orderInfo +
@@ -123,7 +151,7 @@ public class MomoServiceImpl implements MomoService {
         payload.put("redirectUrl", redirectUrl);
         payload.put("ipnUrl", ipnUrl);
         payload.put("lang", "en");
-        payload.put("extraData", "");
+        payload.put("extraData", extraDataStr);
         payload.put("requestType", "captureWallet");
         payload.put("signature", signature);
 

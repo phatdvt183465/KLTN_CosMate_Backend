@@ -48,6 +48,7 @@ public class OrderServiceImpl implements OrderService {
     private final AddressRepository addressRepository;
     private final OrderAddressRepository orderAddressRepository;
     private final ProviderService providerService;
+    private final com.cosmate.service.CancellationPolicyService cancellationPolicyService;
     private final OrderCostumeSurchargeRepository orderCostumeSurchargeRepository;
 
     // New repositories for mapping costume data into order-specific tables
@@ -687,69 +688,77 @@ public class OrderServiceImpl implements OrderService {
             throw new IllegalArgumentException("Order cannot be cancelled in its current status: " + status);
         }
 
-        if ("PAID".equals(status)) {
-            if (order.getCosplayerId() == null) throw new IllegalArgumentException("Cosplayer info missing on order; cannot refund");
-            java.util.Optional<com.cosmate.entity.Wallet> wopt = walletService.getByUserId(order.getCosplayerId());
-            if (wopt.isEmpty()) throw new IllegalArgumentException("Wallet for cosplayer not found; refund failed");
-            com.cosmate.entity.Wallet wallet = wopt.get();
-            java.math.BigDecimal amount = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
-            walletService.credit(wallet, amount, "Refund for cancelled order", "ORDER_REFUND:" + order.getId(), null, order);
-        } else if ("PREPARING".equals(status)) {
-            // When cancelling in PREPARING, transfer the deposit to provider and refund the remaining amount to cosplayer
+        if ("PAID".equals(status) || "WAITING_SERVICE_DATE".equals(status) || "PREPARING".equals(status)) {
+            // Apply provider-defined cancellation policies to compute penalty and refunds
+            java.math.BigDecimal total = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+            java.time.LocalDateTime start = order.getRentDate();
+            long hoursBefore = 0L;
+            if (start != null) {
+                try {
+                    hoursBefore = java.time.Duration.between(now, start).toHours();
+                } catch (Exception ignored) { hoursBefore = 0L; }
+            }
+            if (hoursBefore < 0) hoursBefore = 0L;
+
+            java.util.List<com.cosmate.entity.ProviderCancellationPolicy> policies = java.util.Collections.emptyList();
+            try { policies = cancellationPolicyService.listByProvider(order.getProviderId()); } catch (Exception ignored) {}
+
+            com.cosmate.entity.ProviderCancellationPolicy matched = null;
+            if (policies != null && !policies.isEmpty()) {
+                for (com.cosmate.entity.ProviderCancellationPolicy p : policies) {
+                    if (p == null || p.getMinHoursBefore() == null) continue;
+                    int min = p.getMinHoursBefore();
+                    Integer maxObj = p.getMaxHoursBefore();
+                    if (hoursBefore >= min && (maxObj == null || hoursBefore <= maxObj)) { matched = p; break; }
+                }
+            }
+
+            String penaltyType = matched == null ? "NONE" : matched.getPenaltyType();
+            java.math.BigDecimal penaltyValue = matched == null || matched.getPenaltyValue() == null ? java.math.BigDecimal.ZERO : matched.getPenaltyValue();
+            java.math.BigDecimal penaltyAmount = java.math.BigDecimal.ZERO;
             try {
-                java.math.BigDecimal total = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
-                java.util.List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
-                java.math.BigDecimal depositTotal = java.math.BigDecimal.ZERO;
-                if (details != null && !details.isEmpty()) {
-                    for (OrderDetail d : details) {
-                        try { java.math.BigDecimal dep = d.getDepositAmount() == null ? java.math.BigDecimal.ZERO : d.getDepositAmount(); depositTotal = depositTotal.add(dep); } catch (Exception ignored) {}
-                    }
+                if ("PERCENT".equalsIgnoreCase(penaltyType)) {
+                    penaltyAmount = total.multiply(penaltyValue).divide(new java.math.BigDecimal(100), 2, RoundingMode.HALF_UP);
+                } else if ("FIXED".equalsIgnoreCase(penaltyType)) {
+                    penaltyAmount = penaltyValue.min(total);
+                } else {
+                    penaltyAmount = java.math.BigDecimal.ZERO;
                 }
-                if (depositTotal == null) depositTotal = java.math.BigDecimal.ZERO;
+            } catch (Exception ignored) { penaltyAmount = java.math.BigDecimal.ZERO; }
 
-                // Refund remainder to cosplayer (total - deposit)
-                java.math.BigDecimal refund = total.subtract(depositTotal);
-                if (refund == null) refund = java.math.BigDecimal.ZERO;
-                if (refund.compareTo(java.math.BigDecimal.ZERO) > 0) {
-                    try {
-                        com.cosmate.entity.User cosUser = com.cosmate.entity.User.builder().id(order.getCosplayerId()).build();
-                        com.cosmate.entity.Wallet cosWallet = walletService.createForUser(cosUser);
-                        walletService.credit(cosWallet, refund, "Refund for cancelled order (after deposit)", "ORDER_REFUND:" + order.getId(), null, order);
-                    } catch (Exception ignored) {}
-                }
+            if (penaltyAmount.compareTo(total) > 0) penaltyAmount = total;
+            java.math.BigDecimal refund = total.subtract(penaltyAmount);
 
-                // Transfer deposit to provider
-                if (depositTotal.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            // Credit penalty to provider (if any)
+            if (penaltyAmount.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                try {
                     Integer providerUserId = null;
-                    try {
-                        com.cosmate.entity.Provider provEntity = null;
-                        try { provEntity = providerService.getById(order.getProviderId()); } catch (Exception ignored2) { provEntity = null; }
-                        if (provEntity != null && provEntity.getUserId() != null) {
-                            providerUserId = provEntity.getUserId();
-                        }
-                    } catch (Exception ignored) {}
-
+                    try { com.cosmate.entity.Provider provEntity = providerService.getById(order.getProviderId()); if (provEntity != null) providerUserId = provEntity.getUserId(); } catch (Exception ignored) { providerUserId = null; }
                     if (providerUserId != null) {
-                        try {
-                            java.util.Optional<com.cosmate.entity.Wallet> woptProv = walletService.getByUserId(providerUserId);
-                            if (woptProv.isPresent()) {
-                                com.cosmate.entity.Wallet provWallet = woptProv.get();
-                                walletService.credit(provWallet, depositTotal, "Deposit transfer on cancelled PREPARING order", "DEPOSIT_PAYOUT:" + order.getId(), null, order);
-                            } else {
-                                java.util.Optional<com.cosmate.entity.User> providerUserOpt = userRepository.findById(providerUserId);
-                                if (providerUserOpt.isPresent()) {
-                                    walletService.createForUser(providerUserOpt.get());
-                                    java.util.Optional<com.cosmate.entity.Wallet> wopt2 = walletService.getByUserId(providerUserId);
-                                    if (wopt2.isPresent()) {
-                                        com.cosmate.entity.Wallet provWallet = wopt2.get();
-                                        walletService.credit(provWallet, depositTotal, "Deposit transfer on cancelled PREPARING order", "DEPOSIT_PAYOUT:" + order.getId(), null, order);
-                                    }
-                                }
-                            }
-                        } catch (Exception ignored) {}
+                        java.util.Optional<com.cosmate.entity.Wallet> woptProv = walletService.getByUserId(providerUserId);
+                        com.cosmate.entity.Wallet provWallet;
+                        if (woptProv.isPresent()) provWallet = woptProv.get();
+                        else {
+                            java.util.Optional<com.cosmate.entity.User> providerUserOpt = userRepository.findById(providerUserId);
+                            if (providerUserOpt.isPresent()) provWallet = walletService.createForUser(providerUserOpt.get());
+                            else provWallet = null;
+                        }
+                        if (provWallet != null) {
+                            walletService.credit(provWallet, penaltyAmount, "Cancellation penalty for order", "CANCEL_PENALTY:" + order.getId(), null, order);
+                        }
                     }
-                }
-            } catch (Exception ignored) {}
+                } catch (Exception ignored) {}
+            }
+
+            // Refund remainder to cosplayer (if any)
+            if (refund.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                try {
+                    com.cosmate.entity.User cosUser = com.cosmate.entity.User.builder().id(order.getCosplayerId()).build();
+                    com.cosmate.entity.Wallet cosWallet = walletService.createForUser(cosUser);
+                    walletService.credit(cosWallet, refund, "Refund for cancelled order", "ORDER_REFUND:" + order.getId(), null, order);
+                } catch (Exception ignored) {}
+            }
         }
 
         order.setStatus("CANCELLED");

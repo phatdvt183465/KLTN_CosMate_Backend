@@ -77,6 +77,15 @@ public class AiTokenPlanServiceImpl implements AiTokenPlanService {
     }
 
     @Override
+    @Transactional
+    public void activate(Integer id) {
+        requireStaff();
+        AiTokenSubscriptionPlan e = repository.findById(id).orElseThrow(() -> new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION));
+        e.setIsActive(true);
+        repository.save(e);
+    }
+
+    @Override
     public List<AiTokenPlanResponse> getAll() {
         return repository.findByIsActiveTrue().stream().map(this::toResponse).collect(Collectors.toList());
     }

@@ -55,6 +55,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // public business api
                         .requestMatchers("/api/events/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/search/pose-history/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/costumes/**").permitAll()
                         .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/surcharges/**").permitAll()

@@ -1,6 +1,7 @@
 package com.cosmate.controller;
 
 import com.cosmate.dto.request.GoogleRegisterRequest;
+import com.cosmate.dto.request.QrApproveRequest;
 import com.cosmate.dto.request.LoginRequest;
 import com.cosmate.dto.request.RegisterRequest;
 import com.cosmate.dto.request.GoogleTokenRequest;
@@ -23,6 +24,12 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.time.LocalDateTime;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import com.cosmate.entity.Token;
+import com.cosmate.repository.TokenRepository;
+import java.util.ArrayList;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -34,6 +41,8 @@ public class AuthController {
     private final ProviderService providerService;
     private final ActivationService activationService;
     private final PasswordResetService passwordResetService;
+    private final TokenRepository tokenRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
     // Only accept JSON register requests (no avatar upload through this API)
     @PostMapping(value = "/register", consumes = { MediaType.APPLICATION_JSON_VALUE })
@@ -183,6 +192,92 @@ public class AuthController {
             api.setMessage(ex.getMessage());
             api.setResult(null);
             return ResponseEntity.badRequest().body(api);
+        }
+    }
+
+    // QR login: generate a sessionId (token) for the web client to display as QR
+    @GetMapping("/qr-generate")
+    public ResponseEntity<ApiResponse<Map<String, String>>> generateQrSession() {
+        String sessionId = UUID.randomUUID().toString();
+        Token token = Token.builder()
+                .token(sessionId)
+                .type("QR_LOGIN_SESSION")
+                .user(null)
+                .createdAt(LocalDateTime.now())
+                .expiresAt(LocalDateTime.now().plusMinutes(10))
+                .used(false)
+                .build();
+
+        tokenRepository.save(token);
+
+        ApiResponse<Map<String, String>> api = new ApiResponse<>();
+        api.setCode(0);
+        api.setMessage("OK");
+        api.setResult(Map.of("sessionId", sessionId));
+        return ResponseEntity.ok(api);
+    }
+
+    // Mobile approves: authenticated mobile user posts sessionId to claim it
+    @PostMapping("/qr-approve")
+    public ResponseEntity<ApiResponse<Map<String, String>>> approveQr(@Valid @RequestBody QrApproveRequest request) {
+        ApiResponse<Map<String, String>> api = new ApiResponse<>();
+
+        Integer currentUserId = getCurrentUserId();
+        if (currentUserId == null) {
+            api.setCode(1);
+            api.setMessage("Unauthenticated");
+            return ResponseEntity.status(401).body(api);
+        }
+
+        int updated = tokenRepository.approveToken(currentUserId.longValue(), request.getSessionId());
+        if (updated == 0) {
+            api.setCode(1);
+            api.setMessage("Invalid or expired session");
+            return ResponseEntity.badRequest().body(api);
+        }
+
+        // Build JWT for the user and notify web client via WebSocket
+        var user = userService.getById(currentUserId);
+        List<String> roles = user.getRole() == null ? List.of() : List.of(user.getRole().getRoleName());
+        Long userIdLong = user.getId() == null ? null : user.getId().longValue();
+        Long providerIdLong = null;
+        try {
+            if (user.getRole() != null) {
+                // reuse provider check logic if available
+                try {
+                    var prov = providerService.getByUserId(user.getId());
+                    if (prov != null && prov.getId() != null) providerIdLong = prov.getId().longValue();
+                } catch (Exception ignored) { }
+            }
+        } catch (Exception ignored) { }
+
+        String jwt = jwtUtils.generateToken(userIdLong, roles, providerIdLong);
+
+        // Send event to the room named by sessionId
+        var payload = Map.of("event", "qr_approved", "accessToken", jwt);
+        messagingTemplate.convertAndSend("/topic/qr/" + request.getSessionId(), payload);
+
+        api.setCode(0);
+        api.setMessage("OK");
+        api.setResult(Map.of("sent", "true"));
+        return ResponseEntity.ok(api);
+    }
+
+    private Integer getCurrentUserId() {
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getPrincipal() == null) return null;
+        Object principal = auth.getPrincipal();
+        try {
+            if (principal instanceof String) {
+                String s = (String) principal;
+                if (s.equalsIgnoreCase("anonymousUser")) return null;
+                return Integer.valueOf(s);
+            }
+            if (principal instanceof Integer) return (Integer) principal;
+            if (principal instanceof Long) return ((Long) principal).intValue();
+            return Integer.valueOf(principal.toString());
+        } catch (Exception e) {
+            return null;
         }
     }
 }

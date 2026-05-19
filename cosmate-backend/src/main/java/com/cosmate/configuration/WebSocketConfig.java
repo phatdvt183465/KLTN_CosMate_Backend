@@ -23,9 +23,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Autowired
     private JwtUtils jwtUtils;
 
-    @Autowired
-    private SimpMessagingTemplate messagingTemplate;
-
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws").setAllowedOriginPatterns("*").withSockJS();

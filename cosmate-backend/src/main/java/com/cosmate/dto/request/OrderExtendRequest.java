@@ -18,6 +18,6 @@ public class OrderExtendRequest {
     private String returnUrl;
 
     private Boolean payNow = false;
+    // whether the request originates from mobile client
+    private Boolean isMobile = false;
 }
-
-

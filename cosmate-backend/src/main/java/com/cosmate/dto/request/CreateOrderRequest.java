@@ -41,4 +41,6 @@ public class CreateOrderRequest {
 
     // For the single costume: the chosen rental option id (optional)
     private Integer selectedRentalOptionId;
+    // whether the client is a mobile client; default false
+    private Boolean isMobile = false;
 }

@@ -15,5 +15,9 @@ public class ReviewResponse {
     private String comment;
     private LocalDateTime createdAt;
     private List<ReviewUrlResponse> images;
+    // Provider reply fields
+    private String providerReply;
+    private LocalDateTime repliedAt;
+    private Integer repliedByProviderId;
 }
 

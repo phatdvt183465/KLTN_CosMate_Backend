@@ -34,6 +34,16 @@ public class Review {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @Nationalized
+    @Column(name = "provider_reply", columnDefinition = "NVARCHAR(1000)")
+    private String providerReply;
+
+    @Column(name = "replied_at")
+    private LocalDateTime repliedAt;
+
+    @Column(name = "replied_by_provider_id")
+    private Integer repliedByProviderId;
+
     @PrePersist
     public void prePersist() {
         if (createdAt == null) createdAt = LocalDateTime.now();

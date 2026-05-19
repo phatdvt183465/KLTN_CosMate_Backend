@@ -10,6 +10,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import com.cosmate.dto.request.ProviderReplyRequest;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 @RestController
 @RequestMapping("/api/reviews")
@@ -93,6 +96,56 @@ public class ReviewController {
             api.setCode(500);
             api.setMessage("Failed to fetch reviews: " + ex.getMessage());
             return ResponseEntity.status(500).body(api);
+        }
+    }
+
+    @PutMapping("/{id}/reply")
+    public ResponseEntity<ApiResponse<ReviewResponse>> replyToReview(
+            @PathVariable("id") Integer id,
+            @RequestBody ProviderReplyRequest request
+    ) {
+        ApiResponse<ReviewResponse> api = new ApiResponse<>();
+        try {
+            // Get provider id from security context. If not available, use dummy (e.g., 0)
+            Integer providerId = getCurrentUserId();
+            if (providerId == null) {
+                // For now we can set a dummy provider id or return unauthorized
+                api.setCode(401);
+                api.setMessage("Unauthenticated");
+                return ResponseEntity.status(401).body(api);
+            }
+
+            ReviewResponse resp = reviewService.replyToReview(id, providerId, request);
+            api.setCode(0);
+            api.setMessage("OK");
+            api.setResult(resp);
+            return ResponseEntity.ok(api);
+        } catch (IllegalArgumentException ex) {
+            api.setCode(400);
+            api.setMessage(ex.getMessage());
+            return ResponseEntity.badRequest().body(api);
+        } catch (Exception ex) {
+            api.setCode(500);
+            api.setMessage("Failed to reply to review: " + ex.getMessage());
+            return ResponseEntity.status(500).body(api);
+        }
+    }
+
+    private Integer getCurrentUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getPrincipal() == null) return null;
+        Object principal = auth.getPrincipal();
+        try {
+            if (principal instanceof String) {
+                String s = (String) principal;
+                if (s.equalsIgnoreCase("anonymousUser")) return null;
+                return Integer.valueOf(s);
+            }
+            if (principal instanceof Integer) return (Integer) principal;
+            if (principal instanceof Long) return ((Long) principal).intValue();
+            return Integer.valueOf(principal.toString());
+        } catch (Exception e) {
+            return null;
         }
     }
 }

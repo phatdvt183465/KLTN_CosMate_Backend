@@ -46,6 +46,24 @@ public class AiTokenPlanController {
         return ResponseEntity.ok(api);
     }
 
+    @PostMapping("/{id}/activate")
+    public ResponseEntity<ApiResponse<Void>> activate(@PathVariable Integer id) {
+        service.activate(id);
+        ApiResponse<Void> api = new ApiResponse<>();
+        api.setCode(0);
+        api.setMessage("OK");
+        return ResponseEntity.ok(api);
+    }
+
+    @PostMapping("/{id}/deactivate")
+    public ResponseEntity<ApiResponse<Void>> deactivatePost(@PathVariable Integer id) {
+        service.deactivate(id);
+        ApiResponse<Void> api = new ApiResponse<>();
+        api.setCode(0);
+        api.setMessage("OK");
+        return ResponseEntity.ok(api);
+    }
+
     @GetMapping
     public ResponseEntity<ApiResponse<List<AiTokenPlanResponse>>> getAll() {
         List<AiTokenPlanResponse> list = service.getAll();

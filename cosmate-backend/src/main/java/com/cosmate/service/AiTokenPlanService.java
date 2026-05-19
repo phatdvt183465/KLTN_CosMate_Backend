@@ -9,6 +9,7 @@ public interface AiTokenPlanService {
     AiTokenPlanResponse create(AiTokenPlanRequest req);
     AiTokenPlanResponse update(Integer id, AiTokenPlanRequest req);
     void deactivate(Integer id);
+    void activate(Integer id);
     List<AiTokenPlanResponse> getAll();
     AiTokenPlanResponse getById(Integer id);
 }

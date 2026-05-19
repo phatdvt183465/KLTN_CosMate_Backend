@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import com.cosmate.dto.response.ProviderCancellationPolicyResponse;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +27,7 @@ public class ProviderServiceImpl implements ProviderService {
     private final ProviderRepository providerRepository;
     private final UserRepository userRepository;
     private final FirebaseStorageService firebaseStorageService;
+    private final com.cosmate.service.CancellationPolicyService cancellationPolicyService;
 
     @Override
     @Transactional
@@ -47,6 +49,14 @@ public class ProviderServiceImpl implements ProviderService {
                 .verified(false)
                 .build();
         Provider saved = providerRepository.save(p);
+
+        // create default cancellation policies for new provider
+        try {
+            cancellationPolicyService.createDefaultsForProvider(saved.getId());
+        } catch (Exception e) {
+            // log and continue; do not fail provider creation if policy creation fails
+            org.slf4j.LoggerFactory.getLogger(ProviderServiceImpl.class).error("Failed to create default cancellation policies for provider {}: {}", saved.getId(), e.getMessage(), e);
+        }
 
         return saved;
     }
@@ -184,7 +194,7 @@ public class ProviderServiceImpl implements ProviderService {
     }
 
     private ProviderResponse mapToResponse(Provider p) {
-        return ProviderResponse.builder()
+        ProviderResponse.ProviderResponseBuilder b = ProviderResponse.builder()
                 .id(p.getId())
                 .userId(p.getUserId())
                 .shopName(p.getShopName())
@@ -199,8 +209,26 @@ public class ProviderServiceImpl implements ProviderService {
                 .verified(p.getVerified())
                 .completedOrders(p.getCompletedOrders())
                 .totalRating(p.getTotalRating())
-                .totalReviews(p.getTotalReviews())
-                .build();
+                .totalReviews(p.getTotalReviews());
+
+        try {
+            var policies = cancellationPolicyService.listByProvider(p.getId());
+            var policyDtos = policies.stream().map(pol -> ProviderCancellationPolicyResponse.builder()
+                    .id(pol.getId())
+                    .providerId(pol.getProvider() == null ? null : pol.getProvider().getId())
+                    .minHoursBefore(pol.getMinHoursBefore())
+                    .maxHoursBefore(pol.getMaxHoursBefore())
+                    .penaltyType(pol.getPenaltyType())
+                    .penaltyValue(pol.getPenaltyValue())
+                    .description(pol.getDescription())
+                    .build()
+            ).toList();
+            b.cancellationPolicies(policyDtos);
+        } catch (Exception ignored) {
+            // Ignore - return provider without policies if any error occurs
+        }
+
+        return b.build();
     }
 
     private ProviderPublicResponse mapToPublicResponse(Provider p) {

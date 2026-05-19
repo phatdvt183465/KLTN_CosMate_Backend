@@ -42,6 +42,12 @@ public class TokenPurchaseServiceImpl implements TokenPurchaseService {
     @Override
     @Transactional
     public String initiatePurchase(Integer userId, Integer subscriptionPlanId, String paymentMethod, String returnUrl) throws Exception {
+        return initiatePurchase(userId, subscriptionPlanId, paymentMethod, returnUrl, false);
+    }
+
+    @Override
+    @Transactional
+    public String initiatePurchase(Integer userId, Integer subscriptionPlanId, String paymentMethod, String returnUrl, boolean isMobile) throws Exception {
         AiTokenSubscriptionPlan plan = planRepository.findById(subscriptionPlanId).orElseThrow(() -> new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION));
 
         // Prepare wallet object
@@ -96,10 +102,10 @@ public class TokenPurchaseServiceImpl implements TokenPurchaseService {
 
         if (paymentMethod == null || paymentMethod.equalsIgnoreCase("vnpay")) {
             String r = (returnUrl == null || returnUrl.isEmpty()) ? "/api/payment/api/vnpay/return" : returnUrl;
-            return vnPayService.createPaymentUrlForTransaction(userId, plan.getPrice(), r, t.getId());
+            return vnPayService.createPaymentUrlForTransaction(userId, plan.getPrice(), r, t.getId(), isMobile);
         } else if (paymentMethod.equalsIgnoreCase("momo")) {
             String r = (returnUrl == null || returnUrl.isEmpty()) ? "/api/payment/api/momo/return" : returnUrl;
-            return momoService.createPaymentUrlForTransaction(userId, plan.getPrice(), r, t.getId());
+            return momoService.createPaymentUrlForTransaction(userId, plan.getPrice(), r, t.getId(), isMobile);
         } else {
             throw new AppException(ErrorCode.INVALID_KEY);
         }
@@ -192,5 +198,4 @@ public class TokenPurchaseServiceImpl implements TokenPurchaseService {
         }
     }
 }
-
 

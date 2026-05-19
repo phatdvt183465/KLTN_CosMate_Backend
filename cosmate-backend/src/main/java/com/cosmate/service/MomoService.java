@@ -7,4 +7,7 @@ public interface MomoService {
     String createPaymentUrl(Integer userId, BigDecimal amount, String returnUrl) throws Exception;
     String createPaymentUrlForTransaction(Integer userId, BigDecimal amount, String returnUrl, Integer transactionId) throws Exception;
     Map<String, String> handleNotification(Map<String, String> params) throws Exception;
+    // overloads with isMobile flag
+    String createPaymentUrl(Integer userId, BigDecimal amount, String returnUrl, boolean isMobile) throws Exception;
+    String createPaymentUrlForTransaction(Integer userId, BigDecimal amount, String returnUrl, Integer transactionId, boolean isMobile) throws Exception;
 }

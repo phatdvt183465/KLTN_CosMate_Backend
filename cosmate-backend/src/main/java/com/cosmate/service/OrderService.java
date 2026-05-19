@@ -10,7 +10,7 @@ import java.util.List;
 public interface OrderService {
     OrderResponse createOrder(Integer cosplayerId, CreateOrderRequest request) throws Exception;
     // Pay an existing order if its status is UNPAID. Returns OrderResponse with paymentUrl if external flow created.
-    OrderResponse payOrder(Integer cosplayerId, Integer orderId, String paymentMethod, String returnUrl) throws Exception;
+    OrderResponse payOrder(Integer cosplayerId, Integer orderId, String paymentMethod, String returnUrl, boolean isMobile) throws Exception;
 
     // Service-order specific operations (previously implemented in controllers)
     OrderResponse providerCreateBooking(Integer providerUserId, CreateServiceOrderRequest req) throws Exception;

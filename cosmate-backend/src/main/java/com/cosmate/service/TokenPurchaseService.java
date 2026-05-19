@@ -7,6 +7,8 @@ import java.util.List;
 public interface TokenPurchaseService {
     // Initiate a purchase; returns paymentUrl for offsite providers or null if completed immediately (wallet)
     String initiatePurchase(Integer userId, Integer subscriptionPlanId, String paymentMethod, String returnUrl) throws Exception;
+    // New: pass isMobile flag from client (default false)
+    String initiatePurchase(Integer userId, Integer subscriptionPlanId, String paymentMethod, String returnUrl, boolean isMobile) throws Exception;
 
     // Finalize purchase when transaction completes
     void finalizePurchase(Integer transactionId);
@@ -15,4 +17,3 @@ public interface TokenPurchaseService {
     List<TokenPurchaseResponse> getAll();
     List<TokenPurchaseResponse> getByUser(Integer userId);
 }
-

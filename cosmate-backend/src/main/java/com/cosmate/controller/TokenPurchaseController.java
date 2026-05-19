@@ -22,6 +22,7 @@ public class TokenPurchaseController {
     public ResponseEntity<ApiResponse<String>> initiate(@RequestParam Integer planId,
                                                         @RequestParam String paymentMethod,
                                                         @RequestParam(required = false) String returnUrl,
+                                                        @RequestParam(required = false, defaultValue = "false") boolean isMobile,
                                                         Principal principal) {
         ApiResponse<String> api = new ApiResponse<>();
         try {
@@ -30,7 +31,7 @@ public class TokenPurchaseController {
                 try { userId = Integer.valueOf(principal.getName()); } catch (Exception ignored) {}
             }
             if (userId == null) { api.setCode(1015); api.setMessage("Chưa xác thực - Vui lòng đăng nhập"); return ResponseEntity.status(401).body(api); }
-            String url = service.initiatePurchase(userId, planId, paymentMethod, returnUrl);
+            String url = service.initiatePurchase(userId, planId, paymentMethod, returnUrl, isMobile);
             api.setCode(0); api.setMessage("OK"); api.setResult(url);
             return ResponseEntity.ok(api);
         } catch (Exception ex) {

@@ -170,6 +170,27 @@ public class ReviewServiceImpl implements ReviewService {
                 resp.setAvatarUrl(u.getAvatarUrl());
             });
         }
+        // populate provider reply fields
+        resp.setProviderReply(r.getProviderReply());
+        resp.setRepliedAt(r.getRepliedAt());
+        resp.setRepliedByProviderId(r.getRepliedByProviderId());
         return resp;
+    }
+
+    @Override
+    public ReviewResponse replyToReview(Integer reviewId, Integer providerId, com.cosmate.dto.request.ProviderReplyRequest request) {
+        if (reviewId == null) throw new IllegalArgumentException("reviewId is required");
+        if (providerId == null) throw new IllegalArgumentException("providerId is required");
+        if (request == null || request.getReplyContent() == null) throw new IllegalArgumentException("reply content is required");
+
+        Review review = reviewRepository.findById(reviewId).orElseThrow(() -> new IllegalArgumentException("Review not found"));
+
+        review.setProviderReply(request.getReplyContent());
+        review.setRepliedAt(java.time.LocalDateTime.now());
+        review.setRepliedByProviderId(providerId);
+
+        review = reviewRepository.save(review);
+
+        return mapToDto(review);
     }
 }

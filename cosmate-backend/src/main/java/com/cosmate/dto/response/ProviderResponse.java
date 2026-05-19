@@ -5,6 +5,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import java.math.BigDecimal;
+import java.util.List;
+import com.cosmate.dto.response.ProviderCancellationPolicyResponse;
 
 import com.cosmate.base.crud.dto.CrudDto;
 
@@ -27,4 +29,5 @@ public class ProviderResponse implements CrudDto<Integer> {
     private Integer completedOrders;
     private BigDecimal totalRating;
     private Integer totalReviews;
+    private List<ProviderCancellationPolicyResponse> cancellationPolicies;
 }

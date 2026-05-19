@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.messaging.simp.stomp.StompCommand;
@@ -21,6 +22,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Autowired
     private JwtUtils jwtUtils;
+
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
@@ -43,13 +47,23 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
                 if (StompCommand.CONNECT.equals(accessor.getCommand())) {
                     String authHeader = accessor.getFirstNativeHeader("Authorization");
-                    if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                        String token = authHeader.substring(7).trim();
 
-                        try {
-                            jwtUtils.parse(token);
-                        } catch (Exception e) {
-                            throw new IllegalArgumentException("Token WebSocket không hợp lệ hoặc đã hết hạn!");
+                    // Frontend gửi token=sessionId, có thể nó nhét chữ Bearer hoặc không.
+                    // Ta lấy chuỗi đằng sau Bearer (nếu có), hoặc lấy luôn cả chuỗi.
+                    if (authHeader != null && !authHeader.isBlank()) {
+                        String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7).trim() : authHeader.trim();
+
+                        // JWT chuẩn luôn có 2 dấu chấm (header.payload.signature)
+                        if (token.contains(".")) {
+                            try {
+                                jwtUtils.parse(token); // Nếu là JWT thì bắt buộc phải hợp lệ
+                            } catch (Exception e) {
+                                throw new IllegalArgumentException("Token WebSocket không hợp lệ hoặc đã hết hạn!");
+                            }
+                        } else {
+                            // Nếu không có dấu chấm, đây chính là sessionId của mã QR.
+                            // Cho phép đi tiếp mà không ném lỗi!
+                            System.out.println("WebSocket kết nối bằng Session ID (QR): " + token);
                         }
                     } else {
                         throw new IllegalArgumentException("Không tìm thấy Token xác thực cho WebSocket!");

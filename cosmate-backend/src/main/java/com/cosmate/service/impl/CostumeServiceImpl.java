@@ -78,7 +78,7 @@ public class CostumeServiceImpl implements CostumeService {
         costume.setStatus("PENDING");
 
         // Xử lý các thành phần liên quan
-        handleImages(costume, request.getImageFiles());
+        handleImages(costume, request);
         handleSurcharges(costume, request.getSurcharges());
         handleAccessories(costume, request.getAccessories());
         handleRentalOptions(costume, request.getRentalOptions());
@@ -93,7 +93,11 @@ public class CostumeServiceImpl implements CostumeService {
             savedCostume = costumeRepository.save(savedCostume);
         }
 
-        aiService.processNewCostumeAsync(savedCostume.getId(), request.getImageFiles());
+        List<MultipartFile> imageFilesForAi = new ArrayList<>();
+        if (request.getImageFiles() != null) imageFilesForAi.addAll(request.getImageFiles().stream().filter(f -> f != null && !f.isEmpty() && f.getContentType() != null && f.getContentType().startsWith("image/")).collect(Collectors.toList()));
+        if (request.getVideoFiles() != null) imageFilesForAi.addAll(request.getVideoFiles().stream().filter(f -> f != null && !f.isEmpty() && f.getContentType() != null && f.getContentType().startsWith("image/")).collect(Collectors.toList()));
+        
+        aiService.processNewCostumeAsync(savedCostume.getId(), imageFilesForAi);
 
         return mapToResponse(savedCostume);
     }
@@ -122,8 +126,8 @@ public class CostumeServiceImpl implements CostumeService {
         }
 
         // Kiểm tra xem có up file ảnh mới nào không?
-        boolean isImageChanged = request.getImageFiles() != null &&
-                request.getImageFiles().stream().anyMatch(f -> f != null && !f.isEmpty());
+        boolean isImageChanged = (request.getImageFiles() != null && request.getImageFiles().stream().anyMatch(f -> f != null && !f.isEmpty())) ||
+                                 (request.getVideoFiles() != null && request.getVideoFiles().stream().anyMatch(f -> f != null && !f.isEmpty()));
 
         // 1. Không cho phép đổi quyền sở hữu costume qua API update
         if (request.getProviderId() != null && !request.getProviderId().equals(costume.getProviderId())) {
@@ -134,11 +138,10 @@ public class CostumeServiceImpl implements CostumeService {
         updateBaseInfo(costume, request);
 
         // 3. Xử lý Ảnh (Chỉ thay thế nếu có ít nhất 1 file mới hợp lệ)
-        boolean hasNewImage = request.getImageFiles() != null &&
-                request.getImageFiles().stream().anyMatch(f -> f != null && !f.isEmpty());
-        if (hasNewImage) {
+        if (isImageChanged) {
+            validateMediaLimits(request);
             costume.getImages().clear();
-            handleImages(costume, request.getImageFiles());
+            handleImages(costume, request);
         }
 
         // 4. Xử lý Phụ phí
@@ -307,22 +310,32 @@ public class CostumeServiceImpl implements CostumeService {
      * 2. Tái sử dụng Vector (1 Request/Bộ đồ).
      * 3. Xử lý bất đồng bộ đa luồng (Multi-threading) khi upload Firebase.
      */
-    private void handleImages(Costume costume, List<MultipartFile> files) {
-        if (files == null || files.isEmpty()) return;
+    private void handleImages(Costume costume, CostumeRequest request) {
+        List<MultipartFile> files = new ArrayList<>();
+        if (request.getImageFiles() != null) files.addAll(request.getImageFiles());
+        if (request.getVideoFiles() != null) files.addAll(request.getVideoFiles());
 
-        // Giữ lại kiểm duyệt nội dung ảnh
-        aiService.validateMultipleImageContents(files);
+        if (files.isEmpty()) return;
+
+        // Giữ lại kiểm duyệt nội dung ảnh (chỉ kiểm duyệt hình ảnh)
+        List<MultipartFile> imagesToValidate = files.stream()
+                .filter(f -> f != null && !f.isEmpty() && f.getContentType() != null && f.getContentType().startsWith("image/"))
+                .collect(Collectors.toList());
+        if (!imagesToValidate.isEmpty()) {
+            aiService.validateMultipleImageContents(imagesToValidate);
+        }
 
         // Chỉ upload ảnh, không tạo vector lúc create/update để tránh timeout
         ExecutorService executor = Executors.newFixedThreadPool(Math.min(files.size(), 10));
         List<CompletableFuture<CostumeImage>> futures = new ArrayList<>();
-        int index = 0;
+        int imageIndex = 0;
 
         for (MultipartFile file : files) {
             if (file == null || file.isEmpty()) continue;
 
-            final boolean isMainImage = (index == 0);
-            index++;
+            final boolean isVideo = file.getContentType() != null && file.getContentType().startsWith("video/");
+            final boolean isMainImage = !isVideo && (imageIndex == 0);
+            if (!isVideo) imageIndex++;
 
             CompletableFuture<CostumeImage> future = CompletableFuture.supplyAsync(() -> {
                 try {
@@ -336,6 +349,7 @@ public class CostumeServiceImpl implements CostumeService {
                     CostumeImage img = new CostumeImage();
                     img.setImageUrl(imageUrl);
                     img.setType(isMainImage ? "MAIN" : "DETAIL");
+                    img.setMediaType(isVideo ? "VIDEO" : "IMAGE");
                     img.setCostume(costume);
                     return img;
                 } catch (Exception e) {
@@ -427,6 +441,13 @@ public class CostumeServiceImpl implements CostumeService {
                 .providerId(costume.getProviderId())
                 .completedRentCount(costume.getCompletedRentCount())
                 .imageUrls(costume.getImages().stream().map(CostumeImage::getImageUrl).collect(Collectors.toList()))
+                .medias(costume.getImages().stream()
+                        .map(i -> CostumeResponse.MediaResponse.builder()
+                                .url(i.getImageUrl())
+                                .type(i.getType())
+                                .mediaType(i.getMediaType() != null ? i.getMediaType() : "IMAGE")
+                                .build())
+                        .collect(Collectors.toList()))
                 .surcharges(costume.getSurcharges().stream()
                         .map(s -> CostumeResponse.SurchargeResponse.builder()
                                 .id(s.getId()).name(s.getName()).description(s.getDescription()).price(s.getPrice()).build())
@@ -460,8 +481,10 @@ public class CostumeServiceImpl implements CostumeService {
         if (request.getPricePerDay() == null || request.getPricePerDay().compareTo(BigDecimal.ZERO) <= 0) {
             throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
         }
-        boolean hasImage = request.getImageFiles() != null &&
-                request.getImageFiles().stream().anyMatch(f -> f != null && !f.isEmpty());
+        validateMediaLimits(request);
+
+        boolean hasImage = (request.getImageFiles() != null && request.getImageFiles().stream().anyMatch(f -> f != null && !f.isEmpty())) ||
+                           (request.getVideoFiles() != null && request.getVideoFiles().stream().anyMatch(f -> f != null && !f.isEmpty()));
         if (!hasImage) throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
         if (request.getRentDiscount() != null) {
             if (request.getRentDiscount() < 0 || request.getRentDiscount() > 100)
@@ -531,5 +554,39 @@ public class CostumeServiceImpl implements CostumeService {
         return costumes.stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+    }
+
+    private void validateMediaLimits(CostumeRequest request) {
+        int imageCount = 0;
+        int videoCount = 0;
+
+        if (request.getImageFiles() != null) {
+            for (MultipartFile file : request.getImageFiles()) {
+                if (file != null && !file.isEmpty()) {
+                    String contentType = file.getContentType();
+                    if (contentType != null && contentType.startsWith("video/")) {
+                        videoCount++;
+                    } else {
+                        imageCount++;
+                    }
+                }
+            }
+        }
+        
+        if (request.getVideoFiles() != null) {
+            for (MultipartFile file : request.getVideoFiles()) {
+                if (file != null && !file.isEmpty()) {
+                    String contentType = file.getContentType();
+                    if (contentType != null && contentType.startsWith("image/")) {
+                        imageCount++;
+                    } else {
+                        videoCount++;
+                    }
+                }
+            }
+        }
+
+        if (imageCount > 5) throw new RuntimeException("Chỉ được phép tải lên tối đa 5 hình ảnh.");
+        if (videoCount > 1) throw new RuntimeException("Chỉ được phép tải lên tối đa 1 video.");
     }
 }

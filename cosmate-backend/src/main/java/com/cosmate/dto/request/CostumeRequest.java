@@ -43,6 +43,8 @@ public class CostumeRequest {
     private Integer providerId;
 
     private List<MultipartFile> imageFiles;
+    
+    private List<MultipartFile> videoFiles;
 
     @Size(max = 10000)
     private String surcharges;
@@ -53,6 +55,7 @@ public class CostumeRequest {
     @Size(max = 10000)
     private String rentalOptions;
 
+    @Size(max = 3, message = "Chỉ được chọn tối đa 3 nhân vật cho mỗi trang phục")
     private List<Integer> characterIds;
 
     public void setCharacterIds(List<Integer> characterIds) {

@@ -36,7 +36,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 || path.startsWith("/webjars")
                 || path.startsWith("/configuration")
                 || path.equals("/swagger-ui.html")
-                || path.startsWith("/api/auth")
+                // NOTE: do NOT skip the JWT filter for all /api/auth paths because
+                // some auth endpoints (e.g. /api/auth/qr-approve) must be authenticated.
+                // Keep other public prefixes here.
                 || path.startsWith("/api/public")
                 || path.startsWith("/api/events")
                 || path.startsWith("/api/vnpay/return")
@@ -47,7 +49,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
+        // Log incoming request method and URI for diagnosis
+        logger.debug("Incoming request {} {}", request.getMethod(), request.getRequestURI());
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
+        if (header != null) {
+            String masked = header.length() > 30 ? header.substring(0, 30) + "..." : header;
+            logger.debug("Authorization header present (masked)='{}'", masked);
+        }
 
         if (StringUtils.hasText(header) && header.startsWith("Bearer ")) {
             String token = header.substring(7).trim();
@@ -72,7 +80,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 List<SimpleGrantedAuthority> authorities = (roles != null)
                         ? roles.stream().map(r -> new SimpleGrantedAuthority("ROLE_" + r)).toList()
                         : Collections.emptyList();
-                var auth = new UsernamePasswordAuthenticationToken(userId, null, authorities);
+                // Prefer setting the principal as Integer when subject is numeric to simplify
+                // downstream code that expects an integer user id.
+                Object principal = userId;
+                try {
+                    principal = Integer.valueOf(userId);
+                } catch (Exception ignored) {
+                    // keep principal as string if not numeric
+                }
+                var auth = new UsernamePasswordAuthenticationToken(principal, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(auth);
             } catch (Exception e) {
                 logger.debug("Invalid/expired JWT: {}", e.getMessage());

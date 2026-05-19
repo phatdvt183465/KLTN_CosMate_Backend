@@ -584,12 +584,22 @@ public class AIServiceImpl implements AIService {
         PoseScore poseScore = poseScoreRepository.findById(request.getPoseScoreId())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy PoseScore tương ứng!"));
 
+        boolean alreadySubmitted = poseFeedbackRepository.existsByUser_IdAndPoseScore_Id(userId, poseScore.getId());
+        if (alreadySubmitted) {
+            throw new com.cosmate.exception.AppException("Bạn đã gửi phản hồi cho lượt chấm điểm này rồi!");
+        }
+
         PoseFeedback feedback = PoseFeedback.builder()
                 .user(user)
                 .poseScore(poseScore)
                 .feedbackText(request.getFeedbackText())
                 .build();
-        poseFeedbackRepository.save(feedback);
+
+        try {
+            poseFeedbackRepository.save(feedback);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            throw new com.cosmate.exception.AppException("Bạn đã gửi phản hồi cho lượt chấm điểm này rồi!");
+        }
     }
 
     // --- Các hàm tiện ích (Utility Methods) ---

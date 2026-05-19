@@ -344,16 +344,16 @@ public class CostumeServiceImpl implements CostumeService {
                     String folderName = costume.getId() != null ? String.valueOf(costume.getId()) : "new_" + System.currentTimeMillis();
                     String path = String.format("costumes/%s/%d_%s", folderName, System.currentTimeMillis(), safeName);
 
-                    String imageUrl = firebaseStorageService.uploadFile(file, path);
+                    String mediaUrl = firebaseStorageService.uploadFile(file, path);
 
-                    CostumeImage img = new CostumeImage();
-                    img.setImageUrl(imageUrl);
-                    img.setType(isMainImage ? "MAIN" : "DETAIL");
-                    img.setMediaType(isVideo ? "VIDEO" : "IMAGE");
-                    img.setCostume(costume);
-                    return img;
+                    CostumeImage media = new CostumeImage();
+                    media.setImageUrl(mediaUrl);
+                    media.setType(isMainImage ? "MAIN" : "DETAIL");
+                    media.setMediaType(isVideo ? "VIDEO" : "IMAGE");
+                    media.setCostume(costume);
+                    return media;
                 } catch (Exception e) {
-                    throw new RuntimeException("Lỗi upload ảnh lên Cloud: " + e.getMessage(), e);
+                    throw new RuntimeException("Lỗi upload media lên Cloud: " + e.getMessage(), e);
                 }
             }, executor);
 
@@ -366,7 +366,7 @@ public class CostumeServiceImpl implements CostumeService {
                 costume.getImages().add(future.get());
             }
         } catch (Exception e) {
-            throw new RuntimeException("Tiến trình upload ảnh thất bại: " + e.getCause().getMessage(), e);
+            throw new RuntimeException("Tiến trình upload media thất bại: " + e.getCause().getMessage(), e);
         } finally {
             executor.shutdown();
         }
@@ -559,7 +559,6 @@ public class CostumeServiceImpl implements CostumeService {
     private void validateMediaLimits(CostumeRequest request) {
         int imageCount = 0;
         int videoCount = 0;
-
         if (request.getImageFiles() != null) {
             for (MultipartFile file : request.getImageFiles()) {
                 if (file != null && !file.isEmpty()) {

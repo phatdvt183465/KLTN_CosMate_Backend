@@ -4,9 +4,8 @@ import com.cosmate.dto.response.ApiResponse;
 import com.cosmate.entity.Character;
 import com.cosmate.repository.CharacterRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -22,6 +21,16 @@ public class CharacterController {
         return ApiResponse.<List<Character>>builder()
                 .result(characterRepository.findAll())
                 .message("Lấy danh sách nhân vật thành công!")
+                .build();
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<Character> createCharacter(@RequestBody Character character) {
+        character.setId(null);
+        return ApiResponse.<Character>builder()
+                .result(characterRepository.save(character))
+                .message("Tạo nhân vật thành công!")
                 .build();
     }
 }

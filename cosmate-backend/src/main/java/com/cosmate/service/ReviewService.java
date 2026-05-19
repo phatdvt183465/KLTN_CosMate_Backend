@@ -1,6 +1,7 @@
 package com.cosmate.service;
 
 import com.cosmate.dto.request.CreateReviewRequest;
+import com.cosmate.dto.request.ProviderReplyRequest;
 import com.cosmate.dto.response.ReviewResponse;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -14,4 +15,7 @@ public interface ReviewService {
     List<ReviewResponse> getByProviderId(Integer providerId);
     
     List<ReviewResponse> getByCostumeId(Integer costumeId);
+
+    // Provider replies to a review
+    ReviewResponse replyToReview(Integer reviewId, Integer providerId, ProviderReplyRequest request);
 }

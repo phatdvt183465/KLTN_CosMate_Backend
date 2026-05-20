@@ -691,6 +691,35 @@ public class OrderServiceImpl implements OrderService {
         if ("PAID".equals(status) || "WAITING_SERVICE_DATE".equals(status) || "PREPARING".equals(status)) {
             // Apply provider-defined cancellation policies to compute penalty and refunds
             java.math.BigDecimal total = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
+            // Determine total deposit amount for this order. Prefer summing per-order-detail deposits
+            java.math.BigDecimal depositTotal = java.math.BigDecimal.ZERO;
+            try {
+                java.util.List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
+                if (details != null && !details.isEmpty()) {
+                    for (OrderDetail d : details) {
+                        try {
+                            java.math.BigDecimal dep = d.getDepositAmount() == null ? java.math.BigDecimal.ZERO : d.getDepositAmount();
+                            depositTotal = depositTotal.add(dep);
+                        } catch (Exception ignored) {}
+                    }
+                } else {
+                    // fallback: check service booking deposits (for service orders)
+                    try {
+                        java.util.List<OrderServiceBooking> bookings = orderServiceBookingRepository.findByOrderId(order.getId());
+                        if (bookings != null && !bookings.isEmpty()) {
+                            for (OrderServiceBooking b : bookings) {
+                                try {
+                                    java.math.BigDecimal dep = b.getDepositSlotAmount() == null ? java.math.BigDecimal.ZERO : b.getDepositSlotAmount();
+                                    depositTotal = depositTotal.add(dep);
+                                } catch (Exception ignored) {}
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
+            } catch (Exception ignored) {}
+            if ((depositTotal == null || depositTotal.compareTo(java.math.BigDecimal.ZERO) == 0) && order.getTotalDepositAmount() != null) {
+                depositTotal = order.getTotalDepositAmount();
+            }
             java.time.LocalDateTime now = java.time.LocalDateTime.now();
             java.time.LocalDateTime start = order.getRentDate();
             long hoursBefore = 0L;
@@ -716,18 +745,21 @@ public class OrderServiceImpl implements OrderService {
 
             String penaltyType = matched == null ? "NONE" : matched.getPenaltyType();
             java.math.BigDecimal penaltyValue = matched == null || matched.getPenaltyValue() == null ? java.math.BigDecimal.ZERO : matched.getPenaltyValue();
+            // Penalty should only be applied on the deposit portion (depositTotal)
             java.math.BigDecimal penaltyAmount = java.math.BigDecimal.ZERO;
             try {
                 if ("PERCENT".equalsIgnoreCase(penaltyType)) {
-                    penaltyAmount = total.multiply(penaltyValue).divide(new java.math.BigDecimal(100), 2, RoundingMode.HALF_UP);
+                    penaltyAmount = (depositTotal == null ? java.math.BigDecimal.ZERO : depositTotal).multiply(penaltyValue).divide(new java.math.BigDecimal(100), 2, RoundingMode.HALF_UP);
                 } else if ("FIXED".equalsIgnoreCase(penaltyType)) {
-                    penaltyAmount = penaltyValue.min(total);
+                    penaltyAmount = penaltyValue.min(depositTotal == null ? java.math.BigDecimal.ZERO : depositTotal);
                 } else {
                     penaltyAmount = java.math.BigDecimal.ZERO;
                 }
             } catch (Exception ignored) { penaltyAmount = java.math.BigDecimal.ZERO; }
 
-            if (penaltyAmount.compareTo(total) > 0) penaltyAmount = total;
+            // Cap penalty to depositTotal
+            if (depositTotal == null) depositTotal = java.math.BigDecimal.ZERO;
+            if (penaltyAmount.compareTo(depositTotal) > 0) penaltyAmount = depositTotal;
             java.math.BigDecimal refund = total.subtract(penaltyAmount);
 
             // Credit penalty to provider (if any)

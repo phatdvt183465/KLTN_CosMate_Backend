@@ -62,6 +62,8 @@ public class UserServiceImpl implements UserService {
     @Value("${google.client-id:}")
     private String googleClientId;
 
+    @Value("${google.client-secret:}")
+    private String googleClientSecret;
     @Override
     @Transactional
     public User register(RegisterRequest request, boolean fromGoogle, String avatarUrl) {
@@ -360,7 +362,15 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public String loginWithGoogleToken(GoogleTokenRequest request) {
-        Map<String, Object> payload = verifyGoogleIdToken(request.getIdToken());
+        Map<String, Object> payload = null;
+        String idToken = request.getIdToken();
+        if (idToken == null || idToken.isBlank()) {
+            // Try authorization code exchange (OAuth2 Authorization Code flow)
+            if (request.getCode() != null && !request.getCode().isBlank()) {
+                idToken = exchangeCodeForIdToken(request.getCode(), request.getRedirectUri());
+            }
+        }
+        if (idToken != null && !idToken.isBlank()) payload = verifyGoogleIdToken(idToken);
         if (payload == null) throw new AppException(ErrorCode.INVALID_CREDENTIALS);
         String email = (String) payload.get("email");
         if (email == null) throw new AppException(ErrorCode.INVALID_CREDENTIALS);
@@ -390,7 +400,14 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public String registerWithGoogleToken(GoogleTokenRequest request) {
-        Map<String, Object> payload = verifyGoogleIdToken(request.getIdToken());
+        Map<String, Object> payload = null;
+        String idToken = request.getIdToken();
+        if (idToken == null || idToken.isBlank()) {
+            if (request.getCode() != null && !request.getCode().isBlank()) {
+                idToken = exchangeCodeForIdToken(request.getCode(), request.getRedirectUri());
+            }
+        }
+        if (idToken != null && !idToken.isBlank()) payload = verifyGoogleIdToken(idToken);
         if (payload == null) throw new AppException(ErrorCode.INVALID_CREDENTIALS);
         String email = (String) payload.get("email");
         String name = (String) payload.get("name");
@@ -406,6 +423,8 @@ public class UserServiceImpl implements UserService {
             user = userRepository.save(user);
         } else {
             RegisterRequest r = new RegisterRequest();
+            // set username to the email for Google registrations
+            r.setUsername(email);
             r.setEmail(email);
             r.setFullName(name);
             user = register(r, true, picture);
@@ -471,6 +490,68 @@ public class UserServiceImpl implements UserService {
             }
         } catch (Exception e) {
             logger.debug("verifyGoogleIdToken error: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Exchange authorization code for tokens at Google's token endpoint and return id_token (JWT).
+     */
+    private String exchangeCodeForIdToken(String code, String redirectUri) {
+        if (code == null || code.isBlank()) return null;
+        try {
+            String endpoint = "https://oauth2.googleapis.com/token";
+            URL url = new URL(endpoint);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
+
+            StringBuilder body = new StringBuilder();
+            body.append("grant_type=authorization_code");
+            body.append("&code=").append(java.net.URLEncoder.encode(code, java.nio.charset.StandardCharsets.UTF_8));
+            if (googleClientId != null && !googleClientId.isBlank()) {
+                body.append("&client_id=").append(java.net.URLEncoder.encode(googleClientId, java.nio.charset.StandardCharsets.UTF_8));
+            }
+            if (googleClientSecret != null && !googleClientSecret.isBlank()) {
+                body.append("&client_secret=").append(java.net.URLEncoder.encode(googleClientSecret, java.nio.charset.StandardCharsets.UTF_8));
+            }
+            if (redirectUri != null && !redirectUri.isBlank()) {
+                body.append("&redirect_uri=").append(java.net.URLEncoder.encode(redirectUri, java.nio.charset.StandardCharsets.UTF_8));
+            }
+
+            byte[] out = body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            conn.setFixedLengthStreamingMode(out.length);
+            conn.connect();
+            try (java.io.OutputStream os = conn.getOutputStream()) {
+                os.write(out);
+            }
+
+            int codeResp = conn.getResponseCode();
+            if (codeResp != 200) {
+                logger.debug("Google token exchange returned status {}", codeResp);
+                try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getErrorStream()))) {
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = br.readLine()) != null) sb.append(line);
+                    logger.debug("Google token exchange error body: {}", sb.toString());
+                } catch (Exception ignored) {}
+                return null;
+            }
+
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                Map<String, Object> resp = objectMapper.readValue(sb.toString(), Map.class);
+                Object idTok = resp.get("id_token");
+                if (idTok == null) return null;
+                return idTok.toString();
+            }
+        } catch (Exception e) {
+            logger.debug("exchangeCodeForIdToken error: {}", e.getMessage());
             return null;
         }
     }

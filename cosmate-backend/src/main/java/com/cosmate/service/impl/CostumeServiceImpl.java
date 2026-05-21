@@ -275,6 +275,7 @@ public class CostumeServiceImpl implements CostumeService {
         costume.setRentPurpose(request.getRentPurpose());
         costume.setNumberOfItems(request.getNumberOfItems());
         costume.setPricePerDay(request.getPricePerDay());
+        costume.setCost(request.getCost());
         costume.setDepositAmount(request.getDepositAmount());
         if (request.getRentDiscount() != null) costume.setRentDiscount(request.getRentDiscount());
     }
@@ -286,6 +287,15 @@ public class CostumeServiceImpl implements CostumeService {
         if (isValidString(request.getRentPurpose())) costume.setRentPurpose(request.getRentPurpose());
         if (request.getNumberOfItems() != null) costume.setNumberOfItems(request.getNumberOfItems());
 
+        // Cross-field validation: resulting cost must be >= resulting depositAmount
+        java.math.BigDecimal resultingCost = request.getCost() != null ? request.getCost() : costume.getCost();
+        java.math.BigDecimal resultingDeposit = request.getDepositAmount() != null ? request.getDepositAmount() : costume.getDepositAmount();
+        if (resultingCost != null && resultingDeposit != null) {
+            if (resultingCost.compareTo(resultingDeposit) < 0) {
+                throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
+            }
+        }
+
         if (request.getPricePerDay() != null) {
             if (request.getPricePerDay().compareTo(BigDecimal.ZERO) <= 0)
                 throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
@@ -295,6 +305,11 @@ public class CostumeServiceImpl implements CostumeService {
             if (request.getDepositAmount().compareTo(BigDecimal.ZERO) < 0)
                 throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
             costume.setDepositAmount(request.getDepositAmount());
+        }
+        if (request.getCost() != null) {
+            if (request.getCost().compareTo(BigDecimal.ZERO) < 0)
+                throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
+            costume.setCost(request.getCost());
         }
         if (request.getRentDiscount() != null) {
             if (request.getRentDiscount() < 0 || request.getRentDiscount() > 100)
@@ -435,6 +450,7 @@ public class CostumeServiceImpl implements CostumeService {
                 .rentPurpose(costume.getRentPurpose())
                 .numberOfItems(costume.getNumberOfItems())
                 .pricePerDay(costume.getPricePerDay())
+                .cost(costume.getCost())
                 .depositAmount(costume.getDepositAmount())
                 .rentDiscount(costume.getRentDiscount())
                 .status(costume.getStatus())
@@ -489,6 +505,13 @@ public class CostumeServiceImpl implements CostumeService {
         if (request.getRentDiscount() != null) {
             if (request.getRentDiscount() < 0 || request.getRentDiscount() > 100)
                 throw new RuntimeException("rentDiscount must be between 0 and 100");
+        }
+
+        // Cross-field validation: if both cost and depositAmount provided, ensure cost >= depositAmount
+        if (request.getCost() != null && request.getDepositAmount() != null) {
+            if (request.getCost().compareTo(request.getDepositAmount()) < 0) {
+                throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
+            }
         }
     }
 

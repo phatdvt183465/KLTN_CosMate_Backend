@@ -1,13 +1,15 @@
 package com.cosmate.dto.request;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 @Data
 public class GoogleTokenRequest {
-    // id_token (JWT) obtained from Google's OAuth2 client on frontend
-    @NotBlank(message = "ID_TOKEN_INVALID")
-    @Size(min = 10, max = 4096)
+    // Either provide idToken (JWT) obtained on frontend or an authorization code from OAuth2 Authorization Code flow
     private String idToken;
+
+    // Authorization code (server-side exchange) for OAuth2.0 Authorization Code flow
+    private String code;
+
+    // Redirect URI used when exchanging the authorization code (should match the one used when obtaining the code)
+    private String redirectUri;
 }

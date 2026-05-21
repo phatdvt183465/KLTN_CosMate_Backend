@@ -65,8 +65,19 @@ public class SecurityConfig {
                         .requestMatchers("/api/services/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/ws/**", "/ws-mobile/**").permitAll()
-                        // Auth endpoints
-                        .requestMatchers("/api/auth/**").permitAll()
+                        // Auth endpoints: only allow unauthenticated access to specific public
+                        // auth routes. Other /api/auth/* endpoints (e.g. /api/auth/qr-approve)
+                        // will require authentication.
+                        .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/register/google").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/google/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/google/register").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/activate").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/password-reset-request").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/password-reset").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/password-reset").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/qr-generate").permitAll()
                         // Allow VNPay return endpoint (VNPay redirect must be anonymous)
                         .requestMatchers("/api/vnpay/return").permitAll()
                         // Swagger/OpenAPI

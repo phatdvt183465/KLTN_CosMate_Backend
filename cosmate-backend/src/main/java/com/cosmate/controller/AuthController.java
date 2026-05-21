@@ -217,6 +217,38 @@ public class AuthController {
         return ResponseEntity.ok(api);
     }
 
+    // DEV-only debug endpoint to inspect a QR token record
+    @GetMapping("/qr-debug")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> debugToken(@RequestParam("sessionId") String sessionId) {
+        ApiResponse<Map<String, Object>> api = new ApiResponse<>();
+        var tokenOpt = tokenRepository.findByToken(sessionId);
+        if (tokenOpt.isEmpty()) {
+            api.setCode(1);
+            api.setMessage("Not found");
+            api.setResult(null);
+            return ResponseEntity.badRequest().body(api);
+        }
+        Token tok = tokenOpt.get();
+        // Safely extract user id; token.user is LAZY and may throw LazyInitializationException
+        Integer uid = null;
+        try {
+            if (tok.getUser() != null) uid = tok.getUser().getId();
+        } catch (Exception ignored) {
+            uid = null;
+        }
+        Map<String, Object> m = Map.of(
+                "token", tok.getToken(),
+                "type", tok.getType(),
+                "used", tok.getUsed(),
+                "expiresAt", tok.getExpiresAt(),
+                "userId", uid
+        );
+        api.setCode(0);
+        api.setMessage("OK");
+        api.setResult(m);
+        return ResponseEntity.ok(api);
+    }
+
     // Mobile approves: authenticated mobile user posts sessionId to claim it
     @PostMapping("/qr-approve")
     public ResponseEntity<ApiResponse<Map<String, String>>> approveQr(@Valid @RequestBody QrApproveRequest request) {
@@ -229,15 +261,35 @@ public class AuthController {
             return ResponseEntity.status(401).body(api);
         }
 
-        int updated = tokenRepository.approveToken(currentUserId.longValue(), request.getSessionId());
-        if (updated == 0) {
+        // Load user and token record, perform check/update in Java to avoid DB-specific functions
+        var user = userService.getById(currentUserId);
+        var tokenOpt = tokenRepository.findByToken(request.getSessionId());
+        if (tokenOpt.isEmpty()) {
             api.setCode(1);
             api.setMessage("Invalid or expired session");
             return ResponseEntity.badRequest().body(api);
         }
 
+        Token tok = tokenOpt.get();
+        // used may be null in DB; treat null as used=false
+        if (Boolean.TRUE.equals(tok.getUsed())) {
+            api.setCode(1);
+            api.setMessage("Invalid or expired session");
+            return ResponseEntity.badRequest().body(api);
+        }
+
+        if (tok.getExpiresAt() == null || !tok.getExpiresAt().isAfter(LocalDateTime.now())) {
+            api.setCode(1);
+            api.setMessage("Invalid or expired session");
+            return ResponseEntity.badRequest().body(api);
+        }
+
+        // claim the token for this user
+        tok.setUser(user);
+        tok.setUsed(true);
+        tokenRepository.save(tok);
+
         // Build JWT for the user and notify web client via WebSocket
-        var user = userService.getById(currentUserId);
         List<String> roles = user.getRole() == null ? List.of() : List.of(user.getRole().getRoleName());
         Long userIdLong = user.getId() == null ? null : user.getId().longValue();
         Long providerIdLong = null;

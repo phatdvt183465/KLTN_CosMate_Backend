@@ -423,6 +423,8 @@ public class UserServiceImpl implements UserService {
             user = userRepository.save(user);
         } else {
             RegisterRequest r = new RegisterRequest();
+            // set username to the email for Google registrations
+            r.setUsername(email);
             r.setEmail(email);
             r.setFullName(name);
             user = register(r, true, picture);

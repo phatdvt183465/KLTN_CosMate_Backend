@@ -21,6 +21,7 @@ public class CostumeResponse implements CrudDto<Integer> {
     private String rentPurpose;
     private Integer numberOfItems;
     private BigDecimal pricePerDay;
+    private BigDecimal cost;
     private BigDecimal depositAmount;
     private Integer rentDiscount;
     private String status;

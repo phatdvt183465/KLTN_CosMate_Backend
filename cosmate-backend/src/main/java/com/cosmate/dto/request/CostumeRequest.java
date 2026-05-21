@@ -35,6 +35,9 @@ public class CostumeRequest {
     @DecimalMin(value = "0.0", inclusive = true, message = "DEPOSIT_AMOUNT_INVALID")
     private BigDecimal depositAmount;
 
+    @DecimalMin(value = "0.0", inclusive = true, message = "COST_INVALID")
+    private BigDecimal cost;
+
     @Min(value = 0, message = "RENT_DISCOUNT_INVALID")
     private Integer rentDiscount;
 

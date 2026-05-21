@@ -39,6 +39,9 @@ public class Costume {
     @Column(name = "price_per_day")
     private BigDecimal pricePerDay;
 
+    @Column(name = "cost")
+    private BigDecimal cost;
+
     @Column(name = "rent_discount")
     private Integer rentDiscount;
 

@@ -8,8 +8,10 @@ import com.cosmate.dto.response.CostumeAdminResponse;
 import com.cosmate.entity.Costume;
 import com.cosmate.service.CostumeAdminService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin/costumes")
@@ -17,6 +19,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class CostumeAdminController extends BaseCrudDataIoController<Costume, Integer, CostumeAdminResponse, CostumeFilter> {
 
     private final CostumeAdminService costumeAdminService;
+
+    @PostMapping("/migrate-cost-from-deposit")
+    public Map<String, Object> migrateCostFromDeposit() {
+        costumeAdminService.migrateCostFromDeposit();
+        return Map.of("status", "ok");
+    }
 
     @Override
     protected CrudService<Integer, CostumeAdminResponse, CostumeFilter> getService() {

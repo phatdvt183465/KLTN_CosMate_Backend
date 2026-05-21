@@ -89,4 +89,17 @@ public class CostumeAdminServiceImpl extends CrudServiceImpl<Costume, Integer, C
     public void delete(Integer id) {
         super.deleteEntity(id);
     }
+
+    @Override
+    public void migrateCostFromDeposit() {
+        List<Costume> all = costumeRepository.findAll();
+        List<Costume> toUpdate = all.stream()
+                .filter(c -> c.getDepositAmount() != null)
+                .filter(c -> c.getCost() == null || c.getCost().compareTo(c.getDepositAmount()) != 0)
+                .peek(c -> c.setCost(c.getDepositAmount()))
+                .collect(Collectors.toList());
+        if (!toUpdate.isEmpty()) {
+            costumeRepository.saveAll(toUpdate);
+        }
+    }
 }

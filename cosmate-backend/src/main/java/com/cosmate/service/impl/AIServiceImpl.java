@@ -135,9 +135,22 @@ public class AIServiceImpl implements AIService {
 
                 if (hasImages && hasText) {
                     // TRƯỜNG HỢP 1: CÓ CẢ HÌNH VÀ CHỮ (Trọng số 70/30)
+
+                    // 1. Tính điểm Hình ảnh
                     List<Double> dbImageVector = objectMapper.readValue(costume.getImageVector(), new TypeReference<List<Double>>() {});
                     double imageScore = calculateCosineSimilarity(queryImageVector, dbImageVector);
-                    finalScore = (imageScore * 0.7) + (textScore * 0.3);
+
+                    // 2. Nâng cấp điểm Chữ (Bí kíp của Khoan)
+                    // - Lấy điểm so với Mô tả (đã tính ở ngoài vòng if)
+                    // - Tính thêm điểm so với Tags Hình ảnh
+                    double textScoreVsImageTags = calculateCosineSimilarity(queryTextVector, dbImageVector);
+
+                    // -> Chọn ra điểm cao nhất
+                    double bestTextScore = Math.max(textScore, textScoreVsImageTags);
+
+                    // 3. Gộp lại
+                    finalScore = (imageScore * 0.7) + (bestTextScore * 0.3);
+
                     if (finalScore <= 0.5) continue;
 
                 } else if (hasImages) {
@@ -148,8 +161,17 @@ public class AIServiceImpl implements AIService {
                     if (finalScore <= 0.5) continue;
 
                 } else {
-                    // TRƯỜNG HỢP 3: CHỈ CÓ CHỮ (Trọng số 100% chữ)
-                    finalScore = textScore * 1.0;
+                    // TRƯỜNG HỢP 3: CHỈ CÓ CHỮ
+                    // Cho query của user đi so sánh với cả Text Mô tả VÀ Text Hình ảnh (Tags)
+                    double imageScoreIfAny = 0.0;
+                    if (costume.getImageVector() != null && !costume.getImageVector().isEmpty()) {
+                        List<Double> dbImageVector = objectMapper.readValue(costume.getImageVector(), new TypeReference<List<Double>>() {});
+                        imageScoreIfAny = calculateCosineSimilarity(queryTextVector, dbImageVector);
+                    }
+
+                    // Lấy điểm cao nhất giữa việc giống Mô tả hoặc giống Hình ảnh
+                    finalScore = Math.max(textScore, imageScoreIfAny);
+
                     if (finalScore <= 0.5) continue;
                 }
 
@@ -165,7 +187,7 @@ public class AIServiceImpl implements AIService {
 
             return results.stream()
                     .sorted(Comparator.comparingDouble(SearchResponse::getSimilarityScore).reversed())
-                    .limit(10)
+                    .limit(30)
                     .collect(Collectors.toList());
         } catch (Exception e) {
             log.error("Lỗi trong quá trình AI tìm kiếm Dual-Vector: {}", e.getMessage(), e);

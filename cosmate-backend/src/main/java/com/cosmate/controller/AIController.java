@@ -217,10 +217,22 @@ public class AIController {
 
     // --- Hàm Helper ---
     private Integer getCurrentUserId() {
-        org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.getPrincipal().getClass().equals(String.class) || authentication.getPrincipal().equals("anonymousUser")) {
+        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getPrincipal() == null) {
             throw new RuntimeException("Vui lòng đăng nhập để thực hiện chức năng này!");
         }
-        return Integer.parseInt((String) authentication.getPrincipal());
+        Object principal = auth.getPrincipal();
+        try {
+            if (principal instanceof String) {
+                String s = (String) principal;
+                if (s.equalsIgnoreCase("anonymousUser")) throw new RuntimeException("Vui lòng đăng nhập để thực hiện chức năng này!");
+                return Integer.valueOf(s);
+            }
+            if (principal instanceof Integer) return (Integer) principal;
+            if (principal instanceof Long) return ((Long) principal).intValue();
+            return Integer.valueOf(principal.toString());
+        } catch (Exception e) {
+            throw new RuntimeException("Vui lòng đăng nhập để thực hiện chức năng này!");
+        }
     }
 }

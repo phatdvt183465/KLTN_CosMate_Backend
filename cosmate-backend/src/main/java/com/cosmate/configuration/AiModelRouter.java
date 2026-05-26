@@ -29,11 +29,11 @@ public class AiModelRouter {
 
     /**
      * Dành cho Tác vụ Phức tạp: Pose Battle, Quiz Logic
-     * Model Chính: Gemini 3 Flash (Suy luận sâu)
-     * Model Backup: Gemini 2.5 Flash
+     * Model Chính: Gemini 3.5 Flash (Xử lý logic phức tạp, siêu mạnh)
+     * Model Backup: Gemini 3 Flash
      */
     public String getReasoningModelName(boolean isBackup) {
-        return isBackup ? "models/gemini-2.5-flash" : "models/gemini-3-flash-preview";
+        return isBackup ? "models/gemini-3-flash-preview" : "models/gemini-3.5-flash";
     }
 
     // Tiện ích lấy Full URL

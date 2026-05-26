@@ -116,10 +116,10 @@ public class AIServiceImpl implements AIService {
             List<Double> queryImageVector = null;
             if (hasImages) {
                 String imageTags = extractFeaturesFromMultipleImages(imageFiles);
-                queryImageVector = callGeminiGetVector(imageTags);
+                queryImageVector = selfProxy.callGeminiGetVector(imageTags);
             }
 
-            List<Double> queryTextVector = hasText ? callGeminiGetVector(queryText) : null;
+            List<Double> queryTextVector = hasText ? selfProxy.callGeminiGetVector(queryText) : null;
 
             List<Costume> allCostumes = costumeRepository.findAllWithVector();
             List<SearchResponse> results = new ArrayList<>();
@@ -306,7 +306,7 @@ public class AIServiceImpl implements AIService {
 
             // TẦNG 3: AI VECTOR FALLBACK (COLD START)
             if (candidateIds.size() < 5) {
-                List<Double> queryVector = callGeminiGetVector(searchContent);
+                List<Double> queryVector = selfProxy.callGeminiGetVector(searchContent);
                 List<Costume> vectorFallback = costumeRepository.findAllWithVector().stream()
                         .filter(c -> c.getTextVector() != null && !c.getTextVector().isEmpty())
                         .filter(c -> !candidateIds.contains(c.getId()))
@@ -386,7 +386,7 @@ public class AIServiceImpl implements AIService {
 
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            JsonNode response = callGeminiGenerateContent(body, false);
+            JsonNode response = selfProxy.callGeminiGenerateContent(body, false);
 
             // 3. Dùng Helper lấy kết quả trả về siêu gọn
             String resultText = extractGeminiResponseText(response);
@@ -415,7 +415,7 @@ public class AIServiceImpl implements AIService {
                 if (imagePart != null) partsNode.add(imagePart);
             }
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
-            String result = extractGeminiResponseText(callGeminiGenerateContent(body, false));
+            String result = extractGeminiResponseText(selfProxy.callGeminiGenerateContent(body, false));
             return result == null ? "UNSAFE_IRRELEVANT" : result.trim().toUpperCase();
         } catch (Exception e) {
             log.error("Lỗi kiểm duyệt ảnh costume: {}", e.getMessage(), e);
@@ -509,7 +509,7 @@ public class AIServiceImpl implements AIService {
 
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            JsonNode response = callGeminiGenerateContent(body, true);
+            JsonNode response = selfProxy.callGeminiGenerateContent(body, true);
             String resultJson = extractGeminiResponseText(response);
 
             // ==========================================
@@ -696,7 +696,7 @@ public class AIServiceImpl implements AIService {
     // Nếu gặp lỗi 429 (TooManyRequests) hoặc 503 (Server Quá Tải), nó sẽ thử lại tối đa 3 lần.
     // Độ trễ lần lượt: 1s -> 2s -> 4s.
     @Retryable(
-            retryFor = {HttpClientErrorException.TooManyRequests.class, HttpServerErrorException.class},
+            retryFor = {org.springframework.web.client.HttpClientErrorException.class, org.springframework.web.client.HttpServerErrorException.class},
             maxAttempts = 3,
             backoff = @Backoff(delay = 1000, multiplier = 2)
     )
@@ -763,7 +763,7 @@ public class AIServiceImpl implements AIService {
     public String generateVectorForText(String text) {
         try {
             // Sử dụng lại hàm callGeminiGetVector đã viết sẵn
-            List<Double> vector = callGeminiGetVector(text);
+            List<Double> vector = selfProxy.callGeminiGetVector(text);
             return objectMapper.writeValueAsString(vector);
         } catch (Exception e) {
             log.error("Lỗi khi tạo vector nhúng (embedding) từ text: {}", e.getMessage());
@@ -875,7 +875,7 @@ public class AIServiceImpl implements AIService {
 
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            JsonNode response = callGeminiGenerateContent(body, false);
+            JsonNode response = selfProxy.callGeminiGenerateContent(body, false);
             String resultText = extractGeminiResponseText(response);
 
             return resultText.isEmpty() ? "Không thể generate được description, vui lòng tả thủ công." : resultText.replaceAll("[*#_]", "");
@@ -903,7 +903,7 @@ public class AIServiceImpl implements AIService {
 
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            JsonNode response = callGeminiGenerateContent(body, false);
+            JsonNode response = selfProxy.callGeminiGenerateContent(body, false);
             return extractGeminiResponseText(response);
         } catch (Exception e) {
             log.error("Lỗi khi trích xuất đặc điểm từ nhiều ảnh: {}", e.getMessage());
@@ -937,7 +937,7 @@ public class AIServiceImpl implements AIService {
 
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            JsonNode response = callGeminiGenerateContent(body, false);
+            JsonNode response = selfProxy.callGeminiGenerateContent(body, false);
             return extractGeminiResponseText(response);
         } catch (Exception e) {
             log.error("Lỗi AI khi bóc tag từ mảng byte: {}", e.getMessage());
@@ -1041,7 +1041,7 @@ public class AIServiceImpl implements AIService {
             partsNode.add(buildTextPart(promptText));
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            JsonNode response = callGeminiGenerateContent(body, true);
+            JsonNode response = selfProxy.callGeminiGenerateContent(body, true);
             String resultJson = extractGeminiResponseText(response);
 
             resultJson = extractJsonArray(resultJson);
@@ -1158,7 +1158,7 @@ public class AIServiceImpl implements AIService {
     // =========================================================================
 
     @Retryable(
-            retryFor = {HttpClientErrorException.TooManyRequests.class, HttpServerErrorException.class},
+            retryFor = {org.springframework.web.client.HttpClientErrorException.class, org.springframework.web.client.HttpServerErrorException.class},
             maxAttempts = 3,
             backoff = @Backoff(delay = 1000, multiplier = 2)
     )
@@ -1274,7 +1274,7 @@ public class AIServiceImpl implements AIService {
 
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            JsonNode response = callGeminiGenerateContent(body, false); // Gọi model Flash nhanh
+            JsonNode response = selfProxy.callGeminiGenerateContent(body, false); // Gọi model Flash nhanh
             return extractGeminiResponseText(response);
         } catch (Exception e) {
             log.error("Lỗi AI khi bóc tag từ nhiều mảng byte: {}", e.getMessage());
@@ -1318,7 +1318,7 @@ public class AIServiceImpl implements AIService {
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
             // Gọi model suy luận sâu
-            JsonNode response = callGeminiGenerateContent(body, true);
+            JsonNode response = selfProxy.callGeminiGenerateContent(body, true);
             String resultJson = extractGeminiResponseText(response);
             resultJson = extractJsonArray(resultJson); // Tái sử dụng hàm để cắt lấy chuỗi JSON
 

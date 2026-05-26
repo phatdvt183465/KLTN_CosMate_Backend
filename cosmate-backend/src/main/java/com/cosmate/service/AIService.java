@@ -73,4 +73,7 @@ public interface AIService {
     String submitStyleQuiz(Integer userId, com.cosmate.dto.request.QuizSubmitRequest request);
 
     void consumeTokens(Integer userId, int amount);
+
+    java.util.List<Double> callGeminiGetVector(String text);
+    com.fasterxml.jackson.databind.JsonNode callGeminiGenerateContent(com.fasterxml.jackson.databind.node.ObjectNode body, boolean isComplexTask);
 }

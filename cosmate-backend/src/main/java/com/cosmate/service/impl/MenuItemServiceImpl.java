@@ -164,6 +164,17 @@ public class MenuItemServiceImpl implements MenuItemService {
         return convertToResponse(updatedMenuItem);
     }
 
+    @Override
+    @PreAuthorize("hasAuthority('MENU_ITEM_UPDATE')")
+    @Transactional
+    public void updateMenuItemDisplayOrder(UUID id, Integer displayOrder) {
+        MenuItem menuItem = menuItemRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MenuItem", "id", id));
+        menuItem.setDisplayOrder(displayOrder);
+        menuItemRepository.save(menuItem);
+        log.info("Updated menu item display order to {} for menu item: {}", displayOrder, menuItem.getTitle());
+    }
+
     private MenuItemResponse convertToResponse(MenuItem menuItem) {
         MenuItemResponse response = new MenuItemResponse();
         response.setId(menuItem.getId());

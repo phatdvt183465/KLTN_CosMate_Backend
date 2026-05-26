@@ -15,6 +15,7 @@ public interface MenuService {
     MenuResponse getMenuById(UUID id);
     MenuResponse createMenu(MenuRequest request);
     MenuResponse updateMenu(UUID id, MenuRequest request);
+    void updateMenuDisplayOrder(UUID id, Integer displayOrder);
     void deleteMenu(UUID id);
     MenuResponse toggleMenuStatus(UUID id);
 }

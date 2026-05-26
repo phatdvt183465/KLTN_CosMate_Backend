@@ -131,6 +131,17 @@ public class MenuServiceImpl implements MenuService {
         return convertToResponse(updatedMenu);
     }
 
+    @Override
+    @PreAuthorize("hasAuthority('MENU_UPDATE')")
+    @Transactional
+    public void updateMenuDisplayOrder(UUID id, Integer displayOrder) {
+        Menu menu = menuRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Menu", "id", id));
+        menu.setDisplayOrder(displayOrder);
+        menuRepository.save(menu);
+        log.info("Updated menu display order to {} for menu: {}", displayOrder, menu.getName());
+    }
+
     private MenuResponse convertToResponse(Menu menu) {
         MenuResponse response = new MenuResponse();
         response.setId(menu.getId());

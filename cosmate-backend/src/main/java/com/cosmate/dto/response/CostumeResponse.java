@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -27,6 +28,8 @@ public class CostumeResponse implements CrudDto<Integer> {
     private String status;
     private Integer providerId;
     private Integer completedRentCount;
+    @Schema(description = "Allowed values: MALE, FEMALE, UNISEX, GENDERLESS", allowableValues = {"MALE", "FEMALE", "UNISEX", "GENDERLESS"}, nullable = true)
+    private String gender;
     private List<String> imageUrls;
     private List<MediaResponse> medias;
     private List<SurchargeResponse> surcharges;

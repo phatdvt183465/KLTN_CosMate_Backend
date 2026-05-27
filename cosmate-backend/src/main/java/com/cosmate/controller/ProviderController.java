@@ -408,11 +408,47 @@ public class ProviderController {
                     .filter(s -> s.getStatus() != null && s.getStatus().equalsIgnoreCase("ACTIVE"))
                     .toList();
 
-            long totalRemaining = activeSubs.stream().mapToLong(s -> {
-                if (s.getEndDate() == null) return 0L;
-                if (s.getEndDate().isAfter(now)) return java.time.Duration.between(now, s.getEndDate()).toDays();
-                return 0L;
-            }).sum();
+            // Compute total remaining days without double-counting overlapping active subscriptions.
+            // 1) Build a list of intervals [start, end] clamped to >= now
+            java.util.List<java.time.LocalDate> starts = new java.util.ArrayList<>();
+            java.util.List<java.time.LocalDate> ends = new java.util.ArrayList<>();
+            for (var s : activeSubs) {
+                if (s.getEndDate() == null) continue;
+                java.time.LocalDate startDate = s.getStartDate() != null ? s.getStartDate().toLocalDate() : now.toLocalDate();
+                java.time.LocalDate endDate = s.getEndDate().toLocalDate();
+                if (endDate.isBefore(now.toLocalDate())) continue; // already expired
+                if (startDate.isBefore(now.toLocalDate())) startDate = now.toLocalDate();
+                starts.add(startDate);
+                ends.add(endDate);
+            }
+
+            long totalRemaining = 0L;
+            if (!starts.isEmpty()) {
+                // Build list of intervals and sort by start
+                java.util.List<java.time.LocalDate[]> intervals = new java.util.ArrayList<>();
+                for (int i = 0; i < starts.size(); i++) {
+                    intervals.add(new java.time.LocalDate[]{starts.get(i), ends.get(i)});
+                }
+                intervals.sort((a, b) -> a[0].compareTo(b[0]));
+
+                // Merge overlapping intervals
+                java.time.LocalDate curStart = intervals.get(0)[0];
+                java.time.LocalDate curEnd = intervals.get(0)[1];
+                for (int i = 1; i < intervals.size(); i++) {
+                    java.time.LocalDate sStart = intervals.get(i)[0];
+                    java.time.LocalDate sEnd = intervals.get(i)[1];
+                    if (!sStart.isAfter(curEnd)) { // overlap or contiguous
+                        if (sEnd.isAfter(curEnd)) curEnd = sEnd;
+                    } else {
+                        // add current interval days
+                        totalRemaining += java.time.temporal.ChronoUnit.DAYS.between(curStart, curEnd);
+                        curStart = sStart;
+                        curEnd = sEnd;
+                    }
+                }
+                // add last
+                totalRemaining += java.time.temporal.ChronoUnit.DAYS.between(curStart, curEnd);
+            }
 
             // Find current active subscription: one that contains now (start <= now <= end), otherwise pick the one with latest endDate
             java.util.Optional<com.cosmate.entity.ProviderSubscription> currentOpt = activeSubs.stream()

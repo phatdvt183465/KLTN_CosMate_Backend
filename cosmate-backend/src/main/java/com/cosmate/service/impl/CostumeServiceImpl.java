@@ -277,6 +277,7 @@ public class CostumeServiceImpl implements CostumeService {
         costume.setPricePerDay(request.getPricePerDay());
         costume.setCost(request.getCost());
         costume.setDepositAmount(request.getDepositAmount());
+        costume.setGender(request.getGender());
         if (request.getRentDiscount() != null) costume.setRentDiscount(request.getRentDiscount());
     }
 
@@ -315,6 +316,13 @@ public class CostumeServiceImpl implements CostumeService {
             if (request.getRentDiscount() < 0 || request.getRentDiscount() > 100)
                 throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
             costume.setRentDiscount(request.getRentDiscount());
+        }
+        // Gender update (optional)
+        if (isValidString(request.getGender())) {
+            String g = request.getGender().trim().toUpperCase();
+            List<String> allowed = Arrays.asList("MALE", "FEMALE", "UNISEX", "GENDERLESS");
+            if (!allowed.contains(g)) throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
+            costume.setGender(g);
         }
     }
 
@@ -483,6 +491,7 @@ public class CostumeServiceImpl implements CostumeService {
                                 .anime(c.getAnime())
                                 .build()).collect(Collectors.toList())
                         : new java.util.ArrayList<>())
+                .gender(costume.getGender())
                 .build();
     }
 
@@ -505,6 +514,13 @@ public class CostumeServiceImpl implements CostumeService {
         if (request.getRentDiscount() != null) {
             if (request.getRentDiscount() < 0 || request.getRentDiscount() > 100)
                 throw new RuntimeException("rentDiscount must be between 0 and 100");
+        }
+
+        // Validate gender if provided
+        if (request.getGender() != null && !request.getGender().trim().isEmpty()) {
+            String g = request.getGender().trim().toUpperCase();
+            List<String> allowed = Arrays.asList("MALE", "FEMALE", "UNISEX", "GENDERLESS");
+            if (!allowed.contains(g)) throw new AppException(ErrorCode.INVALID_COSTUME_REQUEST);
         }
 
         // Cross-field validation: if both cost and depositAmount provided, ensure cost >= depositAmount

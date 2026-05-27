@@ -84,4 +84,9 @@ public class Costume {
     )
     @Builder.Default
     private List<Character> characters = new ArrayList<>();
+
+    // Gender of the costume. Allowed values (enforced at DB level): MALE, FEMALE, UNISEX, GENDERLESS
+    @Column(name = "gender", length = 20)
+    private String gender;
+
 }

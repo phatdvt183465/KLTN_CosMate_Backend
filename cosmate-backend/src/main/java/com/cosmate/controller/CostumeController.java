@@ -52,6 +52,13 @@ public class CostumeController {
                 .build();
     }
 
+    // Return allowed gender options for front-end select lists
+    @GetMapping("/genders")
+    public ApiResponse<List<String>> getGenderOptions() {
+        List<String> options = java.util.Arrays.asList("MALE", "FEMALE", "UNISEX", "GENDERLESS");
+        return ApiResponse.<List<String>>builder().result(options).build();
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<CostumeResponse> getById(@PathVariable Integer id) {
         return ApiResponse.<CostumeResponse>builder()

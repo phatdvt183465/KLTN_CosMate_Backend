@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import io.swagger.v3.oas.annotations.media.Schema;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
@@ -58,6 +59,10 @@ public class CostumeRequest {
     @Size(max = 10000)
     private String rentalOptions;
 
+    @Size(max = 20)
+    @Schema(description = "Allowed values: MALE, FEMALE, UNISEX, GENDERLESS", allowableValues = {"MALE", "FEMALE", "UNISEX", "GENDERLESS"}, nullable = true)
+    private String gender;
+
     @Size(max = 3, message = "Chỉ được chọn tối đa 3 nhân vật cho mỗi trang phục")
     private List<Integer> characterIds;
 
@@ -66,5 +71,9 @@ public class CostumeRequest {
                 .filter(id -> id != null && id > 0)
                 .distinct()
                 .toList();
+    }
+
+    public void setGender(String gender) {
+        this.gender = gender == null ? null : gender.trim().toUpperCase();
     }
 }

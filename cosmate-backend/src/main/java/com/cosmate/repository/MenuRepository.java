@@ -24,4 +24,7 @@ public interface MenuRepository extends JpaRepository<Menu, UUID> {
     @Modifying(clearAutomatically = true)
     @Query("UPDATE Menu m SET m.isActive = CASE WHEN m.isActive = true THEN false ELSE true END WHERE m.id = :id")
     void forceToggleStatus(@Param("id") UUID id);
+
+    @Query("SELECT COALESCE(MAX(m.displayOrder), 0) FROM Menu m")
+    Integer findMaxDisplayOrder();
 }

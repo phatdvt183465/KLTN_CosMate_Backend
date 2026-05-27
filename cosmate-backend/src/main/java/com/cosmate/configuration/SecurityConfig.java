@@ -36,7 +36,7 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         // use allowedOriginPatterns so we can allow credentials while matching any origin
         configuration.setAllowedOriginPatterns(List.of("*")); // hoặc domain cụ thể
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
 

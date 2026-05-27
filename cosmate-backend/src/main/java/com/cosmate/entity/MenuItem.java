@@ -48,10 +48,10 @@ public class MenuItem {
     @Column(length = 50)
     private String icon;
 
-    @Column(name = "display_order", updatable = false)
+    @Column(name = "display_order")
     private Integer displayOrder;
 
-    @Column(name = "is_active", updatable = false)
+    @Column(name = "is_active")
     private Boolean isActive = true;
 
     @Column(name = "required_permission", length = 100)

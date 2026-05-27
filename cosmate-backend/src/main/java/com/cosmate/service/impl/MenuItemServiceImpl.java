@@ -80,7 +80,16 @@ public class MenuItemServiceImpl implements MenuItemService {
         menuItem.setUrl(request.getUrl());
         menuItem.setIcon(request.getIcon());
         menuItem.setDescription(request.getDescription());
-        menuItem.setDisplayOrder(request.getDisplayOrder() != null ? request.getDisplayOrder() : 0);
+        
+        Integer maxOrder;
+        if (request.getParentId() != null) {
+            maxOrder = menuItemRepository.findMaxDisplayOrderForParent(request.getParentId());
+        } else {
+            maxOrder = menuItemRepository.findMaxDisplayOrderForRoot(request.getMenuId());
+        }
+        int nextOrder = (maxOrder != null ? maxOrder : 0) + 1;
+        menuItem.setDisplayOrder(request.getDisplayOrder() != null && request.getDisplayOrder() > 0 ? request.getDisplayOrder() : nextOrder);
+        
         menuItem.setIsActive(true);
 
         if (request.getRequiredPermission() != null) {
@@ -153,6 +162,17 @@ public class MenuItemServiceImpl implements MenuItemService {
         menuItem.setIsActive(!menuItem.getIsActive());
         MenuItem updatedMenuItem = menuItemRepository.save(menuItem);
         return convertToResponse(updatedMenuItem);
+    }
+
+    @Override
+    @PreAuthorize("hasAuthority('MENU_ITEM_UPDATE')")
+    @Transactional
+    public void updateMenuItemDisplayOrder(UUID id, Integer displayOrder) {
+        MenuItem menuItem = menuItemRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MenuItem", "id", id));
+        menuItem.setDisplayOrder(displayOrder);
+        menuItemRepository.save(menuItem);
+        log.info("Updated menu item display order to {} for menu item: {}", displayOrder, menuItem.getTitle());
     }
 
     private MenuItemResponse convertToResponse(MenuItem menuItem) {

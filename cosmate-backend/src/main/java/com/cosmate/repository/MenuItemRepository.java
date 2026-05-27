@@ -17,4 +17,10 @@ public interface MenuItemRepository extends JpaRepository<MenuItem, UUID> {
 
     @Query("SELECT mi FROM MenuItem mi WHERE mi.menu.id = :menuId AND mi.parent IS NULL ORDER BY mi.displayOrder")
     List<MenuItem> findRootItemsByMenuId(@Param("menuId") UUID menuId);
+
+    @Query("SELECT COALESCE(MAX(mi.displayOrder), 0) FROM MenuItem mi WHERE mi.menu.id = :menuId AND mi.parent IS NULL")
+    Integer findMaxDisplayOrderForRoot(@Param("menuId") UUID menuId);
+
+    @Query("SELECT COALESCE(MAX(mi.displayOrder), 0) FROM MenuItem mi WHERE mi.parent.id = :parentId")
+    Integer findMaxDisplayOrderForParent(@Param("parentId") UUID parentId);
 }

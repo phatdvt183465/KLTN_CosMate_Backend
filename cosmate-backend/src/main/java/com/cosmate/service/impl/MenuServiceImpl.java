@@ -32,6 +32,13 @@ public class MenuServiceImpl implements MenuService {
     @Override
     @PreAuthorize("hasAuthority('MENU_READ')")
     public Page<MenuResponse> getAllMenus(Pageable pageable) {
+        if (pageable.getSort().isUnsorted()) {
+            pageable = org.springframework.data.domain.PageRequest.of(
+                pageable.getPageNumber(), 
+                pageable.getPageSize(), 
+                org.springframework.data.domain.Sort.by("displayOrder").ascending()
+            );
+        }
         return menuRepository.findAll(pageable).map(this::convertToResponse);
     }
 
@@ -68,7 +75,11 @@ public class MenuServiceImpl implements MenuService {
         Menu menu = new Menu();
         menu.setName(request.getName());
         menu.setDescription(request.getDescription());
-        menu.setDisplayOrder(request.getDisplayOrder() != null ? request.getDisplayOrder() : 0);
+        
+        Integer maxOrder = menuRepository.findMaxDisplayOrder();
+        int nextOrder = (maxOrder != null ? maxOrder : 0) + 1;
+        menu.setDisplayOrder(request.getDisplayOrder() != null && request.getDisplayOrder() > 0 ? request.getDisplayOrder() : nextOrder);
+        
         menu.setIsActive(true);
 
         Menu savedMenu = menuRepository.save(menu);
@@ -118,6 +129,17 @@ public class MenuServiceImpl implements MenuService {
         Menu updatedMenu = menuRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Menu", "id", id));
         return convertToResponse(updatedMenu);
+    }
+
+    @Override
+    @PreAuthorize("hasAuthority('MENU_UPDATE')")
+    @Transactional
+    public void updateMenuDisplayOrder(UUID id, Integer displayOrder) {
+        Menu menu = menuRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Menu", "id", id));
+        menu.setDisplayOrder(displayOrder);
+        menuRepository.save(menu);
+        log.info("Updated menu display order to {} for menu: {}", displayOrder, menu.getName());
     }
 
     private MenuResponse convertToResponse(Menu menu) {

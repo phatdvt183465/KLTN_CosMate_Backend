@@ -19,9 +19,10 @@ public class CharacterRequestController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<CharacterRequest> create(@RequestBody CharacterRequest request, @RequestParam(required = false) Integer providerId) {
+        Integer finalProviderId = providerId != null ? providerId : request.getProviderId();
         return ApiResponse.<CharacterRequest>builder()
                 .message("Gửi yêu cầu thêm nhân vật thành công!")
-                .result(characterRequestService.create(request, providerId))
+                .result(characterRequestService.create(request, finalProviderId))
                 .build();
     }
 

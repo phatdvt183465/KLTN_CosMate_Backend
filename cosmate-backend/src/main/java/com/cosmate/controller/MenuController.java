@@ -60,4 +60,12 @@ public class MenuController {
     public ResponseEntity<MenuResponse> toggleMenuStatus(@PathVariable UUID id) {
         return ResponseEntity.ok(menuService.toggleMenuStatus(id));
     }
+
+    @PatchMapping("/{id}/display-order")
+    public ResponseEntity<Void> updateMenuOrder(
+            @PathVariable UUID id,
+            @RequestParam Integer displayOrder) {
+        menuService.updateMenuDisplayOrder(id, displayOrder);
+        return ResponseEntity.ok().build();
+    }
 }

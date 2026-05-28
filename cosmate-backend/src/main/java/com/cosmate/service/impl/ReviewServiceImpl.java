@@ -11,6 +11,7 @@ import com.cosmate.repository.ReviewRepository;
 import com.cosmate.repository.ReviewUrlRepository;
 import com.cosmate.service.FirebaseStorageService;
 import com.cosmate.service.ReviewService;
+import com.cosmate.service.AIService;
 import com.cosmate.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,8 @@ public class ReviewServiceImpl implements ReviewService {
     private final FirebaseStorageService firebaseStorageService;
     private final com.cosmate.service.ProviderService providerService;
     private final UserRepository userRepository;
+    private final AIService aiService;
+    private final com.cosmate.repository.ProviderRepository providerRepository;
 
     @Override
     @Transactional
@@ -104,6 +107,10 @@ public class ReviewServiceImpl implements ReviewService {
             });
         }
 
+        // Kích hoạt AI phân tích review chạy ngầm
+        String aiComment = "Đánh giá " + rating + " sao. Nội dung: " + (request.getComment() != null ? request.getComment() : "");
+        aiService.analyzeReviewAsync(r.getId(), aiComment);
+
         return resp;
     }
 
@@ -150,6 +157,9 @@ public class ReviewServiceImpl implements ReviewService {
         resp.setRating(r.getRating());
         resp.setComment(r.getComment());
         resp.setCreatedAt(r.getCreatedAt());
+        resp.setAiSentiment(r.getAiSentiment());
+        resp.setIsSpamOrToxic(r.getIsSpamOrToxic());
+        resp.setAiSummary(r.getAiSummary());
 
         List<ReviewUrlResponse> images = new ArrayList<>();
         List<ReviewUrl> urls = reviewUrlRepository.findByReviewId(r.getId());
@@ -192,5 +202,39 @@ public class ReviewServiceImpl implements ReviewService {
         review = reviewRepository.save(review);
 
         return mapToDto(review);
+    }
+
+    @Override
+    @Transactional
+    public ReviewResponse toggleToxicStatus(Integer reviewId) {
+        Review review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new IllegalArgumentException("Review not found"));
+        boolean currentStatus = review.getIsSpamOrToxic() != null ? review.getIsSpamOrToxic() : false;
+        review.setIsSpamOrToxic(!currentStatus);
+        review = reviewRepository.save(review);
+
+        if (review.getOrder() != null && review.getOrder().getProviderId() != null) {
+            recalculateProviderRating(review.getOrder().getProviderId());
+        }
+
+        return mapToDto(review);
+    }
+
+    private void recalculateProviderRating(Integer providerId) {
+        List<Review> reviews = reviewRepository.findByOrderProviderId(providerId);
+        List<Review> validReviews = reviews.stream()
+                .filter(r -> r.getIsSpamOrToxic() == null || !r.getIsSpamOrToxic())
+                .toList();
+
+        int totalReviews = validReviews.size();
+        final double average = totalReviews > 0
+                ? validReviews.stream().mapToDouble(Review::getRating).sum() / totalReviews
+                : 0.0;
+
+        providerRepository.findById(providerId).ifPresent(provider -> {
+            provider.setTotalReviews(totalReviews);
+            provider.setTotalRating(java.math.BigDecimal.valueOf(average));
+            providerRepository.save(provider);
+        });
     }
 }

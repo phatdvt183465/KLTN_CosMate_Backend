@@ -131,6 +131,26 @@ public class ReviewController {
         }
     }
 
+    @PutMapping("/{id}/toggle-toxic")
+    public ResponseEntity<ApiResponse<ReviewResponse>> toggleToxicStatus(@PathVariable("id") Integer id) {
+        ApiResponse<ReviewResponse> api = new ApiResponse<>();
+        try {
+            ReviewResponse resp = reviewService.toggleToxicStatus(id);
+            api.setCode(0);
+            api.setMessage("OK");
+            api.setResult(resp);
+            return ResponseEntity.ok(api);
+        } catch (IllegalArgumentException ex) {
+            api.setCode(400);
+            api.setMessage(ex.getMessage());
+            return ResponseEntity.badRequest().body(api);
+        } catch (Exception ex) {
+            api.setCode(500);
+            api.setMessage("Failed to toggle toxic status: " + ex.getMessage());
+            return ResponseEntity.status(500).body(api);
+        }
+    }
+
     private Integer getCurrentUserId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getPrincipal() == null) return null;

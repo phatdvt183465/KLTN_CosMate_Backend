@@ -19,5 +19,9 @@ public class ReviewResponse {
     private String providerReply;
     private LocalDateTime repliedAt;
     private Integer repliedByProviderId;
+    
+    private String aiSentiment;
+    private Boolean isSpamOrToxic;
+    private String aiSummary;
 }
 

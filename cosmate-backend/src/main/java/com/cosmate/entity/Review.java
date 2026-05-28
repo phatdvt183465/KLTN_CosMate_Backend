@@ -44,6 +44,16 @@ public class Review {
     @Column(name = "replied_by_provider_id")
     private Integer repliedByProviderId;
 
+    @Column(name = "ai_sentiment", length = 50)
+    private String aiSentiment;
+
+    @Column(name = "is_spam_or_toxic")
+    private Boolean isSpamOrToxic;
+
+    @Nationalized
+    @Column(name = "ai_summary", columnDefinition = "NVARCHAR(500)")
+    private String aiSummary;
+
     @PrePersist
     public void prePersist() {
         if (createdAt == null) createdAt = LocalDateTime.now();

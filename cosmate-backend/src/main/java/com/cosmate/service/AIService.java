@@ -47,6 +47,9 @@ public interface AIService {
     // Tiện ích: AI tự động viết mô tả chi tiết cho trang phục dựa trên Tên và Ảnh
     String generateCostumeDescription(String costumeName, Integer personaId, List<MultipartFile> files);
 
+    @org.springframework.scheduling.annotation.Async
+    void analyzeReviewAsync(Integer reviewId, String comment);
+
     String extractFeaturesFromMultipleImages(List<MultipartFile> files);
 
     // Hàm tìm kiếm dự phòng khi AI sập

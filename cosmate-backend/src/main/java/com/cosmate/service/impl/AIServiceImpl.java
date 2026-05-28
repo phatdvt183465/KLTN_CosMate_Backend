@@ -22,6 +22,7 @@ import com.cosmate.repository.ProviderRepository;
 import com.cosmate.repository.StyleSurveyRepository;
 import com.cosmate.repository.SystemConfigRepository;
 import com.cosmate.repository.UserRepository;
+import com.cosmate.repository.ReviewRepository;
 import com.cosmate.service.AIService;
 import com.cosmate.service.FirebaseStorageService;
 import com.cosmate.service.NotificationService;
@@ -89,6 +90,7 @@ public class AIServiceImpl implements AIService {
     private final UserRepository userRepository;
     private final StyleSurveyRepository styleSurveyRepository;
     private final AiModelRouter aiModelRouter;
+    private final ReviewRepository reviewRepository;
     @Lazy
     @Autowired
     private AIService selfProxy;
@@ -1345,6 +1347,66 @@ public class AIServiceImpl implements AIService {
 
         } catch (Exception e) {
             log.error("Lỗi khi AI phân tích Pose Feedback: {}", e.getMessage());
+        }
+    }
+
+    @Async
+    @Override
+    public void analyzeReviewAsync(Integer reviewId, String comment) {
+        if (comment == null || comment.trim().isEmpty()) return;
+        try {
+            String promptText = aiKnowledgeBase.getPromptAnalyzeReview() != null && !aiKnowledgeBase.getPromptAnalyzeReview().isEmpty()
+                    ? aiKnowledgeBase.getPromptAnalyzeReview()
+                    : "Phân tích đánh giá của người dùng. Nếu có chửi thề, lăng mạ, spam vô nghĩa -> is_toxic = true. Phân loại cảm xúc (POSITIVE/NEGATIVE/NEUTRAL). Viết 1 câu tóm tắt ngắn gọn. BẮT BUỘC AI phải trả về định dạng JSON: {\"sentiment\": \"...\", \"is_toxic\": true/false, \"summary\": \"...\"}.";
+            
+            ObjectNode body = objectMapper.createObjectNode();
+            ArrayNode partsNode = objectMapper.createArrayNode();
+            partsNode.add(buildTextPart(promptText + "\nNội dung đánh giá: " + comment));
+            body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
+
+            JsonNode response = selfProxy.callGeminiGenerateContent(body, false);
+            String resultJson = extractGeminiResponseText(response);
+            
+            int startIndex = resultJson.indexOf('{');
+            int endIndex = resultJson.lastIndexOf('}');
+            if (startIndex >= 0 && endIndex > startIndex) {
+                resultJson = resultJson.substring(startIndex, endIndex + 1).trim();
+                JsonNode resultNode = objectMapper.readTree(resultJson);
+                
+                String sentiment = resultNode.path("sentiment").asText("NEUTRAL");
+                boolean isToxic = resultNode.path("is_toxic").asBoolean(false);
+                String summary = resultNode.path("summary").asText("");
+                
+                reviewRepository.findById(reviewId).ifPresent(review -> {
+                    review.setAiSentiment(sentiment.toUpperCase());
+                    review.setIsSpamOrToxic(isToxic);
+                    review.setAiSummary(summary);
+                    reviewRepository.save(review);
+                    
+                    if (review.getOrder() != null && review.getOrder().getProviderId() != null) {
+                        Integer providerId = review.getOrder().getProviderId();
+                        List<Review> validReviews = reviewRepository.findByOrderProviderId(providerId)
+                                .stream()
+                                .filter(r -> r.getIsSpamOrToxic() == null || !r.getIsSpamOrToxic())
+                                .collect(Collectors.toList());
+                                
+                        int totalReviews = validReviews.size();
+                        double average = 0.0;
+                        if (totalReviews > 0) {
+                            double sum = validReviews.stream().mapToDouble(Review::getRating).sum();
+                            average = sum / totalReviews;
+                        }
+                        
+                        providerRepository.findById(providerId).ifPresent(provider -> {
+                            provider.setTotalReviews(totalReviews);
+                            provider.setTotalRating(java.math.BigDecimal.valueOf(average));
+                            providerRepository.save(provider);
+                        });
+                    }
+                });
+            }
+        } catch (Exception e) {
+            log.error("Lỗi khi AI phân tích review id {}: {}", reviewId, e.getMessage());
         }
     }
 }

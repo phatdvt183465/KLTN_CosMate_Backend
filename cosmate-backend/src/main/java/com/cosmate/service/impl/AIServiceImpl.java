@@ -465,7 +465,8 @@ public class AIServiceImpl implements AIService {
     @Override
     @org.springframework.transaction.annotation.Transactional(noRollbackFor = IllegalArgumentException.class)
     public PoseScoringResponse scorePose(PoseScoringRequest request) {
-        selfProxy.consumeTokens(getCurrentUserIdFromContext(), 20);
+        Integer currentUserId = getCurrentUserIdFromContext();
+        selfProxy.consumeTokens(currentUserId, 20);
         try {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
@@ -560,16 +561,6 @@ public class AIServiceImpl implements AIService {
             String safeName = originalName == null ? String.valueOf(System.currentTimeMillis()) : originalName.replaceAll("[^a-zA-Z0-9._-]", "_");
             String path = String.format("pose_battles/%d_%s", System.currentTimeMillis(), safeName);
             String uploadedImageUrl = firebaseStorageService.uploadFile(request.getImage(), path);
-
-            Integer currentUserId = null;
-            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            if (authentication != null && authentication.getPrincipal() instanceof String && !authentication.getPrincipal().equals("anonymousUser")) {
-                try {
-                    currentUserId = Integer.parseInt((String) authentication.getPrincipal());
-                } catch (NumberFormatException e) {
-                    log.warn("Không thể parse userId từ JWT: {}", authentication.getPrincipal());
-                }
-            }
 
             PoseScore newScoreRecord = PoseScore.builder()
                     .cosplayerId(currentUserId)
@@ -1391,11 +1382,9 @@ public class AIServiceImpl implements AIService {
                                 .collect(Collectors.toList());
                                 
                         int totalReviews = validReviews.size();
-                        double average = 0.0;
-                        if (totalReviews > 0) {
-                            double sum = validReviews.stream().mapToDouble(Review::getRating).sum();
-                            average = sum / totalReviews;
-                        }
+                        final double average = totalReviews > 0
+                                ? validReviews.stream().mapToDouble(Review::getRating).sum() / totalReviews
+                                : 0.0;
                         
                         providerRepository.findById(providerId).ifPresent(provider -> {
                             provider.setTotalReviews(totalReviews);

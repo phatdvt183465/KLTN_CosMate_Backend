@@ -227,11 +227,9 @@ public class ReviewServiceImpl implements ReviewService {
                 .toList();
 
         int totalReviews = validReviews.size();
-        double average = 0.0;
-        if (totalReviews > 0) {
-            double sum = validReviews.stream().mapToDouble(Review::getRating).sum();
-            average = sum / totalReviews;
-        }
+        final double average = totalReviews > 0
+                ? validReviews.stream().mapToDouble(Review::getRating).sum() / totalReviews
+                : 0.0;
 
         providerRepository.findById(providerId).ifPresent(provider -> {
             provider.setTotalReviews(totalReviews);

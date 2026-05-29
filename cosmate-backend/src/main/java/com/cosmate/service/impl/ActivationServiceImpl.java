@@ -56,7 +56,7 @@ public class ActivationServiceImpl implements ActivationService {
 
         // send email
         try {
-            String link = backendUrl + "/api/auth/activate?token=" + token;
+            String link = sanitizeBackendUrl(backendUrl) + "/api/auth/activate?token=" + token;
             SimpleMailMessage msg = new SimpleMailMessage();
             if (mailFrom != null && !mailFrom.isBlank()) msg.setFrom(mailFrom);
             msg.setTo(user.getEmail());
@@ -73,6 +73,30 @@ public class ActivationServiceImpl implements ActivationService {
         }
 
         return saved;
+    }
+
+    // Normalize backend URL: remove trailing slash and remove a leading "www." from the host if present
+    private String sanitizeBackendUrl(String url) {
+        if (url == null) return "";
+        String u = url.trim();
+        if (u.isEmpty()) return "";
+        // remove trailing slash
+        while (u.endsWith("/")) u = u.substring(0, u.length() - 1);
+
+        String prefix = "";
+        if (u.startsWith("http://")) {
+            prefix = "http://";
+            u = u.substring(7);
+        } else if (u.startsWith("https://")) {
+            prefix = "https://";
+            u = u.substring(8);
+        }
+
+        if (u.startsWith("www.")) {
+            u = u.substring(4);
+        }
+
+        return prefix + u;
     }
 
     @Override

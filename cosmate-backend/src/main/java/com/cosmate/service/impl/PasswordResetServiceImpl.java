@@ -66,7 +66,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
 
         // send email with backend activation link
         try {
-            String link = backendUrl + "/api/auth/password-reset?token=" + token;
+            String link = sanitizeBackendUrl(backendUrl) + "/api/auth/password-reset?token=" + token;
             SimpleMailMessage msg = new SimpleMailMessage();
             msg.setTo(user.getEmail());
             msg.setSubject("Đặt lại mật khẩu CosMate");
@@ -82,6 +82,30 @@ public class PasswordResetServiceImpl implements PasswordResetService {
         }
 
         return saved;
+    }
+
+    // Normalize backend URL: remove trailing slash and remove a leading "www." from the host if present
+    private String sanitizeBackendUrl(String url) {
+        if (url == null) return "";
+        String u = url.trim();
+        if (u.isEmpty()) return "";
+        // remove trailing slash
+        while (u.endsWith("/")) u = u.substring(0, u.length() - 1);
+
+        String prefix = "";
+        if (u.startsWith("http://")) {
+            prefix = "http://";
+            u = u.substring(7);
+        } else if (u.startsWith("https://")) {
+            prefix = "https://";
+            u = u.substring(8);
+        }
+
+        if (u.startsWith("www.")) {
+            u = u.substring(4);
+        }
+
+        return prefix + u;
     }
 
     @Override

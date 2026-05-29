@@ -259,6 +259,22 @@ public class AIServiceImpl implements AIService {
         });
     }
 
+    private boolean isGenderMatch(String costumeGender, String preferredGender) {
+        if (preferredGender == null || "ALL".equalsIgnoreCase(preferredGender)) {
+            return true;
+        }
+        if (costumeGender == null || "UNISEX".equalsIgnoreCase(costumeGender) || "GENDERLESS".equalsIgnoreCase(costumeGender)) {
+            return true;
+        }
+        if ("MALE".equalsIgnoreCase(preferredGender)) {
+            return "MALE".equalsIgnoreCase(costumeGender);
+        }
+        if ("FEMALE".equalsIgnoreCase(preferredGender)) {
+            return "FEMALE".equalsIgnoreCase(costumeGender);
+        }
+        return false;
+    }
+
     /**
      * Phân tích hồ sơ người dùng và đưa ra gợi ý nhân vật Cosplay phù hợp.
      */
@@ -312,6 +328,7 @@ public class AIServiceImpl implements AIService {
                 List<Costume> vectorFallback = costumeRepository.findAllWithVector().stream()
                         .filter(c -> c.getTextVector() != null && !c.getTextVector().isEmpty())
                         .filter(c -> !candidateIds.contains(c.getId()))
+                        .filter(c -> isGenderMatch(c.getGender(), request.getPreferredGender()))
                         .sorted((a, b) -> {
                             try {
                                 List<Double> vecA = objectMapper.readValue(a.getTextVector(), new TypeReference<List<Double>>() {});
@@ -324,13 +341,17 @@ public class AIServiceImpl implements AIService {
             }
 
             List<Costume> costumes = costumeRepository.findAllById(new ArrayList<>(candidateIds));
-            return costumes.stream().map(c -> SearchResponse.builder()
-                    .costumeId(c.getId())
-                    .costumeName(c.getName())
-                    .imageUrl(c.getImages().isEmpty() ? "" : c.getImages().get(0).getImageUrl())
-                    .price(c.getPricePerDay())
-                    .similarityScore(0.80 + (new java.util.Random().nextDouble() * 0.19999))
-                    .build()).limit(30).collect(Collectors.toList());
+            return costumes.stream()
+                    .filter(c -> isGenderMatch(c.getGender(), request.getPreferredGender()))
+                    .map(c -> SearchResponse.builder()
+                            .costumeId(c.getId())
+                            .costumeName(c.getName())
+                            .imageUrl(c.getImages().isEmpty() ? "" : c.getImages().get(0).getImageUrl())
+                            .price(c.getPricePerDay())
+                            .similarityScore(0.80 + (new java.util.Random().nextDouble() * 0.19999))
+                            .build())
+                    .limit(30)
+                    .collect(Collectors.toList());
 
         } catch (Exception e) {
             log.error("Lỗi Recommend AI: {}", e.getMessage(), e);

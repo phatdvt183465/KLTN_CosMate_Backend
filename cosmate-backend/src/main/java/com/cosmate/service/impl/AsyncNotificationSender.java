@@ -3,6 +3,7 @@ package com.cosmate.service.impl;
 import com.cosmate.entity.Notification;
 import com.cosmate.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.mail.SimpleMailMessage;
@@ -19,6 +20,9 @@ public class AsyncNotificationSender {
     private final JavaMailSender mailSender;
     private final UserRepository userRepository;
 
+    @Value("${spring.mail.username:}")
+    private String mailFrom;
+
     private static final Logger logger = LoggerFactory.getLogger(AsyncNotificationSender.class);
 
     @Async("taskExecutor")
@@ -33,6 +37,7 @@ public class AsyncNotificationSender {
                     String to = u.getEmail();
                     if (to != null && !to.isBlank()) {
                         SimpleMailMessage msg = new SimpleMailMessage();
+                        if (mailFrom != null && !mailFrom.isBlank()) msg.setFrom(mailFrom);
                         msg.setTo(to);
                         msg.setSubject(saved.getHeader() == null ? "Thông báo từ CosMate" : saved.getHeader());
                         String body = saved.getContent() == null ? "" : saved.getContent();

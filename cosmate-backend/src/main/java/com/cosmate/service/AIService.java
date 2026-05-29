@@ -16,6 +16,7 @@ public interface AIService {
     // --- TÌM KIẾM & GỢI Ý ---
     List<SearchResponse> searchSimilarCostumes(SearchByImageRequest request);
     List<SearchResponse> recommendCosplay(RecommendationRequest request);
+    com.cosmate.dto.response.ArchetypeStatsResponse getArchetypeStats(String archetypeId);
 
     // --- XỬ LÝ VECTOR (TỐI ƯU API) ---
     // Nâng cấp: Cho phép chọn cập nhật Text hay Image hay cả 2

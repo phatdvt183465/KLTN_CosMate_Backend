@@ -324,20 +324,47 @@ public class AIServiceImpl implements AIService {
 
             // TẦNG 3: AI VECTOR FALLBACK (COLD START)
             if (candidateIds.size() < 5) {
-                List<Double> queryVector = selfProxy.callGeminiGetVector(searchContent);
-                List<Costume> vectorFallback = costumeRepository.findAllWithVector().stream()
-                        .filter(c -> c.getTextVector() != null && !c.getTextVector().isEmpty())
-                        .filter(c -> !candidateIds.contains(c.getId()))
-                        .filter(c -> isGenderMatch(c.getGender(), request.getPreferredGender()))
-                        .sorted((a, b) -> {
-                            try {
-                                List<Double> vecA = objectMapper.readValue(a.getTextVector(), new TypeReference<List<Double>>() {});
-                                List<Double> vecB = objectMapper.readValue(b.getTextVector(), new TypeReference<List<Double>>() {});
-                                return Double.compare(calculateCosineSimilarity(queryVector, vecB), calculateCosineSimilarity(queryVector, vecA));
-                            } catch (Exception e) { return 0; }
-                        })
-                        .limit(30).collect(Collectors.toList());
-                for (Costume costume : vectorFallback) candidateIds.add(costume.getId());
+                try {
+                    List<Double> queryVector = selfProxy.callGeminiGetVector(searchContent);
+                    List<Costume> vectorFallback = costumeRepository.findAllWithVector().stream()
+                            .filter(c -> c.getTextVector() != null && !c.getTextVector().isEmpty())
+                            .filter(c -> !candidateIds.contains(c.getId()))
+                            .filter(c -> isGenderMatch(c.getGender(), request.getPreferredGender()))
+                            .sorted((a, b) -> {
+                                try {
+                                    List<Double> vecA = objectMapper.readValue(a.getTextVector(), new TypeReference<List<Double>>() {});
+                                    List<Double> vecB = objectMapper.readValue(b.getTextVector(), new TypeReference<List<Double>>() {});
+                                    return Double.compare(calculateCosineSimilarity(queryVector, vecB), calculateCosineSimilarity(queryVector, vecA));
+                                } catch (Exception e) { return 0; }
+                            })
+                            .limit(30).collect(Collectors.toList());
+                    for (Costume costume : vectorFallback) candidateIds.add(costume.getId());
+                } catch (Exception e) {
+                    log.warn("Gemini Vector Fallback thất bại (Lỗi: {}). Sử dụng fallback bằng từ khóa nhân vật...", e.getMessage());
+                    // Fallback: Tìm các trang phục khớp với tên các nhân vật tiêu biểu của Archetype
+                    JsonNode famousCharacters = targetArchetype.path("famousCharacters");
+                    if (famousCharacters != null && famousCharacters.isArray()) {
+                        for (JsonNode charNode : famousCharacters) {
+                            String charName = charNode.asText();
+                            List<Costume> matchCostumes = costumeRepository.findByNameContainingIgnoreCaseAndStatusNot(charName, "DELETED");
+                            for (Costume c : matchCostumes) {
+                                if (isGenderMatch(c.getGender(), request.getPreferredGender())) {
+                                    candidateIds.add(c.getId());
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Nếu vẫn ít hơn 5 sản phẩm, lấy ngẫu nhiên một số trang phục có status AVAILABLE làm dự phòng cuối cùng
+                    if (candidateIds.size() < 5) {
+                        List<Costume> randomAvailable = costumeRepository.findAll().stream()
+                                .filter(c -> !"DELETED".equals(c.getStatus()))
+                                .filter(c -> isGenderMatch(c.getGender(), request.getPreferredGender()))
+                                .limit(20)
+                                .collect(Collectors.toList());
+                        for (Costume c : randomAvailable) candidateIds.add(c.getId());
+                    }
+                }
             }
 
             List<Costume> costumes = costumeRepository.findAllById(new ArrayList<>(candidateIds));
@@ -349,6 +376,7 @@ public class AIServiceImpl implements AIService {
                             .imageUrl(c.getImages().isEmpty() ? "" : c.getImages().get(0).getImageUrl())
                             .price(c.getPricePerDay())
                             .similarityScore(0.80 + (new java.util.Random().nextDouble() * 0.19999))
+                            .isCollaborative(cachedIds.contains(c.getId()))
                             .build())
                     .limit(30)
                     .collect(Collectors.toList());
@@ -1418,5 +1446,14 @@ public class AIServiceImpl implements AIService {
         } catch (Exception e) {
             log.error("Lỗi khi AI phân tích review id {}: {}", reviewId, e.getMessage());
         }
+    }
+
+    @Override
+    public com.cosmate.dto.response.ArchetypeStatsResponse getArchetypeStats(String archetypeId) {
+        int count = userRepository.countByCurrentArchetype(archetypeId);
+        return com.cosmate.dto.response.ArchetypeStatsResponse.builder()
+                .archetypeId(archetypeId)
+                .totalUsers(count)
+                .build();
     }
 }

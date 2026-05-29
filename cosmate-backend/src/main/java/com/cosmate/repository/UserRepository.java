@@ -16,4 +16,6 @@ public interface UserRepository extends BaseCrudRepository<User, Integer> {
     @org.springframework.data.jpa.repository.Modifying
     @org.springframework.data.jpa.repository.Query("UPDATE User u SET u.numberOfToken = u.numberOfToken - :amount WHERE u.id = :id AND u.numberOfToken >= :amount")
     int deductTokensSafe(@org.springframework.data.repository.query.Param("id") Integer id, @org.springframework.data.repository.query.Param("amount") int amount);
+
+    int countByCurrentArchetype(String currentArchetype);
 }

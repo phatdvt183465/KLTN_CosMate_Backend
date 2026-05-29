@@ -75,6 +75,14 @@ public class AIController {
                 .build();
     }
 
+    @GetMapping("/archetype-stats/{archetypeId}")
+    public ApiResponse<com.cosmate.dto.response.ArchetypeStatsResponse> getStats(@PathVariable String archetypeId) {
+        return ApiResponse.<com.cosmate.dto.response.ArchetypeStatsResponse>builder()
+                .result(aiService.getArchetypeStats(archetypeId))
+                .message("Lấy thống kê số lượng người dùng theo nhóm tính cách thành công!")
+                .build();
+    }
+
     // API Chấm điểm Pose: POST /api/search/pose-score
     @PostMapping(value = "/pose-score", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<PoseScoringResponse> scorePose(@Valid @ModelAttribute PoseScoringRequest request) {

@@ -12,4 +12,5 @@ public class SearchResponse {
     private String imageUrl;
     private BigDecimal price;
     private double similarityScore;
+    private Boolean isCollaborative;
 }

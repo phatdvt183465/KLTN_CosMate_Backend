@@ -40,6 +40,9 @@ public class PasswordResetServiceImpl implements PasswordResetService {
     @Value("${frontend.url:http://localhost:5173}")
     private String frontendUrl;
 
+    @Value("${spring.mail.username:}")
+    private String mailFrom;
+
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Override
@@ -68,6 +71,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
         try {
             String link = sanitizeBackendUrl(backendUrl) + "/api/auth/password-reset?token=" + token;
             SimpleMailMessage msg = new SimpleMailMessage();
+            if (mailFrom != null && !mailFrom.isBlank()) msg.setFrom(mailFrom);
             msg.setTo(user.getEmail());
             msg.setSubject("Đặt lại mật khẩu CosMate");
             String body = "Xin chào " + (user.getFullName() == null ? "" : user.getFullName()) + ",\n\n" +

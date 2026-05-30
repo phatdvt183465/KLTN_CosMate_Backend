@@ -1,12 +1,13 @@
 package com.cosmate.configuration;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 public class AiModelRouter {
 
-    // Tách riêng prefix URL
-    private static final String BASE_URL = "https://generativelanguage.googleapis.com/v1beta/";
+    @Value("${gemini.api.base-url:https://generativelanguage.googleapis.com/v1beta/}")
+    private String baseUrl;
 
     /**
      * Dành cho tính năng Tạo Vector (Dual-Vector Search)
@@ -33,11 +34,11 @@ public class AiModelRouter {
      * Model Backup: Gemini 3.1 Flash Lite (Backup 1)
      */
     public String getReasoningModelName(boolean isBackup) {
-        return isBackup ? "models/gemini-3.1-flash-lite-preview" : "models/gemini-3.5-flash-preview";
+        return isBackup ? "models/gemini-3.1-flash-lite-preview" : "models/gemini-3.5-flash";
     }
 
     // Tiện ích lấy Full URL
     public String buildUrl(String modelName, String action) {
-        return BASE_URL + modelName + ":" + action;
+        return baseUrl + modelName + ":" + action;
     }
 }

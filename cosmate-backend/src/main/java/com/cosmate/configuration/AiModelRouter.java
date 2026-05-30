@@ -1,5 +1,6 @@
 package com.cosmate.configuration;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -33,7 +34,7 @@ public class AiModelRouter {
      * Model Backup: Gemini 3.1 Flash Lite (Backup 1)
      */
     public String getReasoningModelName(boolean isBackup) {
-        return isBackup ? "models/gemini-3.1-flash-lite-preview" : "models/gemini-3.5-flash-preview";
+        return isBackup ? "models/gemini-3.1-flash-lite-preview" : "models/gemini-3.5-flash";
     }
 
     // Tiện ích lấy Full URL

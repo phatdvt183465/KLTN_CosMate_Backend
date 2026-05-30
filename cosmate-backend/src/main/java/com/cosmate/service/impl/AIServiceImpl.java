@@ -913,12 +913,9 @@ public class AIServiceImpl implements AIService {
             String resultText = extractGeminiResponseText(response);
 
             return resultText.isEmpty() ? "Không thể generate được description, vui lòng tả thủ công." : resultText.replaceAll("[*#_]", "");
-        } catch (org.springframework.web.client.HttpClientErrorException e) {
-            log.error("Google AI Studio API Error: {} - {}", e.getMessage(), e.getResponseBodyAsString(), e);
-            throw new RuntimeException("Google AI Studio Error: " + e.getStatusCode() + " - " + e.getResponseBodyAsString(), e);
         } catch (Exception e) {
-            log.error("Lỗi khi AI generate description: {}", e.getMessage(), e);
-            throw new RuntimeException("Lỗi AI generate description: " + e.getMessage(), e);
+            log.error("Lỗi khi AI generate description: {}", e.getMessage());
+            throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.AI_SERVICE_OVERLOADED);
         }
     }
 

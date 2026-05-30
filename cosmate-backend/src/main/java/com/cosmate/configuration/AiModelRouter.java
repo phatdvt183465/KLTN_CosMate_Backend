@@ -6,8 +6,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class AiModelRouter {
 
-    @Value("${gemini.api.base-url:https://generativelanguage.googleapis.com/v1beta/}")
-    private String baseUrl;
+    // Tách riêng prefix URL
+    private static final String BASE_URL = "https://generativelanguage.googleapis.com/v1beta/";
 
     /**
      * Dành cho tính năng Tạo Vector (Dual-Vector Search)
@@ -39,6 +39,6 @@ public class AiModelRouter {
 
     // Tiện ích lấy Full URL
     public String buildUrl(String modelName, String action) {
-        return baseUrl + modelName + ":" + action;
+        return BASE_URL + modelName + ":" + action;
     }
 }

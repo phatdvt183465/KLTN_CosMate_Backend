@@ -1210,8 +1210,24 @@ public class AIServiceImpl implements AIService {
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
 
-        ResponseEntity<JsonNode> response = restTemplate.postForEntity(url, entity, JsonNode.class);
-        return response.getBody();
+        try {
+            ResponseEntity<JsonNode> response = restTemplate.postForEntity(url, entity, JsonNode.class);
+            return response.getBody();
+        } catch (Exception e) {
+            // Nếu model dự phòng 1 (Gemini 3.1 Flash Lite) của tác vụ phức tạp bị lỗi, chuyển tiếp sang model dự phòng cuối cùng (Gemini 3 Flash)
+            if (isBackup && isComplexTask) {
+                log.warn("Model dự phòng 1 ({}) thất bại. Thử gọi model dự phòng cuối cùng (models/gemini-3-flash)...", modelName);
+                try {
+                    String fallbackUrl = aiModelRouter.buildUrl("models/gemini-3-flash", "generateContent") + "?key=" + apiKey;
+                    ResponseEntity<JsonNode> response = restTemplate.postForEntity(fallbackUrl, entity, JsonNode.class);
+                    return response.getBody();
+                } catch (Exception ex) {
+                    log.error("Cả 3 model của tác vụ phức tạp đều thất bại: {}", ex.getMessage());
+                    throw ex;
+                }
+            }
+            throw e;
+        }
     }
 
     // =========================================================================

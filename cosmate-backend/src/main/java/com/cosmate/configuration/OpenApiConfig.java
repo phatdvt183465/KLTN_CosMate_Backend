@@ -20,7 +20,8 @@ public class OpenApiConfig {
     public OpenAPI customOpenAPI() {
         return new OpenAPI()
                 .servers(List.of(
-                        new Server().url("https://api.cosmate.site")
+                        new Server().url("http://localhost:8080").description("Local Development"),
+                        new Server().url("https://api.cosmate.site").description("Production API")
                 ))
                 .info(new Info().title("CosMate API").version("v1"))
                 .components(new Components()

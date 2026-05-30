@@ -29,7 +29,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI().toLowerCase();
-<<<<<<< HEAD
 
         return path.startsWith("/v3/api-docs")
                 || path.startsWith("/swagger-ui")
@@ -44,18 +43,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 || path.startsWith("/api/events")
                 || path.startsWith("/api/vnpay/return")
                 || "options".equalsIgnoreCase(request.getMethod());
-=======
-        if (path.startsWith("/v3/api-docs") ||
-                path.startsWith("/swagger-ui") ||
-                path.startsWith("/swagger-resources") ||
-                path.startsWith("/webjars") ||
-                path.startsWith("/configuration") ||
-                path.equals("/swagger-ui.html") ||
-                "options".equalsIgnoreCase(request.getMethod())) {
-            return true;
-        }
-        return false;
->>>>>>> parent of 176b1e9 (deploy code)
     }
 
     @Override
@@ -70,8 +57,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             logger.debug("Authorization header present (masked)='{}'", masked);
         }
 
-        if (StringUtils.hasText(header) && header.toLowerCase().startsWith("bearer")) {
-            String token = header;
+        if (StringUtils.hasText(header) && header.startsWith("Bearer ")) {
+            String token = header.substring(7).trim();
             logger.debug("JWT header present, raw header='{}'", header);
 
             // Normalize: strip any number of leading "Bearer " prefixes (case-insensitive)

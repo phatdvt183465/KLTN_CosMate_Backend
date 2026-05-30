@@ -24,7 +24,7 @@ public class AiModelRouter {
      * Model Backup: Gemini 3 Flash
      */
     public String getFastModelName(boolean isBackup) {
-        return isBackup ? "models/gemini-3-flash" : "models/gemini-3.1-flash-lite";
+        return isBackup ? "models/gemini-3-flash-preview" : "models/gemini-3.1-flash-lite-preview";
     }
 
     /**
@@ -33,7 +33,7 @@ public class AiModelRouter {
      * Model Backup: Gemini 3.1 Flash Lite (Backup 1)
      */
     public String getReasoningModelName(boolean isBackup) {
-        return isBackup ? "models/gemini-3.1-flash-lite" : "models/gemini-3.5-flash";
+        return isBackup ? "models/gemini-3.1-flash-lite-preview" : "models/gemini-3.5-flash-preview";
     }
 
     // Tiện ích lấy Full URL

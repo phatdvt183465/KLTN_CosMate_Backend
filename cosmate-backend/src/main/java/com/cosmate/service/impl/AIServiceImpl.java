@@ -98,6 +98,9 @@ public class AIServiceImpl implements AIService {
     @Value("${gemini.api.key}")
     private String apiKey;
 
+    @Value("${fal.api.key}")
+    private String falApiKey;
+
     /**
      * Tìm kiếm các trang phục có độ tương đồng cao bằng thuật toán Cosine Similarity.
      */
@@ -1451,5 +1454,95 @@ public class AIServiceImpl implements AIService {
                 .archetypeId(archetypeId)
                 .totalUsers(count)
                 .build();
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public String generateVirtualTryOn(Integer costumeId, MultipartFile personImage) {
+        log.info("Bắt đầu thực hiện Virtual Try-On cho Costume ID: {}", costumeId);
+        
+        // 1. Tìm Costume theo costumeId
+        Costume costume = costumeRepository.findById(costumeId)
+                .orElseThrow(() -> new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.COSTUME_NOT_FOUND));
+        
+        // Lấy URL của hình ảnh đầu tiên của bộ đồ này
+        if (costume.getImages() == null || costume.getImages().isEmpty()) {
+            log.error("Costume ID {} không có hình ảnh để ghép đồ!", costumeId);
+            throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.IMAGE_NOT_FOUND);
+        }
+        String garmentImageUrl = costume.getImages().get(0).getImageUrl();
+        log.info("Lấy garment_image_url thành công: {}", garmentImageUrl);
+        
+        // 2. Upload ảnh personImage của user lên Firebase
+        if (personImage == null || personImage.isEmpty()) {
+            throw new IllegalArgumentException("Ảnh người dùng không được rỗng!");
+        }
+        
+        String humanImageUrl;
+        try {
+            String originalName = personImage.getOriginalFilename();
+            String safeName = originalName == null ? String.valueOf(System.currentTimeMillis()) : originalName.replaceAll("[^a-zA-Z0-9._-]", "_");
+            String path = String.format("vto/%d_%s", System.currentTimeMillis(), safeName);
+            humanImageUrl = firebaseStorageService.uploadFile(personImage, path);
+            log.info("Upload human_image lên Firebase thành công: {}", humanImageUrl);
+        } catch (Exception e) {
+            log.error("Lỗi khi upload ảnh người dùng lên Firebase: {}", e.getMessage(), e);
+            throw new RuntimeException("Không thể tải ảnh người dùng lên Firebase: " + e.getMessage());
+        }
+        
+        // 3. Dùng RestTemplate gọi API dạng POST tới endpoint: https://fal.run/fal-ai/idm-vton
+        try {
+            String url = "https://fal.run/fal-ai/idm-vton";
+            
+            // Set Headers
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Key " + falApiKey);
+            
+            // Set Body
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("human_image_url", humanImageUrl);
+            body.put("garment_image_url", garmentImageUrl);
+            body.put("description", "Cosplay costume");
+            body.put("category", "upper_body");
+            
+            log.info("Gửi request POST tới Fal.ai VTO API: {}", body.toString());
+            HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
+            
+            ResponseEntity<JsonNode> response = restTemplate.postForEntity(url, entity, JsonNode.class);
+            JsonNode responseNode = response.getBody();
+            log.info("Nhận phản hồi thành công từ Fal.ai VTO API: {}", responseNode);
+            
+            if (responseNode == null) {
+                throw new RuntimeException("Không nhận được phản hồi (null) từ Fal.ai VTO API!");
+            }
+            
+            // Parse JSON response:
+            String outputUrl = null;
+            if (responseNode.has("image") && responseNode.path("image").has("url")) {
+                outputUrl = responseNode.path("image").path("url").asText();
+            } else if (responseNode.has("images") && responseNode.path("images").isArray() && !responseNode.path("images").isEmpty()) {
+                JsonNode firstImage = responseNode.path("images").get(0);
+                if (firstImage.isObject() && firstImage.has("url")) {
+                    outputUrl = firstImage.path("url").asText();
+                } else {
+                    outputUrl = firstImage.asText();
+                }
+            }
+            
+            if (outputUrl == null || outputUrl.trim().isEmpty()) {
+                throw new RuntimeException("Không tìm thấy trường URL hình ảnh kết quả từ phản hồi của Fal.ai!");
+            }
+            
+            log.info("Thực hiện Virtual Try-On thành công! URL ảnh kết quả: {}", outputUrl);
+            return outputUrl;
+            
+        } catch (HttpClientErrorException | HttpServerErrorException e) {
+            log.error("Lỗi HTTP khi gọi Fal.ai VTO API: status={}, body={}", e.getStatusCode(), e.getResponseBodyAsString(), e);
+            throw new RuntimeException("Gọi Fal.ai API thất bại: " + e.getMessage() + " - " + e.getResponseBodyAsString());
+        } catch (Exception e) {
+            log.error("Lỗi trong quá trình xử lý Virtual Try-On với Fal.ai: {}", e.getMessage(), e);
+            throw new RuntimeException("Thực hiện Virtual Try-On thất bại: " + e.getMessage());
+        }
     }
 }

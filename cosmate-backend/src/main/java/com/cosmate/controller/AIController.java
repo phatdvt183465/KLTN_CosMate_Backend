@@ -223,6 +223,17 @@ public class AIController {
                 .build();
     }
 
+    @PostMapping(value = "/vto", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<String> generateVirtualTryOn(
+            @RequestParam("costumeId") Integer costumeId,
+            @RequestParam("personImage") MultipartFile personImage) {
+        String resultUrl = aiService.generateVirtualTryOn(costumeId, personImage);
+        return ApiResponse.<String>builder()
+                .result(resultUrl)
+                .message("Thực hiện ghép thử đồ thành công!")
+                .build();
+    }
+
     // --- Hàm Helper ---
     private Integer getCurrentUserId() {
         org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();

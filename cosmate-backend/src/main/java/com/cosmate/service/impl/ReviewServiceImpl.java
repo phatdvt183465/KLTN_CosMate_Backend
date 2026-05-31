@@ -237,4 +237,16 @@ public class ReviewServiceImpl implements ReviewService {
             providerRepository.save(provider);
         });
     }
+
+    @Override
+    public List<ReviewResponse> getAllReviews() {
+        List<Review> reviews = reviewRepository.findAll();
+        List<ReviewResponse> out = new ArrayList<>();
+        if (reviews == null || reviews.isEmpty()) return out;
+        for (Review r : reviews) {
+            ReviewResponse resp = mapToDto(r);
+            out.add(resp);
+        }
+        return out;
+    }
 }

@@ -21,6 +21,22 @@ public class ReviewController {
 
     private final ReviewService reviewService;
 
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<ReviewResponse>>> getAllReviews() {
+        ApiResponse<List<ReviewResponse>> api = new ApiResponse<>();
+        try {
+            List<ReviewResponse> resp = reviewService.getAllReviews();
+            api.setCode(0);
+            api.setMessage("OK");
+            api.setResult(resp);
+            return ResponseEntity.ok(api);
+        } catch (Exception ex) {
+            api.setCode(500);
+            api.setMessage("Failed to fetch all reviews: " + ex.getMessage());
+            return ResponseEntity.status(500).body(api);
+        }
+    }
+
     @PostMapping(consumes = {"multipart/form-data"})
     public ResponseEntity<ApiResponse<ReviewResponse>> createReview(
             @RequestParam Integer cosplayerId,

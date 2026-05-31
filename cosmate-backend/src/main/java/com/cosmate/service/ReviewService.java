@@ -20,4 +20,6 @@ public interface ReviewService {
     ReviewResponse replyToReview(Integer reviewId, Integer providerId, ProviderReplyRequest request);
 
     ReviewResponse toggleToxicStatus(Integer reviewId);
+
+    List<ReviewResponse> getAllReviews();
 }

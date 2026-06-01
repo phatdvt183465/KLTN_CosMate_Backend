@@ -1,6 +1,7 @@
 package com.cosmate.controller;
 
 import com.cosmate.dto.request.CreateCancellationPolicyRequest;
+import com.cosmate.dto.request.UpdateCancellationPolicyRequest;
 import com.cosmate.dto.response.ApiResponse;
 import com.cosmate.dto.response.ProviderCancellationPolicyResponse;
 import com.cosmate.entity.ProviderCancellationPolicy;
@@ -113,6 +114,44 @@ public class ProviderCancellationPolicyController {
         }
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse<ProviderCancellationPolicyResponse>> update(@PathVariable Integer id, @RequestBody UpdateCancellationPolicyRequest request) {
+        ApiResponse<ProviderCancellationPolicyResponse> api = new ApiResponse<>();
+        try {
+            ProviderCancellationPolicy p = ProviderCancellationPolicy.builder()
+                    .id(id)
+                    .penaltyType(request.getPenaltyType())
+                    .penaltyValue(request.getPenaltyValue())
+                    .description(request.getDescription())
+                    .build();
+
+            ProviderCancellationPolicy saved = policyService.update(p);
+            ProviderCancellationPolicyResponse resp = ProviderCancellationPolicyResponse.builder()
+                    .id(saved.getId())
+                    .providerId(saved.getProvider() == null ? null : saved.getProvider().getId())
+                    .minHoursBefore(saved.getMinHoursBefore())
+                    .maxHoursBefore(saved.getMaxHoursBefore())
+                    .penaltyType(saved.getPenaltyType())
+                    .penaltyValue(saved.getPenaltyValue())
+                    .description(saved.getDescription())
+                    .build();
+
+            api.setCode(0);
+            api.setMessage("OK");
+            api.setResult(resp);
+            return ResponseEntity.ok(api);
+        } catch (AppException ae) {
+            ErrorCode ec = ae.getErrorCode();
+            api.setCode(ec.getCode());
+            api.setMessage(ec.getMessage());
+            return ResponseEntity.badRequest().body(api);
+        } catch (Exception e) {
+            api.setCode(99999);
+            api.setMessage("Unexpected server error: " + e.getMessage());
+            return ResponseEntity.status(500).body(api);
+        }
+    }
+
     @PostMapping("/seed-missing")
     public ResponseEntity<ApiResponse<Integer>> seedDefaultsForMissingProviders() {
         ApiResponse<Integer> api = new ApiResponse<>();
@@ -140,4 +179,3 @@ public class ProviderCancellationPolicyController {
         }
     }
 }
-

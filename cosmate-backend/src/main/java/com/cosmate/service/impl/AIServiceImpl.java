@@ -98,6 +98,9 @@ public class AIServiceImpl implements AIService {
     @Value("${gemini.api.key}")
     private String apiKey;
 
+    @Value("${tryon.api.key}")
+    private String tryonApiKey;
+
     @Value("${fal.api.key}")
     private String falApiKey;
 
@@ -1458,20 +1461,22 @@ public class AIServiceImpl implements AIService {
 
     @Override
     @org.springframework.transaction.annotation.Transactional
-    public String generateVirtualTryOn(Integer costumeId, MultipartFile personImage) {
-        log.info("Bắt đầu thực hiện Virtual Try-On cho Costume ID: {}", costumeId);
+    public String generateVirtualTryOn(Integer costumeId, String garmentImageUrl, MultipartFile personImage, String provider) {
+        String activeProvider = provider != null ? provider.trim().toUpperCase() : "FAL";
         
-        // 1. Tìm Costume theo costumeId
-        Costume costume = costumeRepository.findById(costumeId)
+        // Đồng bộ trừ 50 token cho mọi provider
+        selfProxy.consumeTokens(getCurrentUserIdFromContext(), 50);
+        
+        log.info("Bắt đầu thực hiện Virtual Try-On cho Costume ID: {} với Garment Image URL: {} qua Provider: {}", costumeId, garmentImageUrl, activeProvider);
+        
+        // 1. Tìm Costume theo costumeId (để kiểm tra hợp lệ)
+        costumeRepository.findById(costumeId)
                 .orElseThrow(() -> new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.COSTUME_NOT_FOUND));
         
-        // Lấy URL của hình ảnh đầu tiên của bộ đồ này
-        if (costume.getImages() == null || costume.getImages().isEmpty()) {
-            log.error("Costume ID {} không có hình ảnh để ghép đồ!", costumeId);
-            throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.IMAGE_NOT_FOUND);
+        if (garmentImageUrl == null || garmentImageUrl.trim().isEmpty()) {
+            throw new IllegalArgumentException("Đường dẫn ảnh trang phục không được rỗng!");
         }
-        String garmentImageUrl = costume.getImages().get(0).getImageUrl();
-        log.info("Lấy garment_image_url thành công: {}", garmentImageUrl);
+        log.info("Sử dụng garment_image_url thành công: {}", garmentImageUrl);
         
         // 2. Upload ảnh personImage của user lên Firebase
         if (personImage == null || personImage.isEmpty()) {
@@ -1490,59 +1495,369 @@ public class AIServiceImpl implements AIService {
             throw new RuntimeException("Không thể tải ảnh người dùng lên Firebase: " + e.getMessage());
         }
         
-        // 3. Dùng RestTemplate gọi API dạng POST tới endpoint: https://fal.run/fal-ai/idm-vton
-        try {
-            String url = "https://fal.run/fal-ai/idm-vton";
-            
-            // Set Headers
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("Authorization", "Key " + falApiKey);
-            
-            // Set Body
-            ObjectNode body = objectMapper.createObjectNode();
-            body.put("human_image_url", humanImageUrl);
-            body.put("garment_image_url", garmentImageUrl);
-            body.put("description", "Cosplay costume");
-            body.put("category", "upper_body");
-            
-            log.info("Gửi request POST tới Fal.ai VTO API: {}", body.toString());
-            HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
-            
-            ResponseEntity<JsonNode> response = restTemplate.postForEntity(url, entity, JsonNode.class);
-            JsonNode responseNode = response.getBody();
-            log.info("Nhận phản hồi thành công từ Fal.ai VTO API: {}", responseNode);
-            
-            if (responseNode == null) {
-                throw new RuntimeException("Không nhận được phản hồi (null) từ Fal.ai VTO API!");
+        // 3. Rẽ nhánh gọi nhà cung cấp API
+        if ("TRYON".equals(activeProvider)) {
+            return executeTryOnLabsAsync(personImage, garmentImageUrl);
+        } else {
+            // Fal.ai
+            try {
+                String url = "https://fal.run/fal-ai/idm-vton";
+                
+                // Set Headers
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                headers.set("Authorization", "Key " + falApiKey);
+                
+                // Set Body
+                ObjectNode body = objectMapper.createObjectNode();
+                body.put("human_image_url", humanImageUrl);
+                body.put("garment_image_url", garmentImageUrl);
+                body.put("description", "Cosplay costume");
+                body.put("category", "upper_body");
+                
+                log.info("Gửi request POST tới Fal.ai VTO API: {}", body.toString());
+                HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
+                
+                ResponseEntity<JsonNode> response = restTemplate.postForEntity(url, entity, JsonNode.class);
+                JsonNode responseNode = response.getBody();
+                log.info("Nhận phản hồi thành công từ Fal.ai VTO API: {}", responseNode);
+                
+                if (responseNode == null) {
+                    throw new RuntimeException("Không nhận được phản hồi (null) từ Fal.ai VTO API!");
+                }
+                
+                // Parse JSON response:
+                String outputUrl = null;
+                if (responseNode.has("image") && responseNode.path("image").has("url")) {
+                    outputUrl = responseNode.path("image").path("url").asText();
+                } else if (responseNode.has("images") && responseNode.path("images").isArray() && !responseNode.path("images").isEmpty()) {
+                    JsonNode firstImage = responseNode.path("images").get(0);
+                    if (firstImage.isObject() && firstImage.has("url")) {
+                        outputUrl = firstImage.path("url").asText();
+                    } else {
+                        outputUrl = firstImage.asText();
+                    }
+                }
+                
+                if (outputUrl == null || outputUrl.trim().isEmpty()) {
+                    throw new RuntimeException("Không tìm thấy trường URL hình ảnh kết quả từ phản hồi của Fal.ai!");
+                }
+                
+                log.info("Thực hiện Fal.ai Virtual Try-On thành công! URL ảnh kết quả: {}", outputUrl);
+                return outputUrl;
+                
+            } catch (HttpClientErrorException | HttpServerErrorException e) {
+                log.error("Lỗi HTTP khi gọi Fal.ai VTO API: status={}, body={}", e.getStatusCode(), e.getResponseBodyAsString(), e);
+                throw new RuntimeException("Gọi Fal.ai API thất bại: " + e.getStatusCode() + " - " + e.getResponseBodyAsString());
+            } catch (Exception e) {
+                log.error("Lỗi trong quá trình xử lý Virtual Try-On với Fal.ai: {}", e.getMessage(), e);
+                throw new RuntimeException("Thực hiện Fal.ai Virtual Try-On thất bại: " + e.getMessage());
             }
+        }
+    }
+
+    private String executeTryOnLabsAsync(MultipartFile personImage, String garmentImageUrl) {
+        log.info("Bắt đầu thực hiện TryOn Labs bất đồng bộ với Multipart file và tải garment image.");
+        try {
+            // 1.1 Upload human image (Multipart form-data)
+            HttpHeaders humanHeaders = new HttpHeaders();
+            humanHeaders.setContentType(MediaType.MULTIPART_FORM_DATA);
+            humanHeaders.set("Authorization", "Bearer " + tryonApiKey);
+
+            org.springframework.util.MultiValueMap<String, Object> humanBody = new org.springframework.util.LinkedMultiValueMap<>();
             
-            // Parse JSON response:
-            String outputUrl = null;
-            if (responseNode.has("image") && responseNode.path("image").has("url")) {
-                outputUrl = responseNode.path("image").path("url").asText();
-            } else if (responseNode.has("images") && responseNode.path("images").isArray() && !responseNode.path("images").isEmpty()) {
-                JsonNode firstImage = responseNode.path("images").get(0);
-                if (firstImage.isObject() && firstImage.has("url")) {
-                    outputUrl = firstImage.path("url").asText();
+            String originalName = personImage.getOriginalFilename();
+            String filename = (originalName == null || originalName.trim().isEmpty()) ? "human.jpg" : originalName;
+            NamedByteArrayResource humanResource = new NamedByteArrayResource(personImage.getBytes(), filename);
+            
+            humanBody.add("image", humanResource);
+            humanBody.add("type", "model");
+            humanBody.add("gender", "female");
+
+            log.info("TryOn Labs Bước 1.1: Upload human image (model) vật lý... Filename: {}", filename);
+            HttpEntity<org.springframework.util.MultiValueMap<String, Object>> humanEntity = new HttpEntity<>(humanBody, humanHeaders);
+            
+            ResponseEntity<JsonNode> humanResponse = restTemplate.postForEntity(
+                "https://prod.server.tryonlabs.ai/api/v1/experiment_image/", 
+                humanEntity, 
+                JsonNode.class
+            );
+            
+            JsonNode humanResNode = humanResponse.getBody();
+            String modelId = null;
+            if (humanResNode != null) {
+                if (humanResNode.has("id")) {
+                    modelId = humanResNode.path("id").asText();
+                } else if (humanResNode.has("image_id")) {
+                    modelId = humanResNode.path("image_id").asText();
+                }
+            }
+            log.info("TryOn Labs Bước 1.1 thành công. modelId: {}", modelId);
+            
+            // 1.2 Download garmentImageUrl and upload (Multipart form-data)
+            log.info("TryOn Labs Bước 1.2: Đang tải ảnh garment từ URL: {}", garmentImageUrl);
+            byte[] garmentBytes;
+            try {
+                garmentBytes = restTemplate.getForObject(garmentImageUrl, byte[].class);
+                if (garmentBytes == null || garmentBytes.length == 0) {
+                    throw new RuntimeException("Không tải được dữ liệu hình ảnh (0 bytes) từ URL: " + garmentImageUrl);
+                }
+                log.info("Tải ảnh garment thành công. Kích thước: {} bytes", garmentBytes.length);
+            } catch (Exception e) {
+                log.error("Lỗi khi tải ảnh garment từ URL: {}", e.getMessage(), e);
+                throw new RuntimeException("Không thể tải ảnh trang phục từ URL: " + e.getMessage());
+            }
+
+            HttpHeaders garmentHeaders = new HttpHeaders();
+            garmentHeaders.setContentType(MediaType.MULTIPART_FORM_DATA);
+            garmentHeaders.set("Authorization", "Bearer " + tryonApiKey);
+
+            org.springframework.util.MultiValueMap<String, Object> garmentBody = new org.springframework.util.LinkedMultiValueMap<>();
+            
+            NamedByteArrayResource garmentResource = new NamedByteArrayResource(garmentBytes, "garment.jpg");
+            garmentBody.add("image", garmentResource);
+            garmentBody.add("type", "garment");
+
+            log.info("TryOn Labs Bước 1.2: Upload garment image vật lý...");
+            HttpEntity<org.springframework.util.MultiValueMap<String, Object>> garmentEntity = new HttpEntity<>(garmentBody, garmentHeaders);
+            
+            ResponseEntity<JsonNode> garmentResponse = restTemplate.postForEntity(
+                "https://prod.server.tryonlabs.ai/api/v1/experiment_image/", 
+                garmentEntity, 
+                JsonNode.class
+            );
+            
+            JsonNode garmentResNode = garmentResponse.getBody();
+            String garmentId = null;
+            if (garmentResNode != null) {
+                if (garmentResNode.has("id")) {
+                    garmentId = garmentResNode.path("id").asText();
+                } else if (garmentResNode.has("image_id")) {
+                    garmentId = garmentResNode.path("image_id").asText();
+                }
+            }
+            log.info("TryOn Labs Bước 1.2 thành công. garmentId: {}", garmentId);
+            
+            // Kiểm tra ID hợp lệ
+            if (modelId == null || modelId.trim().isEmpty() || garmentId == null || garmentId.trim().isEmpty()) {
+                throw new RuntimeException("Không thể trích xuất ID ảnh từ TryOn Labs");
+            }
+            log.info("Lấy thành công ID từ TryOn: modelId={}, garmentId={}", modelId, garmentId);
+
+            // Bước 2: POST tới https://prod.server.tryonlabs.ai/api/v1/experiment/ để bắt đầu ghép đồ
+            HttpHeaders expHeaders = new HttpHeaders();
+            expHeaders.setContentType(MediaType.APPLICATION_JSON);
+            expHeaders.set("Authorization", "Bearer " + tryonApiKey);
+
+            ObjectNode expBody = objectMapper.createObjectNode();
+            expBody.put("person_id", modelId);
+            expBody.put("garment_id", garmentId);
+            expBody.put("action", "virtual_try_on");
+            
+            log.info("TryOn Labs Bước 2: Gửi request ghép đồ: {}", expBody.toString());
+            HttpEntity<String> expEntity = new HttpEntity<>(expBody.toString(), expHeaders);
+            ResponseEntity<JsonNode> expResponse = restTemplate.postForEntity(
+                "https://prod.server.tryonlabs.ai/api/v1/experiment/", 
+                expEntity, 
+                JsonNode.class
+            );
+            
+            JsonNode expResNode = expResponse.getBody();
+            String experimentId = null;
+            if (expResNode != null) {
+                if (expResNode.has("id")) {
+                    experimentId = expResNode.path("id").asText();
+                } else if (expResNode.has("experiment_id")) {
+                    experimentId = expResNode.path("experiment_id").asText();
+                } else if (expResNode.has("experiment")) {
+                    JsonNode expNode = expResNode.path("experiment");
+                    if (expNode.has("id")) {
+                        experimentId = expNode.path("id").asText();
+                    } else if (expNode.has("experiment_id")) {
+                        experimentId = expNode.path("experiment_id").asText();
+                    }
+                }
+            }
+            if (experimentId == null || experimentId.trim().isEmpty()) {
+                throw new RuntimeException("Khởi tạo tiến trình ghép đồ TryOn Labs thất bại: " + expResNode);
+            }
+            log.info("TryOn Labs Bước 2 thành công. experimentId: {}", experimentId);
+            
+            // Bước 3: Polling kiểm tra trạng thái mỗi 3 giây, tối đa 100 lần (300 giây)
+            String statusUrl = "https://prod.server.tryonlabs.ai/api/v1/experiment/" + experimentId + "/";
+            int maxAttempts = 100;
+            int attempt = 0;
+            
+            HttpHeaders getHeaders = new HttpHeaders();
+            getHeaders.set("Authorization", "Bearer " + tryonApiKey);
+            
+            while (attempt < maxAttempts) {
+                attempt++;
+                log.info("TryOn Labs Bước 3: Polling lần {}/{}", attempt, maxAttempts);
+                
+                HttpEntity<Void> getEntity = new HttpEntity<>(getHeaders);
+                ResponseEntity<JsonNode> getResponse = restTemplate.exchange(
+                    statusUrl, 
+                    org.springframework.http.HttpMethod.GET, 
+                    getEntity, 
+                    JsonNode.class
+                );
+                
+                JsonNode getResNode = getResponse.getBody();
+                if (getResNode == null) {
+                    throw new RuntimeException("Không nhận được phản hồi từ tiến trình TryOn Labs!");
+                }
+                
+                String experimentStatus = "";
+                if (getResNode.has("experiment")) {
+                    experimentStatus = getResNode.path("experiment").path("status").asText("").toLowerCase();
                 } else {
-                    outputUrl = firstImage.asText();
+                    experimentStatus = getResNode.path("status").asText("").toLowerCase();
+                }
+                log.info("Trạng thái tiến trình TryOn Labs: experimentStatus={}", experimentStatus);
+                
+                if ("success".equals(experimentStatus) || "completed".equals(experimentStatus)) {
+                    // Trích xuất URL từ mọi nguồn có thể
+                    String outputUrl = null;
+                    
+                    // 1. Kiểm tra đối tượng experiment lồng nhau trước
+                    if (getResNode.has("experiment")) {
+                        JsonNode expNode = getResNode.path("experiment");
+                        if (expNode.has("result_image_url")) {
+                            outputUrl = expNode.path("result_image_url").asText();
+                        } else if (expNode.has("output_url")) {
+                            outputUrl = expNode.path("output_url").asText();
+                        } else if (expNode.has("result_url")) {
+                            outputUrl = expNode.path("result_url").asText();
+                        } else if (expNode.has("url")) {
+                            outputUrl = expNode.path("url").asText();
+                        } else if (expNode.has("image_url")) {
+                            outputUrl = expNode.path("image_url").asText();
+                        } else if (expNode.has("result")) {
+                            JsonNode resField = expNode.path("result");
+                            if (resField.isTextual()) {
+                                outputUrl = resField.asText();
+                            } else if (resField.has("url")) {
+                                outputUrl = resField.path("url").asText();
+                            } else if (resField.has("image_url")) {
+                                outputUrl = resField.path("image_url").asText();
+                            }
+                        } else if (expNode.has("output")) {
+                            JsonNode outField = expNode.path("output");
+                            if (outField.isTextual()) {
+                                outputUrl = outField.asText();
+                            } else if (outField.has("url")) {
+                                outputUrl = outField.path("url").asText();
+                            } else if (outField.has("image_url")) {
+                                outputUrl = outField.path("image_url").asText();
+                            }
+                        }
+                    }
+                    
+                    // 2. Nếu chưa tìm thấy, kiểm tra ở cấp root
+                    if (outputUrl == null || outputUrl.trim().isEmpty()) {
+                        if (getResNode.has("result_image_url")) {
+                            outputUrl = getResNode.path("result_image_url").asText();
+                        } else if (getResNode.has("output_url")) {
+                            outputUrl = getResNode.path("output_url").asText();
+                        } else if (getResNode.has("result_url")) {
+                            outputUrl = getResNode.path("result_url").asText();
+                        } else if (getResNode.has("url")) {
+                            outputUrl = getResNode.path("url").asText();
+                        } else if (getResNode.has("image_url")) {
+                            outputUrl = getResNode.path("image_url").asText();
+                        } else if (getResNode.has("result")) {
+                            JsonNode resField = getResNode.path("result");
+                            if (resField.isTextual()) {
+                                outputUrl = resField.asText();
+                            } else if (resField.has("url")) {
+                                outputUrl = resField.path("url").asText();
+                            } else if (resField.has("image_url")) {
+                                outputUrl = resField.path("image_url").asText();
+                            }
+                        } else if (getResNode.has("output")) {
+                            JsonNode outField = getResNode.path("output");
+                            if (outField.isTextual()) {
+                                outputUrl = outField.asText();
+                            } else if (outField.has("url")) {
+                                outputUrl = outField.path("url").asText();
+                            } else if (outField.has("image_url")) {
+                                outputUrl = outField.path("image_url").asText();
+                            }
+                        }
+                    }
+                    
+                    // 3. Kiểm tra mảng images hoặc results (ở root hoặc lồng)
+                    if (outputUrl == null || outputUrl.trim().isEmpty()) {
+                        JsonNode imagesArr = null;
+                        if (getResNode.has("images") && getResNode.path("images").isArray() && !getResNode.path("images").isEmpty()) {
+                            imagesArr = getResNode.path("images");
+                        } else if (getResNode.has("results") && getResNode.path("results").isArray() && !getResNode.path("results").isEmpty()) {
+                            imagesArr = getResNode.path("results");
+                        } else if (getResNode.has("experiment")) {
+                            JsonNode expNode = getResNode.path("experiment");
+                            if (expNode.has("images") && expNode.path("images").isArray() && !expNode.path("images").isEmpty()) {
+                                imagesArr = expNode.path("images");
+                            } else if (expNode.has("results") && expNode.path("results").isArray() && !expNode.path("results").isEmpty()) {
+                                imagesArr = expNode.path("results");
+                            }
+                        }
+                        
+                        if (imagesArr != null) {
+                            JsonNode firstImg = imagesArr.get(0);
+                            if (firstImg.isObject()) {
+                                if (firstImg.has("url")) {
+                                    outputUrl = firstImg.path("url").asText();
+                                } else if (firstImg.has("image_url")) {
+                                    outputUrl = firstImg.path("image_url").asText();
+                                }
+                            } else {
+                                outputUrl = firstImg.asText();
+                            }
+                        }
+                    }
+                    
+                    if (outputUrl == null || outputUrl.trim().isEmpty()) {
+                        throw new RuntimeException("Ghép đồ thành công nhưng không tìm thấy URL kết quả trong phản hồi!");
+                    }
+                    
+                    log.info("TryOn Labs hoàn thành thành công sau {} lần thử! URL: {}", attempt, outputUrl);
+                    return outputUrl;
+                } else if ("failed".equals(experimentStatus) || "error".equals(experimentStatus)) {
+                    throw new RuntimeException("TryOn Labs báo lỗi tiến trình ghép đồ!");
+                }
+                
+                // Sleep 3 seconds
+                try {
+                    Thread.sleep(3000);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Tiến trình polling bị gián đoạn: " + ie.getMessage());
                 }
             }
             
-            if (outputUrl == null || outputUrl.trim().isEmpty()) {
-                throw new RuntimeException("Không tìm thấy trường URL hình ảnh kết quả từ phản hồi của Fal.ai!");
-            }
-            
-            log.info("Thực hiện Virtual Try-On thành công! URL ảnh kết quả: {}", outputUrl);
-            return outputUrl;
+            throw new java.util.concurrent.TimeoutException("Thời gian ghép đồ TryOn Labs vượt quá 300 giây. Vui lòng thử lại sau!");
             
         } catch (HttpClientErrorException | HttpServerErrorException e) {
-            log.error("Lỗi HTTP khi gọi Fal.ai VTO API: status={}, body={}", e.getStatusCode(), e.getResponseBodyAsString(), e);
-            throw new RuntimeException("Gọi Fal.ai API thất bại: " + e.getMessage() + " - " + e.getResponseBodyAsString());
+            log.error("Lỗi HTTP khi gọi TryOn Labs API: status={}, body={}", e.getStatusCode(), e.getResponseBodyAsString(), e);
+            throw new RuntimeException("Gọi TryOn Labs API thất bại: " + e.getStatusCode() + " - " + e.getResponseBodyAsString());
         } catch (Exception e) {
-            log.error("Lỗi trong quá trình xử lý Virtual Try-On với Fal.ai: {}", e.getMessage(), e);
-            throw new RuntimeException("Thực hiện Virtual Try-On thất bại: " + e.getMessage());
+            log.error("Lỗi trong quá trình polling TryOn Labs: {}", e.getMessage(), e);
+            throw new RuntimeException("Thực hiện Virtual Try-On TryOn Labs thất bại: " + e.getMessage());
+        }
+    }
+
+    private static class NamedByteArrayResource extends org.springframework.core.io.ByteArrayResource {
+        private final String filename;
+        
+        public NamedByteArrayResource(byte[] byteArray, String filename) {
+            super(byteArray);
+            this.filename = filename;
+        }
+        
+        @Override
+        public String getFilename() {
+            return this.filename;
         }
     }
 }

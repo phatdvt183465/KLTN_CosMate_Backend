@@ -80,5 +80,5 @@ public interface AIService {
 
     java.util.List<Double> callGeminiGetVector(String text);
     com.fasterxml.jackson.databind.JsonNode callGeminiGenerateContent(com.fasterxml.jackson.databind.node.ObjectNode body, boolean isComplexTask);
-    String generateVirtualTryOn(Integer costumeId, MultipartFile personImage);
+    String generateVirtualTryOn(Integer costumeId, String garmentImageUrl, MultipartFile personImage, String provider);
 }

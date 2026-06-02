@@ -226,8 +226,10 @@ public class AIController {
     @PostMapping(value = "/vto", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<String> generateVirtualTryOn(
             @RequestParam("costumeId") Integer costumeId,
-            @RequestParam("personImage") MultipartFile personImage) {
-        String resultUrl = aiService.generateVirtualTryOn(costumeId, personImage);
+            @RequestParam("garmentImageUrl") String garmentImageUrl,
+            @RequestParam("personImage") MultipartFile personImage,
+            @RequestParam(value = "provider", defaultValue = "FAL") String provider) {
+        String resultUrl = aiService.generateVirtualTryOn(costumeId, garmentImageUrl, personImage, provider);
         return ApiResponse.<String>builder()
                 .result(resultUrl)
                 .message("Thực hiện ghép thử đồ thành công!")

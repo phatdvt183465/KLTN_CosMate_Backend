@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -67,7 +68,7 @@ public class CostumeController {
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<CostumeResponse> create(@ModelAttribute CostumeRequest request) {
+    public ApiResponse<CostumeResponse> create(@Valid @ModelAttribute CostumeRequest request) {
         return ApiResponse.<CostumeResponse>builder()
                 .result(costumeService.createCostume(getCurrentUserId(), request))
                 .message("Tạo mới thành công!")
@@ -75,7 +76,7 @@ public class CostumeController {
     }
 
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<CostumeResponse> update(@PathVariable Integer id, @ModelAttribute CostumeRequest request) {
+    public ApiResponse<CostumeResponse> update(@PathVariable Integer id, @Valid @ModelAttribute CostumeRequest request) {
         return ApiResponse.<CostumeResponse>builder()
                 .result(costumeService.updateCostume(getCurrentUserId(), id, request))
                 .message("Cập nhật xong!")

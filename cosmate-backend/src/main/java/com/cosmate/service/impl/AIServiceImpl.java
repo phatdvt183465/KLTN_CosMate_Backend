@@ -258,6 +258,10 @@ public class AIServiceImpl implements AIService {
 
             } catch (Exception e) {
                 log.error("Lỗi chạy ngầm Vector cho ID {}: {}", costumeId, e.getMessage());
+                if (e instanceof RuntimeException) {
+                    throw (RuntimeException) e;
+                }
+                throw new RuntimeException(e);
             }
         });
     }
@@ -473,35 +477,40 @@ public class AIServiceImpl implements AIService {
 
     @Async
     @Override
-    public void processNewCostumeAsync(Integer costumeId, List<MultipartFile> files) {
-        Costume costume = costumeRepository.findById(costumeId).orElse(null);
-        if (costume == null) return;
-
-        String moderation = moderateCostumeImages(files);
-
-        if ("ERROR".equals(moderation)) {
-            log.warn("AI lỗi hoặc quá tải. Giữ nguyên trạng thái PENDING cho bộ đồ ID: {}", costumeId);
-            return;
-        }
-
+    @org.springframework.transaction.annotation.Transactional
+    public void processNewCostumeAsync(Integer costumeId) {
+        log.info("Bắt đầu tạo Vector Embeddings bất đồng bộ cho Costume ID: {}", costumeId);
         try {
-            if ("UNSAFE_VIOLATION".equals(moderation)) {
-                costume.setStatus("REJECTED");
+            // Logic Try: Gọi API tạo vector và Lưu vector vào DB
+            generateAndSaveVector(costumeId, true, true);
+            
+            // Cập nhật trạng thái Costume thành AVAILABLE
+            costumeRepository.findById(costumeId).ifPresent(costume -> {
+                costume.setStatus("AVAILABLE");
                 costumeRepository.save(costume);
-                sendCostumeRejectionNotification(costume, "Sản phẩm bị từ chối do chứa hình ảnh vi phạm tiêu chuẩn cộng đồng (18+/Bạo lực).");
-                return;
-            }
-            if ("UNSAFE_IRRELEVANT".equals(moderation)) {
-                costume.setStatus("REJECTED");
-                costumeRepository.save(costume);
-                sendCostumeRejectionNotification(costume, "Sản phẩm bị từ chối do hình ảnh tải lên không liên quan đến trang phục hoặc phụ kiện Cosplay.");
-                return;
-            }
-            selfProxy.generateAndSaveVector(costumeId, true, true);
-            costume.setStatus("AVAILABLE");
-            costumeRepository.save(costume);
+                log.info("Tạo vector thành công. Đã cập nhật Costume ID {} thành AVAILABLE.", costumeId);
+            });
+        } catch (org.springframework.web.client.RestClientException e) {
+            log.warn("Lỗi RestClientException khi tạo Vector cho Costume ID {}: {}", costumeId, e.getMessage());
         } catch (Exception e) {
-            log.error("processNewCostumeAsync failed for {}: {}", costumeId, e.getMessage(), e);
+            if (e.getCause() instanceof java.util.concurrent.TimeoutException || e instanceof java.util.concurrent.TimeoutException) {
+                log.warn("Lỗi TimeoutException khi tạo Vector cho Costume ID {}: {}", costumeId, e.getMessage());
+            } else {
+                log.error("Lỗi không xác định khi tạo Vector cho Costume ID {}: {}", costumeId, e.getMessage(), e);
+            }
+        } finally {
+            // Logic Finally: Đảm bảo cập nhật trạng thái Costume thành AVAILABLE (Fallback)
+            try {
+                costumeRepository.findById(costumeId).ifPresent(costume -> {
+                    if (!"AVAILABLE".equals(costume.getStatus())) {
+                        costume.setStatus("AVAILABLE");
+                        costumeRepository.save(costume);
+                        log.info("[FALLBACK] Đã cập nhật trạng thái Costume ID {} thành AVAILABLE trong khối finally.", costumeId);
+                    }
+                });
+            } catch (Exception ex) {
+                log.error("Không thể cập nhật trạng thái AVAILABLE trong khối finally cho Costume ID {}: {}", costumeId, ex.getMessage());
+            }
         }
     }
 
@@ -540,7 +549,7 @@ public class AIServiceImpl implements AIService {
                     .replace("{characterName}", request.getCharacterName() != null ? request.getCharacterName() : "Unknown")
                     .replace("{referenceText}", referenceText);
 
-            String promptText = rules + finalPrompt;
+            String promptText = rules + finalPrompt + "\nYêu cầu phần nhận xét (comment) viết cực kỳ ngắn gọn, súc tích, KHÔNG vượt quá 800 ký tự.";
 
             partsNode.add(buildTextPart(promptText));
 
@@ -808,7 +817,8 @@ public class AIServiceImpl implements AIService {
         }
     }
 
-    @org.springframework.scheduling.annotation.Scheduled(cron = "0 0 3 * * ?")
+    @org.springframework.scheduling.annotation.Scheduled(cron = "0 0 2 * * ?")
+    @org.springframework.transaction.annotation.Transactional
     @Override
     public void generateVectorsForMissingImages() {
         List<Costume> allCostumes = costumeRepository.findCostumesMissingVector();
@@ -862,6 +872,7 @@ public class AIServiceImpl implements AIService {
                 // 3. LƯU VÀO DB NẾU CÓ CẬP NHẬT
                 if (isChanged) {
                     costumeRepository.save(costume);
+                    log.info("Cronjob: Đã quét và tạo vector thành công cho Costume ID: {}", costume.getId());
                     successCount++;
                 }
             } catch (Exception e) {
@@ -901,7 +912,7 @@ public class AIServiceImpl implements AIService {
                             .orElse(""));
             promptStr += personaPrompt + " ";
             promptStr += "Hãy nhìn vào những hình ảnh đính kèm và tạo ra một đoạn mô tả. ";
-            promptStr += " QUAN TRỌNG: TUYỆT ĐỐI KHÔNG chào hỏi, KHÔNG xưng hô (không dùng từ bạn hay tôi). KHÔNG có câu mở bài hay kết luận. CHỈ TRẢ VỀ trực tiếp nội dung mô tả sản phẩm để gắn thẳng lên website.";
+            promptStr += " QUAN TRỌNG: TUYỆT ĐỐI KHÔNG chào hỏi, KHÔNG xưng hô (không dùng từ bạn hay tôi). KHÔNG có câu mở bài hay kết luận. CHỈ TRẢ VỀ trực tiếp nội dung mô tả sản phẩm để gắn thẳng lên website. Yêu cầu viết cực kỳ ngắn gọn, súc tích, KHÔNG vượt quá 2000 ký tự.";
 
             partsNode.add(buildTextPart(promptStr));
 

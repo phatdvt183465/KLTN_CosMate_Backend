@@ -36,7 +36,7 @@ public interface AIService {
 
     String moderateCostumeImages(List<MultipartFile> files);
 
-    void processNewCostumeAsync(Integer costumeId, List<MultipartFile> files);
+    void processNewCostumeAsync(Integer costumeId);
 
     // --- CHẤM ĐIỂM ---
     PoseScoringResponse scorePose(PoseScoringRequest request);

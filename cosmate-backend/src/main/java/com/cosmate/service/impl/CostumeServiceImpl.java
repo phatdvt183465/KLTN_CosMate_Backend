@@ -68,6 +68,27 @@ public class CostumeServiceImpl implements CostumeService {
         }
         validateCreateRequest(currentUserId, request);
 
+        // Bước 1: Validate 18+ (Đồng bộ - Sync)
+        List<MultipartFile> imageFilesForAi = new ArrayList<>();
+        if (request.getImageFiles() != null) {
+            imageFilesForAi.addAll(request.getImageFiles().stream()
+                    .filter(f -> f != null && !f.isEmpty() && f.getContentType() != null && f.getContentType().startsWith("image/"))
+                    .collect(Collectors.toList()));
+        }
+        if (request.getVideoFiles() != null) {
+            imageFilesForAi.addAll(request.getVideoFiles().stream()
+                    .filter(f -> f != null && !f.isEmpty() && f.getContentType() != null && f.getContentType().startsWith("image/"))
+                    .collect(Collectors.toList()));
+        }
+
+        if (!imageFilesForAi.isEmpty()) {
+            String moderation = aiService.moderateCostumeImages(imageFilesForAi);
+            if ("UNSAFE_VIOLATION".equals(moderation) || "UNSAFE_IRRELEVANT".equals(moderation)) {
+                throw new AppException(ErrorCode.IMAGE_POLICY_VIOLATION);
+            }
+        }
+
+        // Bước 2: Khởi tạo và Lưu DB (Đồng bộ - Sync)
         Costume costume = new Costume();
         mapBaseInfo(costume, request);
         // Ensure a default rentDiscount is set to avoid null DB inserts and to have consistent pricing behavior
@@ -75,7 +96,7 @@ public class CostumeServiceImpl implements CostumeService {
             costume.setRentDiscount(100); // default = 100% (no discount for subsequent days)
         }
         costume.setProviderId(request.getProviderId());
-        costume.setStatus("PENDING");
+        costume.setStatus("PENDING"); // Khởi tạo với trạng thái PENDING
 
         // Xử lý các thành phần liên quan
         handleImages(costume, request);
@@ -93,11 +114,8 @@ public class CostumeServiceImpl implements CostumeService {
             savedCostume = costumeRepository.save(savedCostume);
         }
 
-        List<MultipartFile> imageFilesForAi = new ArrayList<>();
-        if (request.getImageFiles() != null) imageFilesForAi.addAll(request.getImageFiles().stream().filter(f -> f != null && !f.isEmpty() && f.getContentType() != null && f.getContentType().startsWith("image/")).collect(Collectors.toList()));
-        if (request.getVideoFiles() != null) imageFilesForAi.addAll(request.getVideoFiles().stream().filter(f -> f != null && !f.isEmpty() && f.getContentType() != null && f.getContentType().startsWith("image/")).collect(Collectors.toList()));
-        
-        aiService.processNewCostumeAsync(savedCostume.getId(), imageFilesForAi);
+        // Bước 3: Tạo Vector Embeddings (Bất đồng bộ - Async)
+        aiService.processNewCostumeAsync(savedCostume.getId());
 
         return mapToResponse(savedCostume);
     }

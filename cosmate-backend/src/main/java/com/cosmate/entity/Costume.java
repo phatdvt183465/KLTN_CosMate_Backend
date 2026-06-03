@@ -34,6 +34,7 @@ public class Costume {
     private Integer numberOfItems;
 
     @Nationalized
+    @Column(length = 2000)
     private String description;
 
     @Column(name = "price_per_day")

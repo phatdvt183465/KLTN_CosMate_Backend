@@ -43,6 +43,9 @@ public class ReviewServiceImpl implements ReviewService {
         if (orderId == null) throw new IllegalArgumentException("orderId is required");
         Integer rating = request.getRating();
         if (rating == null || rating < 1 || rating > 5) throw new IllegalArgumentException("rating must be between 1 and 5");
+        if (request.getComment() != null && request.getComment().length() > 1000) {
+            throw new IllegalArgumentException("Đánh giá không được vượt quá 1000 ký tự");
+        }
 
         Optional<Order> opt = orderRepository.findById(orderId);
         if (opt.isEmpty()) throw new IllegalArgumentException("Order not found");

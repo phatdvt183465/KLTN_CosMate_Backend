@@ -47,6 +47,9 @@ public class ReviewController {
     ) {
         ApiResponse<ReviewResponse> api = new ApiResponse<>();
         try {
+            if (comment != null && comment.length() > 1000) {
+                throw new IllegalArgumentException("Đánh giá không được vượt quá 1000 ký tự");
+            }
             CreateReviewRequest req = new CreateReviewRequest();
             req.setOrderId(orderId);
             req.setRating(rating);

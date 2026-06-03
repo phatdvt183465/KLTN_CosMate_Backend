@@ -32,7 +32,7 @@ public class PoseFeedback {
     @JoinColumn(name = "pose_score_id", nullable = false)
     private PoseScore poseScore;
 
-    @Column(name = "feedback_text", columnDefinition = "TEXT")
+    @Column(name = "feedback_text", length = 800)
     private String feedbackText;
 
     @Column(name = "status")

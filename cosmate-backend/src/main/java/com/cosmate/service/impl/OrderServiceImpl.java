@@ -654,6 +654,12 @@ public class OrderServiceImpl implements OrderService {
         } catch (Exception ex) {
             // swallow
         }
+        // increment provider completed orders count by 1
+        try {
+            if (order.getProviderId() != null) {
+                try { providerService.incrementCompletedOrders(order.getProviderId()); } catch (Exception ignored) {}
+            }
+        } catch (Exception ignored) {}
 
         OrderResponse resp = new OrderResponse();
         resp.setId(order.getId());

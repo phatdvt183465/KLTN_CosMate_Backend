@@ -38,11 +38,11 @@ public class CancellationPolicyServiceImpl implements CancellationPolicyService 
     public ProviderCancellationPolicy update(ProviderCancellationPolicy policy) {
         if (policy.getId() == null) throw new AppException(ErrorCode.INVALID_KEY);
         ProviderCancellationPolicy existing = policyRepository.findById(policy.getId()).orElseThrow(() -> new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION));
-        existing.setMinHoursBefore(policy.getMinHoursBefore());
-        existing.setMaxHoursBefore(policy.getMaxHoursBefore());
-        existing.setPenaltyType(policy.getPenaltyType());
-        existing.setPenaltyValue(policy.getPenaltyValue());
-        existing.setDescription(policy.getDescription());
+        // Do NOT update id, provider, minHoursBefore or maxHoursBefore here.
+        // Only update penalty-related fields and description as requested.
+        if (policy.getPenaltyType() != null) existing.setPenaltyType(policy.getPenaltyType());
+        if (policy.getPenaltyValue() != null) existing.setPenaltyValue(policy.getPenaltyValue());
+        if (policy.getDescription() != null) existing.setDescription(policy.getDescription());
         return policyRepository.save(existing);
     }
 

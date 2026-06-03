@@ -18,7 +18,7 @@ public interface CostumeRepository extends BaseCrudRepository<Costume, Integer> 
     @Query("SELECT c FROM Costume c WHERE COALESCE(TRIM(c.textVector), '') <> '' AND COALESCE(TRIM(c.imageVector), '') <> ''")
     List<Costume> findAllWithVector();
 
-    @Query("SELECT c FROM Costume c WHERE COALESCE(TRIM(c.textVector), '') = '' OR COALESCE(TRIM(c.imageVector), '') = ''")
+    @Query("SELECT c FROM Costume c WHERE c.status = 'AVAILABLE' AND (COALESCE(TRIM(c.textVector), '') = '' OR COALESCE(TRIM(c.imageVector), '') = '')")
     List<Costume> findCostumesMissingVector();
 
     @Query("SELECT DISTINCT c FROM Costume c JOIN c.characters ch WHERE ch IN (SELECT ch2 FROM Costume c2 JOIN c2.characters ch2 WHERE c2.id IN :costumeIds) AND c.id NOT IN :costumeIds")

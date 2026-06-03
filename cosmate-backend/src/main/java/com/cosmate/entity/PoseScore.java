@@ -35,7 +35,7 @@ public class PoseScore {
         this.createdAt = LocalDateTime.now();
     }
 
-    @Column(name = "comment")
+    @Column(name = "comment", length = 800)
     private String comment;
 
     @Column(name = "character_name")

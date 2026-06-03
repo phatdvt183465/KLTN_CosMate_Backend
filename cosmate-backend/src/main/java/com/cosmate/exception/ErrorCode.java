@@ -30,7 +30,8 @@ public enum ErrorCode {
     AI_SERVICE_OVERLOADED(5003, "Hệ thống AI đang quá tải. Vui lòng đợi 1 phút rồi thử lại!"),
     AI_CONTENT_BLOCKED(5004, "Hình ảnh hoặc nội dung vi phạm tiêu chuẩn an toàn của hệ thống."),
     AI_TOKEN_INSUFFICIENT(4001, "Bạn không đủ số dư Token. Vui lòng nạp thêm!"),
-    IMAGE_NOT_FOUND(1023, "Không tìm thấy ảnh!");
+    IMAGE_NOT_FOUND(1023, "Không tìm thấy ảnh!"),
+    IMAGE_POLICY_VIOLATION(5005, "Ảnh trang phục vi phạm tiêu chuẩn cộng đồng, vui lòng chọn ảnh khác!");
 
     ErrorCode(int code, String message) {
         this.code = code;

@@ -126,23 +126,31 @@ public class UserServiceImpl implements UserService {
 
         User saved = userRepository.save(user);
 
-        // If COSPLAYER or provider role -> mark as INACTIVE and send activation email
+        // If COSPLAYER or provider role -> for normal registrations mark as INACTIVE and send activation email.
+        // For accounts created via Google (fromGoogle==true) we want them to be ACTIVE immediately.
         try {
             if (saved.getRole() != null) {
                 Role savedEnum = null;
                 try { savedEnum = Role.valueOf(saved.getRole().getRoleName()); } catch (IllegalArgumentException ignored) {}
                 if (savedEnum != null && (savedEnum == Role.COSPLAYER || RoleUtils.isProviderRole(savedEnum))) {
-                    saved.setStatus("INACTIVE");
-                    saved = userRepository.save(saved);
-                    try {
-                        activationService.createTokenForUser(saved);
-                    } catch (Exception e) {
-                        logger.error("Failed to create/send activation token for user {}: {}", saved.getId(), e.getMessage(), e);
+                    if (fromGoogle) {
+                        // Google-created accounts: mark ACTIVE and skip activation email
+                        saved.setStatus("ACTIVE");
+                        saved = userRepository.save(saved);
+                    } else {
+                        // Regular registration: require activation
+                        saved.setStatus("INACTIVE");
+                        saved = userRepository.save(saved);
+                        try {
+                            activationService.createTokenForUser(saved);
+                        } catch (Exception e) {
+                            logger.error("Failed to create/send activation token for user {}: {}", saved.getId(), e.getMessage(), e);
+                        }
                     }
                 }
             }
         } catch (Exception e) {
-            logger.error("Error while setting INACTIVE and sending activation for user {}: {}", saved.getId(), e.getMessage(), e);
+            logger.error("Error while setting account status and sending activation for user {}: {}", saved.getId(), e.getMessage(), e);
         }
 
         // create wallet for COSPLAYER or provider roles

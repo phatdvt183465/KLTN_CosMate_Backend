@@ -1042,7 +1042,8 @@ public class OrderServiceImpl implements OrderService {
                 "COMPLETED",
                 "DISPUTE",
                 "CANCELLED",
-                "EXTENDING"
+                "EXTENDING",
+                "OVERDUE"
         );
         final List<String> RENT_SERVICE_STATUSES = java.util.Arrays.asList(
                 "UNPAID",
@@ -1428,7 +1429,10 @@ public class OrderServiceImpl implements OrderService {
         Order order = orderRepository.findById(id).orElse(null);
         if (order == null) throw new IllegalArgumentException("Order not found");
         if (!currentUserId.equals(order.getCosplayerId())) throw new IllegalArgumentException("Order does not belong to user");
-        if (!"IN_USE".equals(order.getStatus())) throw new IllegalArgumentException("Order must be in IN_USE status to start return");
+        // Allow starting return when order is currently in use, extending, or overdue
+        String _status = order.getStatus();
+        if (_status == null || !(_status.equals("IN_USE") || _status.equals("EXTENDING") || _status.equals("OVERDUE")))
+            throw new IllegalArgumentException("Order must be in IN_USE, EXTENDING, or OVERDUE status to start return");
         if (trackingCode == null || trackingCode.isBlank()) throw new IllegalArgumentException("trackingCode is required");
         if (images == null || images.length == 0) throw new IllegalArgumentException("At least one image file is required to start return");
 

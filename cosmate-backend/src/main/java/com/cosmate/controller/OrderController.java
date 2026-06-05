@@ -152,7 +152,7 @@ public class OrderController {
 
         if (statuses == null || statuses.isEmpty()) {
             statuses = java.util.Arrays.asList(
-                    "UNPAID","PAID","PREPARING","SHIPPING_OUT","DELIVERING_OUT","IN_USE","SHIPPING_BACK","COMPLETED","DISPUTE","CANCELLED","EXTENDING"
+                        "UNPAID","PAID","PREPARING","SHIPPING_OUT","DELIVERING_OUT","IN_USE","SHIPPING_BACK","COMPLETED","DISPUTE","CANCELLED","EXTENDING","OVERDUE"
             );
         }
         try {

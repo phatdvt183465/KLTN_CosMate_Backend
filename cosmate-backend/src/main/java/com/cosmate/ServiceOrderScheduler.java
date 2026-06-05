@@ -287,10 +287,58 @@ public class ServiceOrderScheduler {
                 try {
                     if (o == null || o.getCreatedAt() == null) continue;
                     if (o.getCreatedAt().isAfter(now.minusDays(3))) continue;
-                    // Provider did not move to PREPARING in 3 days -> cancel and refund full amount to cosplayer
+                    // Default: refund full amount to cosplayer for orders that remain PAID after threshold
                     java.math.BigDecimal total = o.getTotalAmount() == null ? java.math.BigDecimal.ZERO : o.getTotalAmount();
 
-                    // refund full amount to cosplayer
+                    String orderType = o.getOrderType() == null ? "" : o.getOrderType();
+
+                    if ("RENT_SERVICE".equalsIgnoreCase(orderType)) {
+                        // For service orders: provider must move PAID -> WAITING_SERVICE_DATE within threshold
+                        // If still PAID after threshold, cancel and refund full amount
+                        try {
+                            com.cosmate.entity.User cosUser = com.cosmate.entity.User.builder().id(o.getCosplayerId()).build();
+                            com.cosmate.entity.Wallet cosWallet = walletService.createForUser(cosUser);
+                            if (total.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                                walletService.credit(cosWallet, total, "Tiền refund do nhà cung cấp chưa lên lịch dịch vụ", "AUTO_REFUND_NO_SCHEDULE:" + o.getId(), null, o);
+                            }
+                        } catch (Exception ignored) {}
+
+                        o.setStatus("CANCELLED");
+                        orderRepository.save(o);
+
+                        try {
+                            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
+                                    .user(com.cosmate.entity.User.builder().id(o.getCosplayerId()).build())
+                                    .type("ORDER_STATUS")
+                                    .header("Đơn hàng bị hủy - nhà cung cấp chưa lên lịch dịch vụ")
+                                    .content("Đơn hàng #" + o.getId() + " đã bị hủy vì nhà cung cấp chưa chuyển đơn sang WAITING_SERVICE_DATE trong vòng 3 ngày. Số tiền đã thanh toán sẽ được hoàn trả.")
+                                    .sendAt(java.time.LocalDateTime.now())
+                                    .isRead(false)
+                                    .build();
+                            notificationService.create(n);
+                        } catch (Exception ignored) {}
+
+                        try {
+                            Integer providerUserId = null;
+                            try { com.cosmate.entity.Provider provEntity = providerService.getById(o.getProviderId()); if (provEntity != null) providerUserId = provEntity.getUserId(); } catch (Exception ignored) { providerUserId = null; }
+                            if (providerUserId != null) {
+                                com.cosmate.entity.Notification pn = com.cosmate.entity.Notification.builder()
+                                        .user(com.cosmate.entity.User.builder().id(providerUserId).build())
+                                        .type("ORDER_STATUS")
+                                        .header("Đơn hàng bị hủy")
+                                        .content("Đơn hàng #" + o.getId() + " đã bị hủy vì bạn chưa lên lịch dịch vụ (WAITING_SERVICE_DATE) trong vòng 3 ngày kể từ khi khách thanh toán.")
+                                        .sendAt(java.time.LocalDateTime.now())
+                                        .isRead(false)
+                                        .build();
+                                notificationService.create(pn);
+                            }
+                        } catch (Exception ignored) {}
+
+                        log.info("Auto-cancelled PAID service order {} because provider did not set WAITING_SERVICE_DATE", o.getId());
+                        continue; // move to next order
+                    }
+
+                    // Fallback / legacy behavior: treat as RENT_COSTUME (or other types) -> refund and release costumes
                     try {
                         com.cosmate.entity.User cosUser = com.cosmate.entity.User.builder().id(o.getCosplayerId()).build();
                         com.cosmate.entity.Wallet cosWallet = walletService.createForUser(cosUser);
@@ -299,7 +347,7 @@ public class ServiceOrderScheduler {
                         }
                     } catch (Exception ignored) {}
 
-                    // set costumes back to AVAILABLE
+                    // set costumes back to AVAILABLE if any
                     try {
                         List<OrderDetail> details = orderDetailRepository.findByOrderId(o.getId());
                         if (details != null && !details.isEmpty()) {

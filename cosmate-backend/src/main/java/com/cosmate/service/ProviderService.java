@@ -17,6 +17,9 @@ public interface ProviderService {
     Provider incrementCompletedOrders(Integer providerId);
     // update provider totals when a new review is added
     Provider addReviewRating(Integer providerId, Integer rating);
+    // Admin utility: recalculate totals (completed orders, total reviews and average rating)
+    void recalculateAllProviderTotals();
+    Provider recalculateProviderTotals(Integer providerId);
     Provider updateAvatarForUser(Integer userId, String avatarUrl);
     Provider updateCoverImageForUser(Integer userId, String coverImageUrl);
     List<Provider> listAllProviders();

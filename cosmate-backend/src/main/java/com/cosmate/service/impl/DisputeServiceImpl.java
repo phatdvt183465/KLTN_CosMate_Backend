@@ -23,6 +23,7 @@ public class DisputeServiceImpl implements DisputeService {
     private final OrderDetailRepository orderDetailRepository;
     private final com.cosmate.repository.ProviderRepository providerRepository;
     private final com.cosmate.service.NotificationService notificationService;
+    private final com.cosmate.service.ProviderService providerService;
 
     public DisputeServiceImpl(DisputeRepository disputeRepository,
                               DisputeResultRepository disputeResultRepository,
@@ -31,6 +32,7 @@ public class DisputeServiceImpl implements DisputeService {
                               OrderDetailRepository orderDetailRepository,
                               com.cosmate.repository.ProviderRepository providerRepository,
                               com.cosmate.service.NotificationService notificationService,
+                              com.cosmate.service.ProviderService providerService,
                               com.cosmate.repository.DisputeImageRepository disputeImageRepository,
                               com.cosmate.service.FirebaseStorageService firebaseStorageService) {
         this.disputeRepository = disputeRepository;
@@ -40,6 +42,7 @@ public class DisputeServiceImpl implements DisputeService {
         this.orderDetailRepository = orderDetailRepository;
         this.providerRepository = providerRepository;
         this.notificationService = notificationService;
+        this.providerService = providerService;
         this.disputeImageRepository = disputeImageRepository;
         this.firebaseStorageService = firebaseStorageService;
     }
@@ -412,6 +415,12 @@ public class DisputeServiceImpl implements DisputeService {
         // update order: after resolution, move to COMPLETED and record tracking
         order.setStatus("COMPLETED");
         orderRepository.save(order);
+        // increment provider completed orders count by 1
+        try {
+            if (order.getProviderId() != null) {
+                try { providerService.incrementCompletedOrders(order.getProviderId()); } catch (Exception ignored) {}
+            }
+        } catch (Exception ignored) {}
         try {
             com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
                     .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())

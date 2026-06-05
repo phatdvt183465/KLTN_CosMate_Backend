@@ -625,6 +625,12 @@ public class ServiceOrderScheduler {
 
                             order.setStatus("COMPLETED");
                             orderRepository.save(order);
+                            // increment provider completed orders count by 1
+                            try {
+                                if (order.getProviderId() != null) {
+                                    try { providerService.incrementCompletedOrders(order.getProviderId()); } catch (Exception ignored) {}
+                                }
+                            } catch (Exception ignored) {}
 
                             // notify provider and cosplayer
                             try {

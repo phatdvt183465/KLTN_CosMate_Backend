@@ -633,6 +633,10 @@ public class AIServiceImpl implements AIService {
                     .imageUrl(newScoreRecord.getImageUrl())
                     .build();
 
+        } catch (com.cosmate.exception.AppException e) {
+            throw e;
+        } catch (IllegalArgumentException e) {
+            throw e;
         } catch (Exception e) {
             log.error("AI chấm điểm Pose thất bại: {}", e.getMessage(), e);
             throw new RuntimeException("Lỗi khi chấm điểm Pose: " + e.getMessage());
@@ -1135,24 +1139,36 @@ public class AIServiceImpl implements AIService {
     public String submitStyleQuiz(Integer userId, QuizSubmitRequest request) {
         selfProxy.consumeTokens(userId != null ? userId : getCurrentUserIdFromContext(), 30);
         int totalE = 0, totalA = 0, totalO = 0;
+        int validAnswersCount = 0;
 
         // 1. Cộng điểm trắc nghiệm tĩnh
-        for (com.cosmate.dto.request.QuizSubmitRequest.StaticAnswer ans : request.getStaticAnswers()) {
-            totalE += ans.getScoreE();
-            totalA += ans.getScoreA();
-            totalO += ans.getScoreO();
+        if (request.getStaticAnswers() != null) {
+            validAnswersCount += request.getStaticAnswers().size();
+            for (com.cosmate.dto.request.QuizSubmitRequest.StaticAnswer ans : request.getStaticAnswers()) {
+                totalE += ans.getScoreE();
+                totalA += ans.getScoreA();
+                totalO += ans.getScoreO();
+            }
         }
 
         // 2. Chấm điểm tự luận bằng AI
         if (request.getCustomAnswers() != null && !request.getCustomAnswers().isEmpty()) {
             List<CustomAnswerResponse> aiResults = analyzeCustomAnswersBatch(request.getCustomAnswers());
             for (CustomAnswerResponse res : aiResults) {
-                if (res.isValid() && res.getScores() != null) {
-                    totalE += res.getScores().getOrDefault("E", 0);
-                    totalA += res.getScores().getOrDefault("A", 0);
-                    totalO += res.getScores().getOrDefault("O", 0);
+                if (res.isValid()) {
+                    validAnswersCount++;
+                    if (res.getScores() != null) {
+                        totalE += res.getScores().getOrDefault("E", 0);
+                        totalA += res.getScores().getOrDefault("A", 0);
+                        totalO += res.getScores().getOrDefault("O", 0);
+                    }
                 }
             }
+        }
+
+        // Kiểm tra xem số lượng câu trả lời hợp lệ có đạt yêu cầu tối thiểu không
+        if (validAnswersCount < 3) {
+            throw new RuntimeException("Bài test không hợp lệ do có quá nhiều câu trả lời không rõ nghĩa. Vui lòng làm lại một cách nghiêm túc!");
         }
 
         // 3. Tính toán Archetype bằng Euclid

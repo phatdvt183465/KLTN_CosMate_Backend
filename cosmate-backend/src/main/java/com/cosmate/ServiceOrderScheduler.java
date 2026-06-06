@@ -670,7 +670,7 @@ public class ServiceOrderScheduler {
                                                 .user(com.cosmate.entity.User.builder().id(cosUser.getId()).build())
                                                 .type("ACCOUNT_ACTION")
                                                 .header("Tài khoản bị khóa do vi phạm")
-                                                .content("Tài khoản của bạn đã bị khóa do vi phạm chính sách sau khi đơn hàng #" + order.getId() + " quá hạn và tự động hoàn. Liên hệ hỗ trợ để khiếu nại.")
+                                                .content("Tài khoản của bạn đã bị khóa do vi phạm chính sách sau khi đơn hàng #" + order.getId() + " quá hạn và tự động hoàn. Liên hệ nền tảng qua mail này để nhận hỗ trợ.")
                                                 .sendAt(java.time.LocalDateTime.now())
                                                 .isRead(false)
                                                 .build();

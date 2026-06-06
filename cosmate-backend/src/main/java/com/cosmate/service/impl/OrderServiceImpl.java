@@ -631,25 +631,56 @@ public class OrderServiceImpl implements OrderService {
             notificationService.create(n);
         } catch (Exception ignored) {}
 
-        // Transfer money to provider's wallet when service completes
+        // Transfer money: return deposit to cosplayer and pay provider their share (total - deposit)
         try {
-            Integer providerUserIdVal = prov.getUserId();
-            java.util.Optional<com.cosmate.entity.Wallet> wopt = walletService.getByUserId(providerUserIdVal);
-            if (wopt.isPresent()) {
-                com.cosmate.entity.Wallet wallet = wopt.get();
-                java.math.BigDecimal amount = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
-                walletService.credit(wallet, amount, "Payout for completed order", "ORDER_PAYOUT:" + order.getId(), null, order);
-            } else {
-                java.util.Optional<com.cosmate.entity.User> providerUserOpt = userRepository.findById(providerUserIdVal);
-                if (providerUserOpt.isPresent()) {
-                    walletService.createForUser(providerUserOpt.get());
-                    java.util.Optional<com.cosmate.entity.Wallet> wopt2 = walletService.getByUserId(providerUserIdVal);
-                    if (wopt2.isPresent()) {
-                        com.cosmate.entity.Wallet wallet = wopt2.get();
-                        java.math.BigDecimal amount = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
-                        walletService.credit(wallet, amount, "Payout for completed order", "ORDER_PAYOUT:" + order.getId(), null, order);
+            java.math.BigDecimal total = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
+            // compute deposit total for service bookings (if any)
+            java.math.BigDecimal depositTotal = java.math.BigDecimal.ZERO;
+            try {
+                java.util.List<OrderServiceBooking> bookings = orderServiceBookingRepository.findByOrderId(order.getId());
+                if (bookings != null && !bookings.isEmpty()) {
+                    for (OrderServiceBooking b : bookings) {
+                        try {
+                            java.math.BigDecimal dep = b.getDepositSlotAmount() == null ? java.math.BigDecimal.ZERO : b.getDepositSlotAmount();
+                            depositTotal = depositTotal.add(dep);
+                        } catch (Exception ignored) {}
                     }
                 }
+            } catch (Exception ignored) {}
+
+            if (depositTotal == null) depositTotal = java.math.BigDecimal.ZERO;
+
+            // refund deposit back to cosplayer
+            if (depositTotal.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                try {
+                    com.cosmate.entity.User cosUser = com.cosmate.entity.User.builder().id(order.getCosplayerId()).build();
+                    com.cosmate.entity.Wallet cosWallet = walletService.createForUser(cosUser);
+                    walletService.credit(cosWallet, depositTotal, "Deposit returned on service completion", "DEPOSIT_RETURN:" + order.getId(), null, order);
+                } catch (Exception ignored) {}
+            }
+
+            // provider gets total minus deposit (and any other provider-side adjustments can be added later)
+            java.math.BigDecimal providerShare = total.subtract(depositTotal == null ? java.math.BigDecimal.ZERO : depositTotal);
+            if (providerShare == null) providerShare = java.math.BigDecimal.ZERO;
+            if (providerShare.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                try {
+                    Integer providerUserIdVal = prov.getUserId();
+                    java.util.Optional<com.cosmate.entity.Wallet> wopt = walletService.getByUserId(providerUserIdVal);
+                    if (wopt.isPresent()) {
+                        com.cosmate.entity.Wallet wallet = wopt.get();
+                        walletService.credit(wallet, providerShare, "Payout for completed service order", "ORDER_PAYOUT:" + order.getId(), null, order);
+                    } else {
+                        java.util.Optional<com.cosmate.entity.User> providerUserOpt = userRepository.findById(providerUserIdVal);
+                        if (providerUserOpt.isPresent()) {
+                            walletService.createForUser(providerUserOpt.get());
+                            java.util.Optional<com.cosmate.entity.Wallet> wopt2 = walletService.getByUserId(providerUserIdVal);
+                            if (wopt2.isPresent()) {
+                                com.cosmate.entity.Wallet wallet = wopt2.get();
+                                walletService.credit(wallet, providerShare, "Payout for completed service order", "ORDER_PAYOUT:" + order.getId(), null, order);
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
             }
         } catch (Exception ex) {
             // swallow
@@ -1042,7 +1073,8 @@ public class OrderServiceImpl implements OrderService {
                 "COMPLETED",
                 "DISPUTE",
                 "CANCELLED",
-                "EXTENDING"
+                "EXTENDING",
+                "OVERDUE"
         );
         final List<String> RENT_SERVICE_STATUSES = java.util.Arrays.asList(
                 "UNPAID",
@@ -1428,7 +1460,10 @@ public class OrderServiceImpl implements OrderService {
         Order order = orderRepository.findById(id).orElse(null);
         if (order == null) throw new IllegalArgumentException("Order not found");
         if (!currentUserId.equals(order.getCosplayerId())) throw new IllegalArgumentException("Order does not belong to user");
-        if (!"IN_USE".equals(order.getStatus())) throw new IllegalArgumentException("Order must be in IN_USE status to start return");
+        // Allow starting return when order is currently in use, extending, or overdue
+        String _status = order.getStatus();
+        if (_status == null || !(_status.equals("IN_USE") || _status.equals("EXTENDING") || _status.equals("OVERDUE")))
+            throw new IllegalArgumentException("Order must be in IN_USE, EXTENDING, or OVERDUE status to start return");
         if (trackingCode == null || trackingCode.isBlank()) throw new IllegalArgumentException("trackingCode is required");
         if (images == null || images.length == 0) throw new IllegalArgumentException("At least one image file is required to start return");
 

@@ -36,7 +36,8 @@ public class ProviderStatisticsServiceImpl implements ProviderStatisticsService 
         // validate provider exists
         Provider p = providerRepository.findById(providerId).orElseThrow(() -> new IllegalArgumentException("Provider not found"));
 
-        long totalCostumes = costumeRepository.countByProviderId(providerId);
+        // Count costumes belonging to provider excluding those marked as DELETED
+        long totalCostumes = costumeRepository.countByProviderIdAndStatusNotIgnoreCase(providerId, "DELETED");
 
         List<com.cosmate.entity.Order> orders = orderRepository.findByProviderIdOrderByCreatedAtDesc(providerId);
 

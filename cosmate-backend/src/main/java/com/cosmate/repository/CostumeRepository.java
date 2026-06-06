@@ -14,6 +14,8 @@ public interface CostumeRepository extends BaseCrudRepository<Costume, Integer> 
     List<Costume> findByProviderIdAndStatusNotIgnoreCase(Integer providerId, String status);
     List<Costume> findByNameContainingIgnoreCaseAndStatusNot(String keyword, String status);
     long countByProviderId(Integer providerId);
+    // Count costumes for a provider excluding a specific status (case-insensitive)
+    long countByProviderIdAndStatusNotIgnoreCase(Integer providerId, String status);
 
     @Query("SELECT c FROM Costume c WHERE COALESCE(TRIM(c.textVector), '') <> '' AND COALESCE(TRIM(c.imageVector), '') <> ''")
     List<Costume> findAllWithVector();

@@ -126,23 +126,31 @@ public class UserServiceImpl implements UserService {
 
         User saved = userRepository.save(user);
 
-        // If COSPLAYER or provider role -> mark as INACTIVE and send activation email
+        // If COSPLAYER or provider role -> for normal registrations mark as INACTIVE and send activation email.
+        // For accounts created via Google (fromGoogle==true) we want them to be ACTIVE immediately.
         try {
             if (saved.getRole() != null) {
                 Role savedEnum = null;
                 try { savedEnum = Role.valueOf(saved.getRole().getRoleName()); } catch (IllegalArgumentException ignored) {}
                 if (savedEnum != null && (savedEnum == Role.COSPLAYER || RoleUtils.isProviderRole(savedEnum))) {
-                    saved.setStatus("INACTIVE");
-                    saved = userRepository.save(saved);
-                    try {
-                        activationService.createTokenForUser(saved);
-                    } catch (Exception e) {
-                        logger.error("Failed to create/send activation token for user {}: {}", saved.getId(), e.getMessage(), e);
+                    if (fromGoogle) {
+                        // Google-created accounts: mark ACTIVE and skip activation email
+                        saved.setStatus("ACTIVE");
+                        saved = userRepository.save(saved);
+                    } else {
+                        // Regular registration: require activation
+                        saved.setStatus("INACTIVE");
+                        saved = userRepository.save(saved);
+                        try {
+                            activationService.createTokenForUser(saved);
+                        } catch (Exception e) {
+                            logger.error("Failed to create/send activation token for user {}: {}", saved.getId(), e.getMessage(), e);
+                        }
                     }
                 }
             }
         } catch (Exception e) {
-            logger.error("Error while setting INACTIVE and sending activation for user {}: {}", saved.getId(), e.getMessage(), e);
+            logger.error("Error while setting account status and sending activation for user {}: {}", saved.getId(), e.getMessage(), e);
         }
 
         // create wallet for COSPLAYER or provider roles
@@ -375,9 +383,31 @@ public class UserServiceImpl implements UserService {
         String email = (String) payload.get("email");
         if (email == null) throw new AppException(ErrorCode.INVALID_CREDENTIALS);
 
-        User user = userRepository.findByEmail(email).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        // Try to find existing user by email. If not found, create a new account using Google info.
+        var existingOpt = userRepository.findByEmail(email);
+        User user;
+        if (existingOpt.isPresent()) {
+            user = existingOpt.get();
+        } else {
+            // Create a new user using Google-provided data. Use email as username (same approach as registerWithGoogleToken).
+            String name = payload.get("name") == null ? null : payload.get("name").toString();
+            String picture = payload.get("picture") == null ? null : payload.get("picture").toString();
+            RegisterRequest r = new RegisterRequest();
+            r.setUsername(email);
+            r.setEmail(email);
+            r.setFullName(name);
+            try {
+                user = register(r, true, picture);
+            } catch (AppException ae) {
+                // If registration fails for some reason, rethrow as invalid credentials to keep contract of this method
+                throw new AppException(ErrorCode.INVALID_CREDENTIALS);
+            }
+        }
+
         if (user.getStatus() != null && "BANNED".equalsIgnoreCase(user.getStatus())) throw new AppException(ErrorCode.ACCOUNT_BANNED);
-        if (user.getStatus() != null && "INACTIVE".equalsIgnoreCase(user.getStatus())) throw new AppException(ErrorCode.ACCOUNT_NOT_ACTIVATED);
+        // NOTE: we do not block INACTIVE here so behavior matches registerWithGoogleToken which allows creation/login and
+        // returns a token even if activation is pending. If you want to require activation, uncomment the next line.
+        // if (user.getStatus() != null && "INACTIVE".equalsIgnoreCase(user.getStatus())) throw new AppException(ErrorCode.ACCOUNT_NOT_ACTIVATED);
 
         List<String> roles = user.getRole() == null ? Collections.emptyList() : List.of(user.getRole().getRoleName());
         Long userIdLong = user.getId() == null ? null : user.getId().longValue();

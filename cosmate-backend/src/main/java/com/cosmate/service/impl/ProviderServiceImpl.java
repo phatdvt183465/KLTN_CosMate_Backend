@@ -18,6 +18,12 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import com.cosmate.entity.Order;
+import com.cosmate.entity.Review;
+import com.cosmate.repository.OrderRepository;
+import com.cosmate.repository.ReviewRepository;
 import com.cosmate.dto.response.ProviderCancellationPolicyResponse;
 
 @Service
@@ -28,6 +34,8 @@ public class ProviderServiceImpl implements ProviderService {
     private final UserRepository userRepository;
     private final FirebaseStorageService firebaseStorageService;
     private final com.cosmate.service.CancellationPolicyService cancellationPolicyService;
+    private final OrderRepository orderRepository;
+    private final ReviewRepository reviewRepository;
 
     @Override
     @Transactional
@@ -138,6 +146,46 @@ public class ProviderServiceImpl implements ProviderService {
         Integer cur = p.getCompletedOrders() == null ? 0 : p.getCompletedOrders();
         p.setCompletedOrders(cur + 1);
         return providerRepository.save(p);
+    }
+
+    @Override
+    @Transactional
+    public Provider recalculateProviderTotals(Integer providerId) {
+        Provider p = providerRepository.findById(providerId).orElseThrow(() -> new AppException(ErrorCode.PROVIDER_NOT_FOUND));
+
+        List<Order> orders = orderRepository.findByProviderIdOrderByCreatedAtDesc(providerId);
+        long completed = orders.stream().filter(o -> o.getStatus() != null && "COMPLETED".equalsIgnoreCase(o.getStatus())).count();
+
+        List<Review> reviews = reviewRepository.findByOrderProviderId(providerId);
+        List<Review> validReviews = reviews.stream()
+                .filter(r -> r.getRating() != null)
+                .filter(r -> r.getIsSpamOrToxic() == null || !r.getIsSpamOrToxic())
+                .collect(Collectors.toList());
+
+        int totalReviews = validReviews.size();
+        BigDecimal avg = BigDecimal.ZERO;
+        if (totalReviews > 0) {
+            int sum = validReviews.stream().mapToInt(Review::getRating).sum();
+            avg = new BigDecimal(sum).divide(new BigDecimal(totalReviews), 2, RoundingMode.HALF_UP);
+        }
+
+        p.setCompletedOrders((int) completed);
+        p.setTotalReviews(totalReviews);
+        p.setTotalRating(avg);
+        return providerRepository.save(p);
+    }
+
+    @Override
+    @Transactional
+    public void recalculateAllProviderTotals() {
+        List<Provider> all = providerRepository.findAll();
+        for (Provider p : all) {
+            try {
+                recalculateProviderTotals(p.getId());
+            } catch (Exception ex) {
+                org.slf4j.LoggerFactory.getLogger(ProviderServiceImpl.class).error("Failed to recalc provider {}: {}", p.getId(), ex.getMessage(), ex);
+            }
+        }
     }
 
     @Override

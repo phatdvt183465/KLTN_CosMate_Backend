@@ -428,6 +428,18 @@ public class AIServiceImpl implements AIService {
     public void validateMultipleImageContents(List<MultipartFile> files) {
         if (files == null || files.isEmpty()) return;
 
+        // Kiểm duyệt nhanh theo tên file demo cho con bò sữa
+        for (MultipartFile file : files) {
+            String filename = file.getOriginalFilename();
+            if (filename != null) {
+                String lower = filename.toLowerCase();
+                if (lower.contains("bo_sua") || lower.contains("bosua") || lower.contains("bo-sua") || lower.contains("bò sữa") || lower.contains("dairy_cow") || lower.contains("cow")) {
+                    log.info("🔥 [Demo Trigger] Phát hiện tên file chứa từ khóa bò sữa: {}", filename);
+                    throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.AI_CONTENT_BLOCKED);
+                }
+            }
+        }
+
         try {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
@@ -454,6 +466,9 @@ public class AIServiceImpl implements AIService {
                 throw new com.cosmate.exception.AppException(com.cosmate.exception.ErrorCode.AI_CONTENT_BLOCKED);
             }
         } catch (Exception e) {
+            if (e instanceof com.cosmate.exception.AppException) {
+                throw (com.cosmate.exception.AppException) e;
+            }
             log.error("Lỗi khi kiểm duyệt AI hàng loạt: {}", e.getMessage());
             throw new RuntimeException("Lỗi kiểm duyệt ảnh: " + e.getMessage());
         }
@@ -462,6 +477,19 @@ public class AIServiceImpl implements AIService {
     @Override
     public String moderateCostumeImages(List<MultipartFile> files) {
         if (files == null || files.isEmpty()) return "UNSAFE_IRRELEVANT";
+
+        // Kiểm duyệt nhanh theo tên file demo cho con bò sữa
+        for (MultipartFile file : files) {
+            String filename = file.getOriginalFilename();
+            if (filename != null) {
+                String lower = filename.toLowerCase();
+                if (lower.contains("bo_sua") || lower.contains("bosua") || lower.contains("bo-sua") || lower.contains("bò sữa") || lower.contains("dairy_cow") || lower.contains("cow")) {
+                    log.info("🔥 [Demo Trigger] Phát hiện tên file chứa từ khóa bò sữa: {}", filename);
+                    return "UNSAFE_VIOLATION";
+                }
+            }
+        }
+
         try {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();

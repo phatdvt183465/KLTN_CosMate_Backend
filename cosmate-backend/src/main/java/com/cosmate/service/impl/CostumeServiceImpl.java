@@ -75,15 +75,11 @@ public class CostumeServiceImpl implements CostumeService {
                     .filter(f -> f != null && !f.isEmpty() && f.getContentType() != null && f.getContentType().startsWith("image/"))
                     .collect(Collectors.toList()));
         }
-        if (request.getVideoFiles() != null) {
-            imageFilesForAi.addAll(request.getVideoFiles().stream()
-                    .filter(f -> f != null && !f.isEmpty() && f.getContentType() != null && f.getContentType().startsWith("image/"))
-                    .collect(Collectors.toList()));
-        }
 
+        String moderationResult = null;
         if (!imageFilesForAi.isEmpty()) {
-            String moderation = aiService.moderateCostumeImages(imageFilesForAi);
-            if ("UNSAFE_VIOLATION".equals(moderation) || "UNSAFE_IRRELEVANT".equals(moderation)) {
+            moderationResult = aiService.moderateCostumeImages(imageFilesForAi);
+            if ("UNSAFE_VIOLATION".equals(moderationResult)) {
                 throw new AppException(ErrorCode.IMAGE_POLICY_VIOLATION);
             }
         }
@@ -117,7 +113,11 @@ public class CostumeServiceImpl implements CostumeService {
         // Bước 3: Tạo Vector Embeddings (Bất đồng bộ - Async)
         aiService.processNewCostumeAsync(savedCostume.getId());
 
-        return mapToResponse(savedCostume);
+        CostumeResponse response = mapToResponse(savedCostume);
+        if ("UNSAFE_IRRELEVANT".equals(moderationResult)) {
+            response.setHasIrrelevantImage(true);
+        }
+        return response;
     }
 
     @Override
@@ -156,7 +156,22 @@ public class CostumeServiceImpl implements CostumeService {
         updateBaseInfo(costume, request);
 
         // 3. Xử lý Ảnh (Chỉ thay thế nếu có ít nhất 1 file mới hợp lệ)
+        String moderationResult = null;
         if (isImageChanged) {
+            List<MultipartFile> imageFilesForAi = new ArrayList<>();
+            if (request.getImageFiles() != null) {
+                imageFilesForAi.addAll(request.getImageFiles().stream()
+                        .filter(f -> f != null && !f.isEmpty() && f.getContentType() != null && f.getContentType().startsWith("image/"))
+                        .collect(Collectors.toList()));
+            }
+
+            if (!imageFilesForAi.isEmpty()) {
+                moderationResult = aiService.moderateCostumeImages(imageFilesForAi);
+                if ("UNSAFE_VIOLATION".equals(moderationResult)) {
+                    throw new AppException(ErrorCode.IMAGE_POLICY_VIOLATION);
+                }
+            }
+
             validateMediaLimits(request);
             costume.getImages().clear();
             handleImages(costume, request);
@@ -190,7 +205,11 @@ public class CostumeServiceImpl implements CostumeService {
             registerVectorGenerationAfterCommit(costume.getId(), isTextChanged, isImageChanged);
         }
 
-        return mapToResponse(costume); // Thay cho costumeRepository.save(costume) nếu không cần thiết
+        CostumeResponse response = mapToResponse(costume);
+        if ("UNSAFE_IRRELEVANT".equals(moderationResult)) {
+            response.setHasIrrelevantImage(true);
+        }
+        return response;
     }
 
     @Override

@@ -36,6 +36,7 @@ public class CostumeResponse implements CrudDto<Integer> {
     private List<AccessoryResponse> accessories;
     private List<RentalOptionResponse> rentalOptions;
     private List<CharacterDto> characters;
+    private Boolean hasIrrelevantImage;
 
     @Data
     @Builder

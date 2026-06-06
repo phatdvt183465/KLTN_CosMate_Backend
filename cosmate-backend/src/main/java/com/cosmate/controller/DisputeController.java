@@ -104,10 +104,10 @@ public class DisputeController {
             if (!hasAdminStaffRole(auth)) return ApiResponse.<DisputeResult>builder().code(403).message("Chỉ staff hoặc admin mới có thể xử lý khiếu nại").build();
 
             // validate request: require either penaltyAmount > 0 or penaltyPercent > 0 (or both); if both provided, percent takes precedence
-            boolean hasAmount = req.getPenaltyAmount() != null && req.getPenaltyAmount().compareTo(java.math.BigDecimal.ZERO) > 0;
-            boolean hasPercent = req.getPenaltyPercent() != null && req.getPenaltyPercent().compareTo(java.math.BigDecimal.ZERO) > 0;
+            boolean hasAmount = req.getPenaltyAmount() != null && req.getPenaltyAmount().compareTo(java.math.BigDecimal.ZERO) >= 0;
+            boolean hasPercent = req.getPenaltyPercent() != null && req.getPenaltyPercent().compareTo(java.math.BigDecimal.ZERO) >= 0;
             if (!hasAmount && !hasPercent) {
-                return ApiResponse.<DisputeResult>builder().code(400).message("penaltyAmount or penaltyPercent is required and must be > 0").build();
+                return ApiResponse.<DisputeResult>builder().code(400).message("penaltyAmount or penaltyPercent is required and must be >= 0").build();
             }
 
             // build a DisputeResult entity to pass into service

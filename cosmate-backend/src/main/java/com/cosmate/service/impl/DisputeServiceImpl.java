@@ -431,7 +431,12 @@ public class DisputeServiceImpl implements DisputeService {
                             java.util.Optional<com.cosmate.entity.Costume> cosOpt = costumeRepository.findById(od.getCostumeId());
                             if (cosOpt.isPresent()) {
                                 com.cosmate.entity.Costume cos = cosOpt.get();
+                                // mark as available again
                                 cos.setStatus("AVAILABLE");
+                                // update completed rent count: same logic as in OrderServiceImpl and scheduler (increment by 1 per order detail)
+                                Integer crc = cos.getCompletedRentCount();
+                                if (crc == null || crc == 0) cos.setCompletedRentCount(1);
+                                else cos.setCompletedRentCount(crc + 1);
                                 costumeRepository.save(cos);
                             }
                         } catch (Exception ignored) {}

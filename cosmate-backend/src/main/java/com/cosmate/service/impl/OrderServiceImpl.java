@@ -6,6 +6,7 @@ import com.cosmate.dto.response.OrderResponse;
 import com.cosmate.entity.*;
 import com.cosmate.exception.InsufficientBalanceException;
 import com.cosmate.repository.OrderCostumeSurchargeRepository;
+import com.cosmate.repository.DisputeRepository;
 import com.cosmate.repository.CostumeRepository;
 import com.cosmate.repository.OrderDetailRepository;
 import com.cosmate.repository.OrderRepository;
@@ -50,6 +51,7 @@ public class OrderServiceImpl implements OrderService {
     private final ProviderService providerService;
     private final com.cosmate.service.CancellationPolicyService cancellationPolicyService;
     private final OrderCostumeSurchargeRepository orderCostumeSurchargeRepository;
+    private final DisputeRepository disputeRepository;
 
     // New repositories for mapping costume data into order-specific tables
     private final com.cosmate.repository.CostumeAccessoryRepository costumeAccessoryRepository;
@@ -1543,6 +1545,24 @@ public class OrderServiceImpl implements OrderService {
 
         java.math.BigDecimal total = order.getTotalAmount() == null ? java.math.BigDecimal.ZERO : order.getTotalAmount();
 
+        // Check whether a dispute was opened by the cosplayer for this order. If so,
+        // money flows for deposit return / provider payout were already handled in
+        // DisputeService.resolveDispute; therefore skip wallet transactions here.
+        boolean skipMoneyFlows = false;
+        try {
+            java.util.List<com.cosmate.entity.Dispute> disputes = disputeRepository.findByOrderId(order.getId());
+            if (disputes != null && !disputes.isEmpty()) {
+                for (com.cosmate.entity.Dispute d : disputes) {
+                    try {
+                        if (d != null && d.getCreatedByUserId() != null && d.getCreatedByUserId().equals(order.getCosplayerId())) {
+                            skipMoneyFlows = true;
+                            break;
+                        }
+                    } catch (Exception ignored) {}
+                }
+            }
+        } catch (Exception ignored) {}
+
         List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
         java.math.BigDecimal depositTotal = java.math.BigDecimal.ZERO;
         if (details != null && !details.isEmpty()) {
@@ -1552,9 +1572,10 @@ public class OrderServiceImpl implements OrderService {
         }
         if (depositTotal == null) depositTotal = java.math.BigDecimal.ZERO;
         java.math.BigDecimal providerShare = total.subtract(depositTotal);
+
         // Add any paid extension amounts for this order to provider payout
         java.math.BigDecimal extendTotalPaid = java.math.BigDecimal.ZERO;
-        if (details != null && !details.isEmpty()) {
+        if (!skipMoneyFlows && details != null && !details.isEmpty()) {
             for (OrderDetail d : details) {
                 try {
                     java.util.List<com.cosmate.entity.OrderDetailExtend> exts = orderDetailExtendRepository.findByOrderDetailId(d.getId());
@@ -1574,45 +1595,51 @@ public class OrderServiceImpl implements OrderService {
         if (providerShare.compareTo(java.math.BigDecimal.ZERO) < 0) providerShare = java.math.BigDecimal.ZERO;
 
         java.util.List<com.cosmate.entity.Transaction> txs = new java.util.ArrayList<>();
-        if (depositTotal.compareTo(java.math.BigDecimal.ZERO) > 0) {
-            com.cosmate.entity.User cosUser = com.cosmate.entity.User.builder().id(order.getCosplayerId()).build();
-            com.cosmate.entity.Wallet cosWallet = walletService.createForUser(cosUser);
-            com.cosmate.entity.Transaction txDeposit = walletService.credit(cosWallet, depositTotal, "Deposit returned on order completion", "DEPOSIT_RETURN:" + order.getId(), null, order);
-            if (txDeposit != null) txs.add(txDeposit);
-        }
-        if (providerShare.compareTo(java.math.BigDecimal.ZERO) > 0) {
-            // Ensure we credit the provider's USER wallet (provider has separate id and userId)
-            Integer providerUserId = null;
-            try {
-                com.cosmate.entity.Provider provEntity = null;
-                try { provEntity = providerService.getById(order.getProviderId()); } catch (Exception ignored) { provEntity = null; }
-                if (provEntity != null && provEntity.getUserId() != null) {
-                    providerUserId = provEntity.getUserId();
-                }
-            } catch (Exception ignored) {}
+        if (!skipMoneyFlows) {
+            if (depositTotal.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                com.cosmate.entity.User cosUser = com.cosmate.entity.User.builder().id(order.getCosplayerId()).build();
+                com.cosmate.entity.Wallet cosWallet = walletService.createForUser(cosUser);
+                com.cosmate.entity.Transaction txDeposit = walletService.credit(cosWallet, depositTotal, "Deposit returned on order completion", "DEPOSIT_RETURN:" + order.getId(), null, order);
+                if (txDeposit != null) txs.add(txDeposit);
+            }
+            if (providerShare.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                // Ensure we credit the provider's USER wallet (provider has separate id and userId)
+                Integer providerUserId = null;
+                try {
+                    com.cosmate.entity.Provider provEntity = null;
+                    try { provEntity = providerService.getById(order.getProviderId()); } catch (Exception ignored) { provEntity = null; }
+                    if (provEntity != null && provEntity.getUserId() != null) {
+                        providerUserId = provEntity.getUserId();
+                    }
+                } catch (Exception ignored) {}
 
-            if (providerUserId != null) {
-                java.util.Optional<com.cosmate.entity.Wallet> wopt = walletService.getByUserId(providerUserId);
-                if (wopt.isPresent()) {
-                    com.cosmate.entity.Wallet provWallet = wopt.get();
-                    com.cosmate.entity.Transaction txProv = walletService.credit(provWallet, providerShare, "Provider payout on order completion", "PROVIDER_PAYOUT:" + order.getId(), null, order);
-                    if (txProv != null) txs.add(txProv);
-                } else {
-                    java.util.Optional<com.cosmate.entity.User> providerUserOpt = userRepository.findById(providerUserId);
-                    if (providerUserOpt.isPresent()) {
-                        walletService.createForUser(providerUserOpt.get());
-                        java.util.Optional<com.cosmate.entity.Wallet> wopt2 = walletService.getByUserId(providerUserId);
-                        if (wopt2.isPresent()) {
-                            com.cosmate.entity.Wallet provWallet = wopt2.get();
-                            com.cosmate.entity.Transaction txProv = walletService.credit(provWallet, providerShare, "Provider payout on order completion", "PROVIDER_PAYOUT:" + order.getId(), null, order);
-                            if (txProv != null) txs.add(txProv);
+                if (providerUserId != null) {
+                    java.util.Optional<com.cosmate.entity.Wallet> wopt = walletService.getByUserId(providerUserId);
+                    if (wopt.isPresent()) {
+                        com.cosmate.entity.Wallet provWallet = wopt.get();
+                        com.cosmate.entity.Transaction txProv = walletService.credit(provWallet, providerShare, "Provider payout on order completion", "PROVIDER_PAYOUT:" + order.getId(), null, order);
+                        if (txProv != null) txs.add(txProv);
+                    } else {
+                        java.util.Optional<com.cosmate.entity.User> providerUserOpt = userRepository.findById(providerUserId);
+                        if (providerUserOpt.isPresent()) {
+                            walletService.createForUser(providerUserOpt.get());
+                            java.util.Optional<com.cosmate.entity.Wallet> wopt2 = walletService.getByUserId(providerUserId);
+                            if (wopt2.isPresent()) {
+                                com.cosmate.entity.Wallet provWallet = wopt2.get();
+                                com.cosmate.entity.Transaction txProv = walletService.credit(provWallet, providerShare, "Provider payout on order completion", "PROVIDER_PAYOUT:" + order.getId(), null, order);
+                                if (txProv != null) txs.add(txProv);
+                            }
                         }
                     }
+                } else {
+                    // If we can't find a provider user to credit, log an error and skip the payout (but still complete the order)
+                    System.err.println("Unable to credit provider payout for order " + order.getId() + " because provider user was not found");
                 }
-            } else {
-                // If we can't find a provider user to credit, log an error and skip the payout (but still complete the order)
-                System.err.println("Unable to credit provider payout for order " + order.getId() + " because provider user was not found");
             }
+        } else {
+            // Skip money flows since dispute by cosplayer handled payments already
+            depositTotal = java.math.BigDecimal.ZERO;
+            providerShare = java.math.BigDecimal.ZERO;
         }
 
         order.setStatus("COMPLETED");

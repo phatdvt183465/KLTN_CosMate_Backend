@@ -18,6 +18,7 @@ public class DisputeServiceImpl implements DisputeService {
     private final DisputeResultRepository disputeResultRepository;
     private final OrderRepository orderRepository;
     private final com.cosmate.repository.DisputeImageRepository disputeImageRepository;
+    private final com.cosmate.repository.CostumeRepository costumeRepository;
     private final com.cosmate.service.FirebaseStorageService firebaseStorageService;
     private final WalletService walletService;
     private final OrderDetailRepository orderDetailRepository;
@@ -34,6 +35,7 @@ public class DisputeServiceImpl implements DisputeService {
                               com.cosmate.service.NotificationService notificationService,
                               com.cosmate.service.ProviderService providerService,
                               com.cosmate.repository.DisputeImageRepository disputeImageRepository,
+                              com.cosmate.repository.CostumeRepository costumeRepository,
                               com.cosmate.service.FirebaseStorageService firebaseStorageService) {
         this.disputeRepository = disputeRepository;
         this.disputeResultRepository = disputeResultRepository;
@@ -44,6 +46,7 @@ public class DisputeServiceImpl implements DisputeService {
         this.notificationService = notificationService;
         this.providerService = providerService;
         this.disputeImageRepository = disputeImageRepository;
+        this.costumeRepository = costumeRepository;
         this.firebaseStorageService = firebaseStorageService;
     }
 
@@ -317,6 +320,21 @@ public class DisputeServiceImpl implements DisputeService {
             appliedPenalty = depositTotal;
         }
 
+        // Determine who created the dispute: cosplayer or provider (compute early so available regardless of penalty)
+        boolean createdByProvider = false;
+        boolean createdByCosplayer = false;
+        try {
+            Integer creatorUserId = d.getCreatedByUserId();
+            if (creatorUserId != null) {
+                if (order.getCosplayerId() != null && order.getCosplayerId().equals(creatorUserId)) {
+                    createdByCosplayer = true;
+                } else {
+                        createdByProvider = true;
+                        }
+                    }
+        } catch (Exception ignored) {
+        }
+
         if (appliedPenalty.compareTo(BigDecimal.ZERO) > 0) {
             // get or create wallets for cosplayer and provider
             com.cosmate.entity.User cosUser = com.cosmate.entity.User.builder().id(order.getCosplayerId()).build();
@@ -343,24 +361,7 @@ public class DisputeServiceImpl implements DisputeService {
                 provWallet = walletService.getByUser(provUser).orElseGet(() -> walletService.createForUser(provUser));
             }
 
-            // Determine if dispute was created by provider
-            boolean createdByProvider = false;
-            try {
-                Integer creatorUserId = d.getCreatedByUserId();
-                if (creatorUserId != null) {
-                    if (order.getProviderId() != null && order.getProviderId().equals(creatorUserId)) {
-                        createdByProvider = true;
-                    } else {
-                        java.util.Optional<com.cosmate.entity.Provider> provOpt = providerRepository.findByUserId(creatorUserId);
-                        if (provOpt.isPresent()) {
-                            com.cosmate.entity.Provider provInfo = provOpt.get();
-                            if (provInfo.getId() != null && provInfo.getId().equals(order.getProviderId())) createdByProvider = true;
-                        }
-                    }
-                }
-            } catch (Exception ex) {
-                createdByProvider = false;
-            }
+            // createdByProvider / createdByCosplayer were computed above
 
             if (createdByProvider) {
                 // Provider opened dispute: staff decision moves portion of deposit to provider, refund rest to cosplayer
@@ -412,29 +413,68 @@ public class DisputeServiceImpl implements DisputeService {
         d.setStaffId(resolverUserId);
         disputeRepository.save(d);
 
-        // update order: after resolution, move to COMPLETED and record tracking
-        order.setStatus("COMPLETED");
-        orderRepository.save(order);
-        // increment provider completed orders count by 1
+        // update order status depending on who opened the dispute
         try {
-            if (order.getProviderId() != null) {
-                try { providerService.incrementCompletedOrders(order.getProviderId()); } catch (Exception ignored) {}
+            if (createdByCosplayer) {
+                // Cosplayer opened the dispute at receiving time -> ask them to ship back the items
+                order.setStatus("SHIPPING_BACK");
+            } else {
+                // Provider opened (or not cosplayer) -> complete the order and make costumes available again
+                order.setStatus("COMPLETED");
+
+                // set costumes in this order back to AVAILABLE (provider-created dispute or admin fallback)
+                try {
+                    java.util.List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
+                    for (OrderDetail od : details) {
+                        if (od.getCostumeId() == null) continue;
+                        try {
+                            java.util.Optional<com.cosmate.entity.Costume> cosOpt = costumeRepository.findById(od.getCostumeId());
+                            if (cosOpt.isPresent()) {
+                                com.cosmate.entity.Costume cos = cosOpt.get();
+                                cos.setStatus("AVAILABLE");
+                                costumeRepository.save(cos);
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                } catch (Exception ignored) {}
             }
-        } catch (Exception ignored) {}
-        try {
-            com.cosmate.entity.Notification n = com.cosmate.entity.Notification.builder()
-                    .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
-                    .type("ORDER_STATUS")
-                    .header("Đơn hàng hoàn tất")
-                    .content("Đơn hàng #" + order.getId() + " đã được giải quyết và hoàn tất.")
-                    .sendAt(java.time.LocalDateTime.now())
-                    .isRead(false)
-                    .build();
-            notificationService.create(n);
-        } catch (Exception ignored) {}
+            orderRepository.save(order);
 
+            // increment provider completed orders count by 1 only when order moved to COMPLETED
+            if (!createdByCosplayer) {
+                try {
+                    if (order.getProviderId() != null) {
+                        try { providerService.incrementCompletedOrders(order.getProviderId()); } catch (Exception ignored) {}
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            // send notification to cosplayer depending on flow
+            try {
+                com.cosmate.entity.Notification n;
+                if (createdByCosplayer) {
+                    n = com.cosmate.entity.Notification.builder()
+                            .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                            .type("ORDER_STATUS")
+                            .header("Vui lòng trả lại bộ đồ")
+                            .content("Đơn hàng #" + order.getId() + " đã được giải quyết. Vui lòng trả lại bộ đồ cho nhà cung cấp.")
+                            .sendAt(java.time.LocalDateTime.now())
+                            .isRead(false)
+                            .build();
+                } else {
+                    n = com.cosmate.entity.Notification.builder()
+                            .user(com.cosmate.entity.User.builder().id(order.getCosplayerId()).build())
+                            .type("ORDER_STATUS")
+                            .header("Đơn hàng hoàn tất")
+                            .content("Đơn hàng #" + order.getId() + " đã được giải quyết và hoàn tất.")
+                            .sendAt(java.time.LocalDateTime.now())
+                            .isRead(false)
+                            .build();
+                }
+                notificationService.create(n);
+            } catch (Exception ignored) {}
+        } catch (Exception ignored) {}
         // NOTE: Do not create OrderTracking entries for dispute resolution. See note above.
-
         return saved;
     }
 }

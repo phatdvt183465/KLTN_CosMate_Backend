@@ -18,4 +18,7 @@ public interface UserRepository extends BaseCrudRepository<User, Integer> {
     int deductTokensSafe(@org.springframework.data.repository.query.Param("id") Integer id, @org.springframework.data.repository.query.Param("amount") int amount);
 
     int countByCurrentArchetype(String currentArchetype);
+
+    @org.springframework.data.jpa.repository.Query("SELECT DISTINCT u.currentArchetype FROM User u WHERE u.currentArchetype IS NOT NULL AND u.currentArchetype != ''")
+    List<String> findDistinctArchetypes();
 }

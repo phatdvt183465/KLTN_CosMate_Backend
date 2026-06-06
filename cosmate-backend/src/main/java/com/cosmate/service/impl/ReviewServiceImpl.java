@@ -163,6 +163,7 @@ public class ReviewServiceImpl implements ReviewService {
         resp.setAiSentiment(r.getAiSentiment());
         resp.setIsSpamOrToxic(r.getIsSpamOrToxic());
         resp.setAiSummary(r.getAiSummary());
+        resp.setIsConflicting(r.getIsConflicting());
 
         List<ReviewUrlResponse> images = new ArrayList<>();
         List<ReviewUrl> urls = reviewUrlRepository.findByReviewId(r.getId());
@@ -226,7 +227,8 @@ public class ReviewServiceImpl implements ReviewService {
     private void recalculateProviderRating(Integer providerId) {
         List<Review> reviews = reviewRepository.findByOrderProviderId(providerId);
         List<Review> validReviews = reviews.stream()
-                .filter(r -> r.getIsSpamOrToxic() == null || !r.getIsSpamOrToxic())
+                .filter(r -> (r.getIsSpamOrToxic() == null || !r.getIsSpamOrToxic())
+                          && (r.getIsConflicting() == null || !r.getIsConflicting()))
                 .toList();
 
         int totalReviews = validReviews.size();

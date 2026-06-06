@@ -23,5 +23,6 @@ public class ReviewResponse {
     private String aiSentiment;
     private Boolean isSpamOrToxic;
     private String aiSummary;
+    private Boolean isConflicting;
 }
 

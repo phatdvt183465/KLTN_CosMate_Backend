@@ -49,6 +49,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
@@ -91,6 +92,7 @@ public class AIServiceImpl implements AIService {
     private final StyleSurveyRepository styleSurveyRepository;
     private final AiModelRouter aiModelRouter;
     private final ReviewRepository reviewRepository;
+    private final TransactionTemplate transactionTemplate;
     @Lazy
     @Autowired
     private AIService selfProxy;
@@ -204,66 +206,69 @@ public class AIServiceImpl implements AIService {
      * Tạo vector nhúng (embedding) cho trang phục và lưu vào Database.
      */
     @Async
-    @org.springframework.transaction.annotation.Transactional
     @Override
     public void generateAndSaveVector(Integer costumeId, boolean updateText, boolean updateImage) {
-        if (!updateText && !updateImage) return; // Không cần cập nhật gì thì thoát luôn cho nhẹ server
+        if (!updateText && !updateImage) return;
 
         log.info("Chạy ngầm cập nhật Vector (Text: {}, Image: {}) cho Costume ID: {}", updateText, updateImage, costumeId);
 
-        costumeRepository.findById(costumeId).ifPresent(costume -> {
-            try {
-                boolean isChanged = false;
+        try {
+            String imageVector = null;
+            String textVector = null;
 
-                // 1. CHỈ TẠO LẠI IMAGE VECTOR NẾU CÓ YÊU CẦU
-                if (updateImage && costume.getImages() != null && !costume.getImages().isEmpty()) {
-                    List<byte[]> downloadedImages = new ArrayList<>();
+            // 1. Lấy URLs ảnh trong Transaction ngắn
+            List<String> imageUrls = Boolean.TRUE.equals(updateImage) ? transactionTemplate.execute(status -> {
+                Costume costume = costumeRepository.findById(costumeId).orElse(null);
+                if (costume == null || costume.getImages() == null) return Collections.emptyList();
+                return costume.getImages().stream().map(img -> img.getImageUrl()).collect(Collectors.toList());
+            }) : Collections.emptyList();
 
-                    // Giới hạn tối đa 3-5 ảnh để bóc tag (tránh payload quá lớn gây lỗi quá tải)
-                    costume.getImages().stream().limit(4).forEach(img -> {
-                        byte[] bytes = downloadImageFromUrl(img.getImageUrl());
-                        if (bytes != null) downloadedImages.add(bytes);
-                    });
+            // 2. Chạy tải ảnh và gọi API ngoài Transaction
+            if (updateImage && imageUrls != null && !imageUrls.isEmpty()) {
+                List<byte[]> downloadedImages = new ArrayList<>();
+                imageUrls.stream().limit(4).forEach(url -> {
+                    byte[] bytes = downloadImageFromUrl(url);
+                    if (bytes != null) downloadedImages.add(bytes);
+                });
 
-                    if (!downloadedImages.isEmpty()) {
-                        // GỌI API LẦN 1: Bóc tag cho toàn bộ 4 ảnh cùng lúc
-                        String allImageTags = extractTagsFromMultipleImageBytes(downloadedImages);
-
-                        if (allImageTags != null && !allImageTags.isEmpty()) {
-                            // GỌI API LẦN 2: Nhúng chuỗi tag thành Vector
-                            String imageVector = generateVectorForText(allImageTags);
-                            if (imageVector != null) {
-                                costume.setImageVector(imageVector);
-                                isChanged = true;
-                            }
-                        }
+                if (!downloadedImages.isEmpty()) {
+                    String allImageTags = extractTagsFromMultipleImageBytes(downloadedImages);
+                    if (allImageTags != null && !allImageTags.isEmpty()) {
+                        imageVector = generateVectorForText(allImageTags);
                     }
                 }
-
-                // 2. CHỈ TẠO LẠI TEXT VECTOR NẾU CÓ YÊU CẦU
-                if (updateText) {
-                    String textInput = (costume.getName() + " " + (costume.getDescription() != null ? costume.getDescription() : "")).trim();
-                    String textVector = generateVectorForText(textInput);
-                    if (textVector != null) {
-                        costume.setTextVector(textVector);
-                        isChanged = true;
-                    }
-                }
-
-                // 3. CHỈ LƯU VÀO DB NẾU THỰC SỰ CÓ SỰ THAY ĐỔI
-                if (isChanged) {
-                    costumeRepository.save(costume);
-                    log.info("Hoàn tất cập nhật Vector cho bộ: {}", costume.getName());
-                }
-
-            } catch (Exception e) {
-                log.error("Lỗi chạy ngầm Vector cho ID {}: {}", costumeId, e.getMessage());
-                if (e instanceof RuntimeException) {
-                    throw (RuntimeException) e;
-                }
-                throw new RuntimeException(e);
             }
-        });
+
+            // 3. Lấy text mô tả trong Transaction ngắn
+            String textInput = Boolean.TRUE.equals(updateText) ? transactionTemplate.execute(status -> {
+                Costume costume = costumeRepository.findById(costumeId).orElse(null);
+                if (costume == null) return "";
+                return ((costume.getName() != null ? costume.getName() : "") + " " + (costume.getDescription() != null ? costume.getDescription() : "")).trim();
+            }) : "";
+
+            if (updateText && textInput != null && !textInput.isEmpty()) {
+                textVector = generateVectorForText(textInput);
+            }
+
+            // 4. Mở Transaction ngắn để lưu kết quả vào DB
+            if (imageVector != null || textVector != null) {
+                final String finalImageVector = imageVector;
+                final String finalTextVector = textVector;
+
+                transactionTemplate.executeWithoutResult(status -> {
+                    Costume costume = costumeRepository.findById(costumeId).orElse(null);
+                    if (costume != null) {
+                        if (finalImageVector != null) costume.setImageVector(finalImageVector);
+                        if (finalTextVector != null) costume.setTextVector(finalTextVector);
+                        costumeRepository.save(costume);
+                        log.info("Hoàn tất cập nhật Vector cho bộ: {}", costume.getName());
+                    }
+                });
+            }
+        } catch (Exception e) {
+            log.error("Lỗi chạy ngầm Vector cho ID {}: {}", costumeId, e.getMessage(), e);
+            throw new RuntimeException(e);
+        }
     }
 
     private boolean isGenderMatch(String costumeGender, String preferredGender) {
@@ -398,10 +403,10 @@ public class AIServiceImpl implements AIService {
         try {
             log.info("Bắt đầu Refresh Archetype Cache...");
             Map<String, List<Integer>> cache = new HashMap<>();
-            for (User user : userRepository.findAll()) {
-                if (user.getCurrentArchetype() == null || user.getCurrentArchetype().isEmpty()) continue;
-                List<Integer> topCostumeIds = orderDetailRepository.findTopCostumeIdsByArchetype(user.getCurrentArchetype(), 10);
-                cache.put(user.getCurrentArchetype(), topCostumeIds);
+            List<String> distinctArchetypes = userRepository.findDistinctArchetypes();
+            for (String archetype : distinctArchetypes) {
+                List<Integer> topCostumeIds = orderDetailRepository.findTopCostumeIdsByArchetype(archetype, 10);
+                cache.put(archetype, topCostumeIds);
             }
             archetypeTopCache.clear();
             archetypeTopCache.putAll(cache);
@@ -477,18 +482,17 @@ public class AIServiceImpl implements AIService {
 
     @Async
     @Override
-    @org.springframework.transaction.annotation.Transactional
     public void processNewCostumeAsync(Integer costumeId) {
         log.info("Bắt đầu tạo Vector Embeddings bất đồng bộ cho Costume ID: {}", costumeId);
         try {
-            // Logic Try: Gọi API tạo vector và Lưu vector vào DB
             generateAndSaveVector(costumeId, true, true);
             
-            // Cập nhật trạng thái Costume thành AVAILABLE
-            costumeRepository.findById(costumeId).ifPresent(costume -> {
-                costume.setStatus("AVAILABLE");
-                costumeRepository.save(costume);
-                log.info("Tạo vector thành công. Đã cập nhật Costume ID {} thành AVAILABLE.", costumeId);
+            transactionTemplate.executeWithoutResult(status -> {
+                costumeRepository.findById(costumeId).ifPresent(costume -> {
+                    costume.setStatus("AVAILABLE");
+                    costumeRepository.save(costume);
+                    log.info("Tạo vector thành công. Đã cập nhật Costume ID {} thành AVAILABLE.", costumeId);
+                });
             });
         } catch (org.springframework.web.client.RestClientException e) {
             log.warn("Lỗi RestClientException khi tạo Vector cho Costume ID {}: {}", costumeId, e.getMessage());
@@ -499,14 +503,15 @@ public class AIServiceImpl implements AIService {
                 log.error("Lỗi không xác định khi tạo Vector cho Costume ID {}: {}", costumeId, e.getMessage(), e);
             }
         } finally {
-            // Logic Finally: Đảm bảo cập nhật trạng thái Costume thành AVAILABLE (Fallback)
             try {
-                costumeRepository.findById(costumeId).ifPresent(costume -> {
-                    if (!"AVAILABLE".equals(costume.getStatus())) {
-                        costume.setStatus("AVAILABLE");
-                        costumeRepository.save(costume);
-                        log.info("[FALLBACK] Đã cập nhật trạng thái Costume ID {} thành AVAILABLE trong khối finally.", costumeId);
-                    }
+                transactionTemplate.executeWithoutResult(status -> {
+                    costumeRepository.findById(costumeId).ifPresent(costume -> {
+                        if (!"AVAILABLE".equals(costume.getStatus())) {
+                            costume.setStatus("AVAILABLE");
+                            costumeRepository.save(costume);
+                            log.info("[FALLBACK] Đã cập nhật trạng thái Costume ID {} thành AVAILABLE trong khối finally.", costumeId);
+                        }
+                    });
                 });
             } catch (Exception ex) {
                 log.error("Không thể cập nhật trạng thái AVAILABLE trong khối finally cho Costume ID {}: {}", costumeId, ex.getMessage());
@@ -518,7 +523,7 @@ public class AIServiceImpl implements AIService {
      * Đánh giá tư thế (pose) cosplay so với nhân vật gốc và trả về điểm số kèm nhận xét.
      */
     @Override
-    @org.springframework.transaction.annotation.Transactional(noRollbackFor = IllegalArgumentException.class)
+    @org.springframework.transaction.annotation.Transactional
     public PoseScoringResponse scorePose(PoseScoringRequest request) {
         Integer currentUserId = getCurrentUserIdFromContext();
         selfProxy.consumeTokens(currentUserId, 20);
@@ -526,16 +531,19 @@ public class AIServiceImpl implements AIService {
             ObjectNode body = objectMapper.createObjectNode();
             ArrayNode partsNode = objectMapper.createArrayNode();
 
-            // 1. Lấy Luật WCS Cứng
-            String rules = "Bạn là một giám khảo Cosplay. Dưới đây là 50% tiêu chuẩn WCS chính thức:\n"
+            // 1. Tiêu chuẩn cốt lõi WCS (Khung nền tảng quyết định điểm số)
+            String rules = "Bạn là một giám khảo Cosplay chuyên nghiệp. Hãy sử dụng bộ quy chuẩn WCS dưới đây làm khung tiêu chuẩn cốt lõi (baseline) để đánh giá và chấm điểm:\n"
                     + aiKnowledgeBase.getWcsRules() + "\n";
 
-            // 2. Lấy Luật Động từ Database (Nạp vào lúc runtime)
+            // 2. Tiêu chuẩn bổ sung từ cộng đồng (Công cụ tinh chỉnh - Modifiers)
             String dynamicRules = systemConfigRepository.findById("DYNAMIC_POSE_RULES")
                     .map(SystemConfig::getConfigValue).orElse("");
 
             if (!dynamicRules.isEmpty()) {
-                rules += "TIÊU CHUẨN CỘNG ĐỒNG (Chiếm tối đa 50% trọng số điểm): " + dynamicRules + "\n";
+                rules += "TIÊU CHUẨN BỔ SUNG CỘNG ĐỒNG (Điều chỉnh ngữ cảnh - Tối đa 50% trọng số lập luận):\n"
+                        + "Lưu ý: Các luật cộng đồng dưới đây đóng vai trò là các yếu tố điều chỉnh (modifiers) để tinh chỉnh điểm số nền tảng dựa trên WCS. "
+                        + "Chúng chỉ được phép ảnh hưởng tối đa 50% vào lập luận tổng thể, KHÔNG ĐƯỢC PHÉP ghi đè hoặc thay thế hoàn toàn khung tiêu chuẩn WCS chính thức.\n"
+                        + "Nội dung luật bổ sung:\n" + dynamicRules + "\n";
             }
 
             // 3. Lấy Prompt từ DB và map các chuỗi thay vì dùng String.format (%s) dễ gây lỗi
@@ -822,7 +830,6 @@ public class AIServiceImpl implements AIService {
     }
 
     @org.springframework.scheduling.annotation.Scheduled(cron = "0 0 2 * * ?")
-    @org.springframework.transaction.annotation.Transactional
     @Override
     public void generateVectorsForMissingImages() {
         List<Costume> allCostumes = costumeRepository.findCostumesMissingVector();
@@ -832,51 +839,63 @@ public class AIServiceImpl implements AIService {
 
         for (Costume costume : allCostumes) {
             try {
-                boolean isChanged = false;
+                final Integer costumeId = costume.getId();
+                
+                // 1. Lấy danh sách ảnh trong Transaction ngắn
+                List<String> imageUrls = transactionTemplate.execute(status -> {
+                    Costume dbCostume = costumeRepository.findById(costumeId).orElse(null);
+                    if (dbCostume == null || dbCostume.getImages() == null) return Collections.emptyList();
+                    if (dbCostume.getImageVector() == null || dbCostume.getImageVector().trim().isEmpty()) {
+                        return dbCostume.getImages().stream().map(img -> img.getImageUrl()).collect(Collectors.toList());
+                    }
+                    return Collections.emptyList();
+                });
 
-                // 1. CHỈ TẠO IMAGE VECTOR NẾU NÓ THỰC SỰ TRỐNG (DÙNG LOGIC GỘP ẢNH TỐI ƯU API)
-                if (costume.getImageVector() == null || costume.getImageVector().trim().isEmpty()) {
-                    if (costume.getImages() != null && !costume.getImages().isEmpty()) {
-                        List<byte[]> downloadedImages = new ArrayList<>();
+                String imageVector = null;
+                if (imageUrls != null && !imageUrls.isEmpty()) {
+                    List<byte[]> downloadedImages = new ArrayList<>();
+                    imageUrls.stream().limit(4).forEach(url -> {
+                        byte[] bytes = downloadImageFromUrl(url);
+                        if (bytes != null) downloadedImages.add(bytes);
+                    });
 
-                        // Lấy tối đa 4 ảnh của RIÊNG bộ đồ này
-                        costume.getImages().stream().limit(4).forEach(img -> {
-                            byte[] bytes = downloadImageFromUrl(img.getImageUrl());
-                            if (bytes != null) downloadedImages.add(bytes);
-                        });
-
-                        if (!downloadedImages.isEmpty()) {
-                            // GỌI API LẦN 1: Bóc tag gom chung cho tất cả ảnh của bộ đồ này
-                            String allImageTags = extractTagsFromMultipleImageBytes(downloadedImages);
-
-                            if (allImageTags != null && !allImageTags.isEmpty()) {
-                                // GỌI API LẦN 2: Nhúng chuỗi tag thành Vector
-                                String imageVector = generateVectorForText(allImageTags);
-                                if (imageVector != null) {
-                                    costume.setImageVector(imageVector);
-                                    isChanged = true;
-                                }
-                            }
+                    if (!downloadedImages.isEmpty()) {
+                        String allImageTags = extractTagsFromMultipleImageBytes(downloadedImages);
+                        if (allImageTags != null && !allImageTags.isEmpty()) {
+                            imageVector = generateVectorForText(allImageTags);
                         }
                     }
                 }
 
-                // 2. CHỈ TẠO TEXT VECTOR NẾU NÓ THỰC SỰ TRỐNG
-                if (costume.getTextVector() == null || costume.getTextVector().trim().isEmpty()) {
-                    String textInput = ((costume.getName() != null ? costume.getName() : "") + " " + (costume.getDescription() != null ? costume.getDescription() : "")).trim();
-                    if (!textInput.isEmpty()) {
-                        String textVector = generateVectorForText(textInput);
-                        if (textVector != null) {
-                            costume.setTextVector(textVector);
-                            isChanged = true;
-                        }
+                // 2. Kiểm tra xem có cần update text vector không và lấy textInput ngoài Transaction
+                String textInput = transactionTemplate.execute(status -> {
+                    Costume dbCostume = costumeRepository.findById(costumeId).orElse(null);
+                    if (dbCostume == null) return null;
+                    if (dbCostume.getTextVector() == null || dbCostume.getTextVector().trim().isEmpty()) {
+                        return ((dbCostume.getName() != null ? dbCostume.getName() : "") + " " + (dbCostume.getDescription() != null ? dbCostume.getDescription() : "")).trim();
                     }
+                    return null;
+                });
+
+                String textVector = null;
+                if (textInput != null && !textInput.isEmpty()) {
+                    textVector = generateVectorForText(textInput);
                 }
 
-                // 3. LƯU VÀO DB NẾU CÓ CẬP NHẬT
-                if (isChanged) {
-                    costumeRepository.save(costume);
-                    log.info("Cronjob: Đã quét và tạo vector thành công cho Costume ID: {}", costume.getId());
+                // 3. Mở Transaction ngắn để cập nhật DB
+                if (imageVector != null || textVector != null) {
+                    final String finalImageVector = imageVector;
+                    final String finalTextVector = textVector;
+                    
+                    transactionTemplate.executeWithoutResult(status -> {
+                        Costume dbCostume = costumeRepository.findById(costumeId).orElse(null);
+                        if (dbCostume != null) {
+                            if (finalImageVector != null) dbCostume.setImageVector(finalImageVector);
+                            if (finalTextVector != null) dbCostume.setTextVector(finalTextVector);
+                            costumeRepository.save(dbCostume);
+                            log.info("Cronjob: Đã quét và tạo vector thành công cho Costume ID: {}", dbCostume.getId());
+                        }
+                    });
                     successCount++;
                 }
             } catch (Exception e) {
@@ -1361,25 +1380,35 @@ public class AIServiceImpl implements AIService {
     @org.springframework.scheduling.annotation.Scheduled(cron = "0 0 2 * * SUN")
     public void analyzeAndApplyPoseFeedbacks() {
         log.info("Bắt đầu tiến trình AI phân tích Pose Feedback từ cộng đồng...");
-        List<PoseFeedback> feedbacks = poseFeedbackRepository.findByStatus("PENDING");
+        
+        List<Map<String, Object>> feedbackDataList = transactionTemplate.execute(status -> {
+            List<PoseFeedback> feedbacks = poseFeedbackRepository.findByStatus("PENDING");
+            List<Map<String, Object>> list = new ArrayList<>();
+            for (PoseFeedback fb : feedbacks) {
+                Map<String, Object> map = new HashMap<>();
+                map.put("id", fb.getId());
+                map.put("userId", fb.getUser() != null ? fb.getUser().getId() : null);
+                map.put("feedbackText", fb.getFeedbackText());
+                list.add(map);
+            }
+            return list;
+        });
 
-        if (feedbacks.isEmpty()) {
+        if (feedbackDataList == null || feedbackDataList.isEmpty()) {
             log.info("Chưa có feedback nào mới. Bỏ qua.");
             return;
         }
 
         try {
             ArrayNode feedbackArray = objectMapper.createArrayNode();
-            for (PoseFeedback fb : feedbacks) {
+            for (Map<String, Object> fb : feedbackDataList) {
                 ObjectNode node = objectMapper.createObjectNode();
-                node.put("userId", fb.getUser().getId()); // Đưa userId vào để AI biết đếm số lượng người (chặn spam)
-                node.put("feedback", fb.getFeedbackText());
+                node.put("userId", (Integer) fb.get("userId"));
+                node.put("feedback", (String) fb.get("feedbackText"));
                 feedbackArray.add(node);
             }
 
-            // PROMPT THẦN THÁNH: Ép AI làm toán và gom cụm
             String basePrompt = aiKnowledgeBase.getPromptAnalyzeFeedback();
-            
             String promptText = basePrompt.replace("{feedback}", feedbackArray.toString());
 
             ObjectNode body = objectMapper.createObjectNode();
@@ -1387,91 +1416,114 @@ public class AIServiceImpl implements AIService {
             partsNode.add(buildTextPart(promptText));
             body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
 
-            // Gọi model suy luận sâu
             JsonNode response = selfProxy.callGeminiGenerateContent(body, true);
             String resultJson = extractGeminiResponseText(response);
-            resultJson = extractJsonArray(resultJson); // Tái sử dụng hàm để cắt lấy chuỗi JSON
+            resultJson = extractJsonArray(resultJson);
 
             JsonNode resultNode = objectMapper.readTree(resultJson);
             String supplementaryRules = resultNode.path("supplementary_rules").asText();
 
-            if (!supplementaryRules.isEmpty()) {
-                // Lưu vào Database để dùng cho những lần chấm điểm sau
-                SystemConfig dynamicConfig = systemConfigRepository.findById("DYNAMIC_POSE_RULES")
-                        .orElse(SystemConfig.builder()
-                                .configKey("DYNAMIC_POSE_RULES")
-                                .description("Luật chấm điểm bổ sung tự học từ Pose Feedback")
-                                .build());
+            transactionTemplate.executeWithoutResult(status -> {
+                if (!supplementaryRules.isEmpty()) {
+                    SystemConfig dynamicConfig = systemConfigRepository.findById("DYNAMIC_POSE_RULES")
+                            .orElse(SystemConfig.builder()
+                                    .configKey("DYNAMIC_POSE_RULES")
+                                    .description("Luật chấm điểm bổ sung tự học từ Pose Feedback")
+                                    .build());
 
-                dynamicConfig.setConfigValue(supplementaryRules);
-                systemConfigRepository.save(dynamicConfig);
-                log.info("Đã nạp thành công Luật Bổ Sung vào Database!");
-            }
+                    dynamicConfig.setConfigValue(supplementaryRules);
+                    systemConfigRepository.save(dynamicConfig);
+                    log.info("Đã nạp thành công Luật Bổ Sung vào Database!");
+                }
 
-            for (PoseFeedback fb : feedbacks) {
-                fb.setStatus("PROCESSED");
-            }
-            poseFeedbackRepository.saveAll(feedbacks);
+                List<Integer> ids = feedbackDataList.stream()
+                        .map(m -> (Integer) m.get("id"))
+                        .collect(Collectors.toList());
+                List<PoseFeedback> feedbacksToUpdate = poseFeedbackRepository.findAllById(ids);
+                for (PoseFeedback fb : feedbacksToUpdate) {
+                    fb.setStatus("PROCESSED");
+                }
+                poseFeedbackRepository.saveAll(feedbacksToUpdate);
+            });
 
         } catch (Exception e) {
-            log.error("Lỗi khi AI phân tích Pose Feedback: {}", e.getMessage());
+            log.error("Lỗi khi AI phân tích Pose Feedback: {}", e.getMessage(), e);
         }
     }
 
     @Async
     @Override
-    public void analyzeReviewAsync(Integer reviewId, String comment) {
-        if (comment == null || comment.trim().isEmpty()) return;
-        try {
-            String promptText = aiKnowledgeBase.getPromptAnalyzeReview();
-            
-            ObjectNode body = objectMapper.createObjectNode();
-            ArrayNode partsNode = objectMapper.createArrayNode();
-            partsNode.add(buildTextPart(promptText + "\nNội dung đánh giá: " + comment));
-            body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
+    public void analyzeReviewAsync(Integer reviewId, String ignoredComment) {
+        reviewRepository.findById(reviewId).ifPresent(review -> {
+            try {
+                String originalComment = review.getComment() != null ? review.getComment().trim() : "";
+                int rating = review.getRating() != null ? review.getRating() : 5;
 
-            JsonNode response = selfProxy.callGeminiGenerateContent(body, false);
-            String resultJson = extractGeminiResponseText(response);
-            
-            int startIndex = resultJson.indexOf('{');
-            int endIndex = resultJson.lastIndexOf('}');
-            if (startIndex >= 0 && endIndex > startIndex) {
-                resultJson = resultJson.substring(startIndex, endIndex + 1).trim();
-                JsonNode resultNode = objectMapper.readTree(resultJson);
-                
-                String sentiment = resultNode.path("sentiment").asText("NEUTRAL");
-                boolean isToxic = resultNode.path("is_toxic").asBoolean(false);
-                String summary = resultNode.path("summary").asText("");
-                
-                reviewRepository.findById(reviewId).ifPresent(review -> {
-                    review.setAiSentiment(sentiment.toUpperCase());
+                if (originalComment.isEmpty()) return;
+
+                String promptText = String.format(
+                    "Bạn là một chuyên gia kiểm duyệt nội dung đánh giá dịch vụ. Hãy phân tích đánh giá sau:\n" +
+                    "- Số sao đánh giá (Rating): %d sao\n" +
+                    "- Bình luận gốc: \"%s\"\n\n" +
+                    "Hãy phân tích và trả về cấu trúc JSON duy nhất gồm các trường sau:\n" +
+                    "1. \"sentiment\": Chuỗi cảm xúc (chỉ nhận một trong ba giá trị: \"POSITIVE\", \"NEGATIVE\", hoặc \"NEUTRAL\").\n" +
+                    "2. \"is_toxic\": boolean (bằng true nếu bình luận mang tính thù ghét, bạo lực, xúc phạm danh dự hoặc thô tục quá đà. Ngược lại là false).\n" +
+                    "3. \"censored_comment\": Chuỗi bình luận đã được xử lý che các từ tục tĩu/chửi thề (nếu có) bằng ký tự \"***\". Nếu bình luận sạch sẽ, giữ nguyên bình luận gốc.\n" +
+                    "4. \"is_conflicting\": boolean (bằng true nếu số sao chấm mâu thuẫn lớn với cảm xúc bình luận, ví dụ: chấm 1-2 sao nhưng viết khen ngợi tích cực, hoặc chấm 5 sao nhưng viết chê bai thậm tệ. Ngược lại là false).\n\n" +
+                    "Yêu cầu định dạng đầu ra phải là một JSON hợp lệ và không chứa các ký tự định dạng markdown như ```json.",
+                    rating, originalComment
+                );
+
+                ObjectNode body = objectMapper.createObjectNode();
+                ArrayNode partsNode = objectMapper.createArrayNode();
+                partsNode.add(buildTextPart(promptText));
+                body.set("contents", objectMapper.createArrayNode().add(objectMapper.createObjectNode().set("parts", partsNode)));
+
+                JsonNode response = selfProxy.callGeminiGenerateContent(body, false);
+                String resultJson = extractGeminiResponseText(response);
+
+                int startIndex = resultJson.indexOf('{');
+                int endIndex = resultJson.lastIndexOf('}');
+                if (startIndex >= 0 && endIndex > startIndex) {
+                    resultJson = resultJson.substring(startIndex, endIndex + 1).trim();
+                    JsonNode resultNode = objectMapper.readTree(resultJson);
+
+                    String sentiment = resultNode.path("sentiment").asText("NEUTRAL").toUpperCase();
+                    boolean isToxic = resultNode.path("is_toxic").asBoolean(false);
+                    String censoredComment = resultNode.path("censored_comment").asText(originalComment);
+                    boolean isConflicting = resultNode.path("is_conflicting").asBoolean(false);
+
+                    review.setAiSentiment(sentiment);
                     review.setIsSpamOrToxic(isToxic);
-                    review.setAiSummary(summary);
+                    review.setComment(censoredComment);
+                    review.setIsConflicting(isConflicting);
+                    review.setAiSummary(censoredComment.length() > 100 ? censoredComment.substring(0, 97) + "..." : censoredComment);
                     reviewRepository.save(review);
-                    
+
                     if (review.getOrder() != null && review.getOrder().getProviderId() != null) {
                         Integer providerId = review.getOrder().getProviderId();
                         List<Review> validReviews = reviewRepository.findByOrderProviderId(providerId)
                                 .stream()
-                                .filter(r -> r.getIsSpamOrToxic() == null || !r.getIsSpamOrToxic())
+                                .filter(r -> (r.getIsSpamOrToxic() == null || !r.getIsSpamOrToxic())
+                                          && (r.getIsConflicting() == null || !r.getIsConflicting()))
                                 .collect(Collectors.toList());
-                                
+
                         int totalReviews = validReviews.size();
                         final double average = totalReviews > 0
                                 ? validReviews.stream().mapToDouble(Review::getRating).sum() / totalReviews
                                 : 0.0;
-                        
+
                         providerRepository.findById(providerId).ifPresent(provider -> {
                             provider.setTotalReviews(totalReviews);
                             provider.setTotalRating(java.math.BigDecimal.valueOf(average));
                             providerRepository.save(provider);
                         });
                     }
-                });
+                }
+            } catch (Exception e) {
+                log.error("Lỗi khi AI phân tích review id {}: {}", reviewId, e.getMessage(), e);
             }
-        } catch (Exception e) {
-            log.error("Lỗi khi AI phân tích review id {}: {}", reviewId, e.getMessage());
-        }
+        });
     }
 
     @Override

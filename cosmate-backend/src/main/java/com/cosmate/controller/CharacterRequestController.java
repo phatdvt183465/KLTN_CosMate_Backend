@@ -18,11 +18,22 @@ public class CharacterRequestController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<CharacterRequest> create(@RequestBody CharacterRequest request, @RequestParam(required = false) Integer providerId) {
-        Integer finalProviderId = providerId != null ? providerId : request.getProviderId();
+    public ApiResponse<CharacterRequest> create(
+            @RequestParam("characterName") String characterName,
+            @RequestParam("animeName") String animeName,
+            @RequestParam(value = "imageUrl", required = false) String imageUrl,
+            @RequestParam(value = "file", required = false) org.springframework.web.multipart.MultipartFile file,
+            @RequestParam(required = false) Integer providerId) {
+        
+        CharacterRequest request = CharacterRequest.builder()
+                .characterName(characterName)
+                .animeName(animeName)
+                .imageUrl(imageUrl)
+                .build();
+        
         return ApiResponse.<CharacterRequest>builder()
                 .message("Gửi yêu cầu thêm nhân vật thành công!")
-                .result(characterRequestService.create(request, finalProviderId))
+                .result(characterRequestService.create(request, file, providerId))
                 .build();
     }
 

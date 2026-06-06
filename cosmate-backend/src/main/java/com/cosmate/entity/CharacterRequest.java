@@ -25,6 +25,9 @@ public class CharacterRequest {
     @Column(name = "provider_id", nullable = false)
     private Integer providerId;
 
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
+
     @Column(name = "status", length = 20, nullable = false)
     private String status; // PENDING, APPROVED, REJECTED
 

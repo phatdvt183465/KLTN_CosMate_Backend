@@ -50,6 +50,9 @@ public class Review {
     @Column(name = "is_spam_or_toxic")
     private Boolean isSpamOrToxic;
 
+    @Column(name = "is_conflicting")
+    private Boolean isConflicting;
+
     @Nationalized
     @Column(name = "ai_summary", columnDefinition = "NVARCHAR(500)")
     private String aiSummary;

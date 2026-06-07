@@ -72,14 +72,6 @@ public class ReviewServiceImpl implements ReviewService {
                 .build();
         r = reviewRepository.save(r);
 
-        // update provider totals (average rating and review count)
-        try {
-            if (order.getProviderId() != null) {
-                providerService.addReviewRating(order.getProviderId(), rating);
-            }
-        } catch (Exception ignored) {
-        }
-
         List<ReviewUrlResponse> images = new ArrayList<>();
         if (files != null && !files.isEmpty()) {
             for (MultipartFile f : files) {

@@ -1551,6 +1551,29 @@ public class AIServiceImpl implements AIService {
                 }
             } catch (Exception e) {
                 log.error("Lỗi khi AI phân tích review id {}: {}", reviewId, e.getMessage(), e);
+                try {
+                    if (review.getOrder() != null && review.getOrder().getProviderId() != null) {
+                        Integer providerId = review.getOrder().getProviderId();
+                        List<Review> validReviews = reviewRepository.findByOrderProviderId(providerId)
+                                .stream()
+                                .filter(r -> (r.getIsSpamOrToxic() == null || !r.getIsSpamOrToxic())
+                                          && (r.getIsConflicting() == null || !r.getIsConflicting()))
+                                .collect(Collectors.toList());
+
+                        int totalReviews = validReviews.size();
+                        final double average = totalReviews > 0
+                                ? validReviews.stream().mapToDouble(Review::getRating).sum() / totalReviews
+                                : 0.0;
+
+                        providerRepository.findById(providerId).ifPresent(provider -> {
+                            provider.setTotalReviews(totalReviews);
+                            provider.setTotalRating(java.math.BigDecimal.valueOf(average));
+                            providerRepository.save(provider);
+                        });
+                    }
+                } catch (Exception ex) {
+                    log.error("Lỗi khi chạy fallback tính điểm cho review id {}: {}", reviewId, ex.getMessage());
+                }
             }
         });
     }

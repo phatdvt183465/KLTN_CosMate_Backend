@@ -379,6 +379,7 @@ public class AIServiceImpl implements AIService {
 
             List<Costume> costumes = costumeRepository.findAllById(new ArrayList<>(candidateIds));
             return costumes.stream()
+                    .filter(c -> !"DELETED".equalsIgnoreCase(c.getStatus()))
                     .filter(c -> isGenderMatch(c.getGender(), request.getPreferredGender()))
                     .map(c -> SearchResponse.builder()
                             .costumeId(c.getId())
